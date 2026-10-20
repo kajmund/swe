@@ -1,7 +1,7 @@
 # Socialism Workflow Engine (SWE) / SWD 1.0
 
-**Status:** First implementation slice — schema, parser, contracts  
-**Runtime:** not in this PR (no scheduler, no OverGraph writes, no research cutover)
+**Status:** Schema/parser (PR #398) + in-memory Rust/PyO3 runtime (phase 2)  
+**Runtime:** `crates/swe-native` + `app.swe.runtime`. No OverGraph writes, no research cutover.
 
 ## Goal
 
@@ -50,7 +50,7 @@ Customer id and feature id come from host context, never from YAML. Allowed feat
 ## Follow-up PRs
 
 1. **This PR** — inventory, schema, parser/validator, tests, docs
-2. Rust/PyO3 runtime: `task`, `decision(expression)`, `fork`, `join`, `map`, `end` + Python asyncio dispatch
+2. Rust/PyO3 runtime: `task`, `decision(expression)`, `fork`, `join`, `map`, `end` + Python asyncio dispatch — [swe-runtime.md](swe-runtime.md)
 3. OverGraph adapter: isolation, `immediate` WAL, atomic transitions, recovery, run events
 4. Jev provider + SHA-256 cache L1/L2 + single-flight, reuse `EvidenceScreenCache` contracts
 5. Research integration and differential tests; delete replaced orchestration
