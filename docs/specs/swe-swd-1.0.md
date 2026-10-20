@@ -18,7 +18,11 @@ Python reference implementation under `backend/app/swe/`:
 - Graph validation (refs, join ownership, reachability, non-terminal loops)
 - Handler / provider registry checks
 - Typed expression AST (`3 < 5` is true; missing/null/type mismatch fail; no `eval`)
-- Canonical JSON + SHA-256 (Python oracle until Rust matches it)
+- Provider decisions reference `prompt_key` in the prompt catalog (`PROMPT_KEY_SET` at compile; `require_active_prompts` / `render_prompt` at runtime)
+- Canonical JSON + SHA-256 (Python oracle until Rust matches it); object keys are NFC-normalized and colliding keys fail
+- Compiled `document` is the deep-frozen canonical form, so hash and executed definition match
+- Fork/map branches must complete at the owning join; omitted `next` on a branch node completes that branch into the join
+- A nested fork/map is one step in an outer branch; inner branches are not outer members
 - Trusted `WorkflowHostContext` → `workflows/customer_<id>/<feature>/`
 
 Unknown node types and unknown registered handlers fail before any execution. YAML and JSON of the same document share a SHA-256.
@@ -26,6 +30,8 @@ Unknown node types and unknown registered handlers fail before any execution. YA
 ## Node types (v1)
 
 `task`, `decision` (expression or named provider), `fork`, `join` (`mode: all`, `on_failure: fail`), `map`, `wait`, `subworkflow`, `end`.
+
+A `fork`/`map` does not skip to its `join`. Join is reachable only from nodes in that instance's branches. A branch may not terminate at `end`, skip its join, or continue past the join. Nested fan-out continues from its own join (or map `next`). Expression `decision` routes are exactly `true` and `false`. `in` uses the same JSON type rules as `eq` (booleans are not numbers).
 
 Loops are a `decision` routing backwards plus `limits.max_steps` / `max_depth`. `wait` is schema-complete; the runtime may land after the core scheduler.
 
