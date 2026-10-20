@@ -114,6 +114,14 @@ impl Machine {
         self.protect(Machine::cancel_run)
     }
 
+    pub fn tick(&mut self, now_ms: u64) -> StepOutcome {
+        self.now_ms = now_ms;
+        if self.status.is_terminal() {
+            return self.drain();
+        }
+        self.protect(|machine| machine.check_timeout())
+    }
+
     pub fn events(&self) -> &[RuntimeEvent] {
         &self.sink.events
     }

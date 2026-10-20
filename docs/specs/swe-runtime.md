@@ -13,12 +13,22 @@ SHA-256 to `swe_native.Machine` and runs registered `async` handlers.
 compile_definition → Machine.start(document, sha256, run_id, input, now_ms)
                  ← InvokeHandler effects
 Python asyncio tasks (outside the Rust lock / GIL)
-                 → Machine.complete / fail / cancel
+                 → Machine.complete / fail / cancel / tick
                  ← more effects or a terminal status
 ```
 
 Rust never calls Python. Python never waits on a handler while the machine lock
 is held. `py.allow_threads` wraps every Rust mutation.
+
+The driver waits with `asyncio.wait(..., timeout=remaining_deadline)` and the
+optional cancel event. When the deadline elapses it calls `Machine.tick(now_ms)`,
+which fails the run and emits `CancelInvocation` for open handlers. A
+`try/finally` cancels owned tasks (handlers and the cancel watcher) and
+`await`s `asyncio.gather(..., return_exceptions=True)`.
+
+Handlers that swallow `CancelledError` are not force-stopped. Terminal status
+stays protected; a late `complete`/`fail` is an idempotent no-op or typed
+conflict and does not route again.
 
 Low-level module: `swe_native` (`sha256_hex`, `canonical_json_bytes`,
 `evaluate_expression`, `Machine`).
@@ -51,7 +61,9 @@ features.
 - **step:** each scheduled node instance (task, decision, fork, join, map, end).
 - **depth:** nested fork/map frames. Root is 0. A new frame is `parent + 1`.
 - **timeout:** `started_ms + timeout_seconds * 1000`, compared to injected
-  monotonic `now_ms` on every mutation.
+  monotonic `now_ms` on every mutation **and** on `tick`. Python uses the
+  remaining deadline as the `asyncio.wait` timeout so a hanging handler cannot
+  outlive `timeout_seconds`.
 
 ## State and paths
 
@@ -89,3 +101,20 @@ This is the seam for OverGraph append in phase 3. No durability is claimed.
 The machine is per run. Two concurrent runs of the same definition do not share
 branch ids or outputs. Research, Jev, OverGraph, and expert routing stay
 outside this crate.
+
+## Map memory (phase 2)
+
+`map.items` is stored in full, the work queue is a `Vec` (`remove(0)` is O(n)),
+and `events()` materializes the whole in-memory sink. Measured on this branch
+with `uv run python scripts/benchmark_swe_runtime.py --steps 10000 --fanout 10000`:
+
+| Case | Time | Events | max RSS |
+| --- | --- | --- | --- |
+| 10 000 decision steps | 319 ms | 30 004 | (shared process) |
+| 1 000 map items | 1.95 s | 4 005 | 131 MiB |
+| 10 000 map items | 233 s | 40 005 | 220 MiB |
+
+Time is superlinear. The work queue stays small under `concurrency`, so
+`Vec.remove(0)` is not the dominant cost. The map scope (items + children) is
+cloned while spawning, and every event is kept. That is accepted for phase 2;
+do not grow this toward a webcrawler fan-out without a dedicated pass.

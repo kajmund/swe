@@ -120,6 +120,19 @@ impl PyMachine {
         outcome_to_py(py, &outcome)
     }
 
+    fn tick(&self, py: Python<'_>, now_ms: u64) -> PyResult<Py<PyAny>> {
+        let outcome = self.with_machine(py, |machine| machine.tick(now_ms))?;
+        outcome_to_py(py, &outcome)
+    }
+
+    fn deadline_ms(&self) -> PyResult<u64> {
+        Ok(self
+            .lock()?
+            .as_ref()
+            .map(|machine| machine.deadline_ms)
+            .unwrap_or(0))
+    }
+
     fn status(&self) -> PyResult<String> {
         Ok(self
             .lock()?

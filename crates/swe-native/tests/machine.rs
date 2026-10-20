@@ -399,6 +399,38 @@ fn max_depth_fails_on_nested_fork() {
 }
 
 #[test]
+fn tick_times_out_without_a_completion() {
+    let raw = r#"{
+      "version": "1.0",
+      "name": "hang",
+      "entrypoint": "work",
+      "limits": {"max_steps": 6, "max_depth": 1, "timeout_seconds": 1},
+      "nodes": {
+        "work": {"type": "task", "handler": "demo.work", "next": "done"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#;
+    let (document, sha) = load(raw);
+    let (mut machine, outcome) =
+        start_run(document, &sha, "hang".into(), Json::empty_object(), 0).unwrap();
+    assert_eq!(outcome.status, RunStatus::Running);
+    let timed = machine.tick(1000);
+    assert_eq!(timed.status, RunStatus::Failed);
+    assert!(timed
+        .effects
+        .iter()
+        .any(|effect| matches!(effect, Effect::CancelInvocation { .. })));
+    let error = machine.error().expect("timeout is recorded");
+    assert!(error.message.contains("timeout"));
+    let late = machine.complete(
+        &invoke_ids(&outcome.effects)[0],
+        Json::object([("ok".into(), Json::from("late"))]),
+        1001,
+    );
+    assert_eq!(late.status, RunStatus::Failed);
+}
+
+#[test]
 fn timeout_and_max_steps_fail_closed() {
     let raw = r#"{
       "version": "1.0",
