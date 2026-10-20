@@ -37,7 +37,7 @@ Loops are a `decision` routing backwards plus `limits.max_steps` / `max_depth`. 
 
 ## Expressions
 
-JSON objects only. Operators: `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `and`, `or`, `not`, `in`, `add`, `sub`, `mul`, `div`, `exists`, plus `var` / `const`. `var` may set `default`. Missing paths without `default` are errors, never silent `false`. Booleans are not numbers.
+JSON objects only. Operators: `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `and`, `or`, `not`, `in`, `add`, `sub`, `mul`, `div`, `exists`, plus `var` / `const`. `var` may set `default`. Missing paths without `default` are errors, never silent `false`. Booleans are not numbers, including inside objects and arrays (`eq`/`ne`/`in` use recursive JSON equality). The evaluator accepts the frozen compiled form (`Mapping` / `tuple`); it does not thaw a mutable copy.
 
 ## Isolation
 
