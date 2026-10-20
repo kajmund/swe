@@ -64,9 +64,10 @@ top-level keys.
 ## Completions
 
 `invocation_id` names a node instance (`run`, node, branch path, loop epoch,
-serial). Same terminal payload: idempotent no-op. Different payload: typed
-conflict. Unknown id: typed error. After cancel/fail, late handler returns do
-not route again.
+serial). `loop_epoch` starts at 0 and increments on the current scope when a
+node id is scheduled again in that scope (decision/fork re-entry). Same
+terminal payload: idempotent no-op. Different payload: typed conflict. Unknown
+id: typed error. After cancel/fail, late handler returns do not route again.
 
 Task failure with `join mode=all / on_failure=fail` fails the run immediately
 and emits `CancelInvocation` for siblings.

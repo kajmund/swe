@@ -58,6 +58,7 @@ impl Machine {
                 locals: indexmap::IndexMap::new(),
                 depth: 0,
                 loop_epoch: 0,
+                visited: indexmap::IndexSet::new(),
                 owner_node: None,
                 join_node: None,
                 after_node: None,

@@ -46,6 +46,7 @@ pub struct Scope {
     pub locals: IndexMap<String, Json>,
     pub depth: u32,
     pub loop_epoch: u32,
+    pub visited: indexmap::IndexSet<String>,
     pub owner_node: Option<String>,
     pub join_node: Option<String>,
     pub after_node: Option<String>,

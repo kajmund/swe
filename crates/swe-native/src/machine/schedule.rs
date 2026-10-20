@@ -64,6 +64,7 @@ impl Machine {
         }
         self.check_timeout()?;
         self.consume_step()?;
+        self.advance_loop_epoch(scope_id, node_id);
         let instance_id = {
             let scope = self.scope_or_err(scope_id)?.clone();
             self.instance_id(node_id, &scope)
@@ -402,6 +403,14 @@ impl Machine {
         }
         Ok(())
     }
+
+    fn advance_loop_epoch(&mut self, scope_id: &str, node_id: &str) {
+        if let Some(scope) = self.scopes.get_mut(scope_id) {
+            if !scope.visited.insert(node_id.to_string()) {
+                scope.loop_epoch = scope.loop_epoch.saturating_add(1);
+            }
+        }
+    }
 }
 
 fn default_task_input(scope: &Scope) -> Json {
@@ -442,6 +451,7 @@ fn child_scope(parent: &Scope, id: String, kind: ScopeKind, depth: u32) -> Scope
         locals: IndexMap::new(),
         depth,
         loop_epoch: parent.loop_epoch,
+        visited: indexmap::IndexSet::new(),
         owner_node: None,
         join_node: None,
         after_node: None,

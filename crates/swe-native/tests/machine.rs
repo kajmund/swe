@@ -333,6 +333,72 @@ fn deterministic_loop_does_not_overflow() {
 }
 
 #[test]
+fn loop_epoch_increments_on_reentry() {
+    let raw = r#"{
+      "version": "1.0",
+      "name": "epochs",
+      "entrypoint": "loop",
+      "limits": {"max_steps": 8, "max_depth": 1, "timeout_seconds": 5},
+      "nodes": {
+        "loop": {
+          "type": "decision",
+          "evaluator": "expression",
+          "condition": {"lt": [{"var": "$.run.steps_used"}, {"const": 3}]},
+          "routes": {"true": "loop", "false": "done"}
+        },
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#;
+    let (document, sha) = load(raw);
+    let (machine, outcome) =
+        start_run(document, &sha, "epochs".into(), Json::empty_object(), 0).unwrap();
+    assert_eq!(outcome.status, RunStatus::Completed);
+    let epochs: Vec<u32> = machine
+        .events()
+        .iter()
+        .filter(|event| event.node_id.as_deref() == Some("loop"))
+        .filter_map(|event| event.lineage.as_ref().map(|lineage| lineage.loop_epoch))
+        .collect();
+    assert!(epochs.contains(&0));
+    assert!(epochs.contains(&1));
+    assert_eq!(epochs.iter().copied().max(), Some(2));
+}
+
+#[test]
+fn max_depth_fails_on_nested_fork() {
+    let raw = r#"{
+      "version": "1.0",
+      "name": "deep",
+      "entrypoint": "outer",
+      "limits": {"max_steps": 20, "max_depth": 1, "timeout_seconds": 5},
+      "nodes": {
+        "outer": {
+          "type": "fork",
+          "branches": {"left": "inner", "right": "task_c"},
+          "join": "outer_join"
+        },
+        "inner": {
+          "type": "fork",
+          "branches": {"a": "task_a", "b": "task_b"},
+          "join": "inner_join"
+        },
+        "task_a": {"type": "task", "handler": "demo.a"},
+        "task_b": {"type": "task", "handler": "demo.b"},
+        "task_c": {"type": "task", "handler": "demo.c"},
+        "inner_join": {"type": "join", "mode": "all"},
+        "outer_join": {"type": "join", "mode": "all", "next": "done"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#;
+    let (document, sha) = load(raw);
+    let (machine, outcome) =
+        start_run(document, &sha, "deep".into(), Json::empty_object(), 0).unwrap();
+    assert_eq!(outcome.status, RunStatus::Failed);
+    let error = machine.error().expect("max_depth is recorded");
+    assert!(error.message.contains("max_depth"));
+}
+
+#[test]
 fn timeout_and_max_steps_fail_closed() {
     let raw = r#"{
       "version": "1.0",

@@ -284,4 +284,11 @@ mod tests {
         let error = canonical_json_bytes(&value).unwrap_err();
         assert!(error.message.contains("canonical key collision"));
     }
+
+    #[test]
+    fn nan_and_infinity_are_rejected() {
+        assert!(Number::from_f64(f64::NAN).is_none());
+        assert!(Number::from_f64(f64::INFINITY).is_none());
+        assert!(Number::from_f64(f64::NEG_INFINITY).is_none());
+    }
 }
