@@ -1,0 +1,36 @@
+[package]
+name = "swe-native"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.83"
+description = "In-memory SWD 1.0 execution kernel for Socialism Workflow Engine"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+name = "swe_native"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+python = ["dep:pyo3"]
+extension-module = ["python", "pyo3/extension-module"]
+
+[dependencies]
+indexmap = { version = "=2.9.0", features = ["std"] }
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = { version = "=1.0.140", features = ["preserve_order"] }
+sha2 = "=0.10.8"
+thiserror = "=2.0.12"
+unicode-normalization = "=0.1.24"
+
+[dependencies.pyo3]
+version = "=0.24.2"
+optional = true
+
+[dev-dependencies]
+serde_json = { version = "=1.0.140", features = ["preserve_order"] }
+
+[profile.release]
+lto = false
+codegen-units = 16
