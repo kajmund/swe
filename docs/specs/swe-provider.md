@@ -1,10 +1,18 @@
 # SWE provider decisions and exact cache (phase 4)
 
 **Status:** Provider decisions and the exact decision cache are implemented.  
-**Not in this phase:** research bridge/cutover (phase 5), Jev cache for task
-handlers, `wait`/`subworkflow`/`retry`.
+**Not in this phase:** Jev cache for task handlers, `wait`/`subworkflow`/`retry`.
 
 ## Scope
+
+## Research cutover note
+
+The research wave loop now runs on SWE (`swe-runtime.md#research-wave-loop`).
+That cutover does **not** route assessment/planning through `decision(provider)`:
+the assessor, follow-up planner and completeness reviewer keep calling Jev
+inside the research domain handlers. The provider decision node and its cache
+remain available for later adapters; no LLM call moved into this phase.
+
 
 `decision(evaluator=provider)` now executes. The Rust kernel parses the node,
 emits an `invoke_provider` effect, and routes on the validated choice. The Python

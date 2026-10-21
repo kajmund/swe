@@ -125,6 +125,42 @@ Jev, OverGraph, and expert routing imports: the run store, providers and cache
 are injected as adapters (`app.services.overgraph.workflows`,
 `app.swe.providers`, `app.services.overgraph.jev_cache`).
 
+## Research wave loop
+
+The research cutover runs the wave loop of `execute_attempt_research` on SWE
+through `backend/app/services/research/swe_bridge.py`, wired from
+`execution._run_research_loop`. The compiled definition is:
+
+```
+run_wave (task) -> needs (map, child execute_need) -> finish_wave (task) -> route (decision)
+route true  -> done (end, completed)
+route false -> run_wave (next wave)
+```
+
+The handlers call the research domain's public wave primitives
+(`pending_need_pairs`, `runtime_plan`, `execute_one_need`,
+`complete_timed_out_need`, `quality_descriptors`, `finish_research_wave`); the
+engine itself never imports research.
+
+- **Concurrency:** the map schedules one child per pending need (no wave-level
+  cap, mirroring the phase-2 loop's one worker per pending need).
+  `research_need_concurrency` bounds provider retrieval inside the child handler
+  through the same semaphore the old loop used; `finish_wave` is the barrier.
+  The wider-fanout measurement variant only raises that retrieval bound.
+- **Lease/cancel:** the research lease-lost event is the runner
+  `cancel_event` (`WorkflowResources`). A lost lease cancels open handlers and a
+  terminal `cancelled` run re-raises `asyncio.CancelledError`, which the existing
+  research write fence/worker path already expects. Committed transitions are
+  unchanged.
+- **Deadlines:** `limits.timeout_seconds` is a run backstop only. The per-need
+  deadline remains `research_need_timeout_seconds`, enforced in the
+  `research.execute_need` handler exactly as before.
+- **Run store:** the OverGraph run store is not production-wired in the cutover;
+  the bridge accepts one for tests and measurement only (`swe-overgraph.md`).
+
+`loop_control.run_research_loop` is kept for now but is unreachable from
+production; it is removed in the follow-up delete PR.
+
 ## Map memory (phase 2)
 
 `map.items` is stored in full, the work queue is a `Vec` (`remove(0)` is O(n)),
