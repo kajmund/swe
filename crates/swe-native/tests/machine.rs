@@ -175,7 +175,7 @@ fn map_zero_one_and_many_preserve_order() {
 }
 
 #[test]
-fn provider_decision_is_rejected() {
+fn provider_decision_invokes_a_provider_and_routes_on_choice() {
     let raw = r#"{
       "version": "1.0",
       "name": "provider",
@@ -187,6 +187,7 @@ fn provider_decision_is_rejected() {
           "evaluator": "provider",
           "provider": "jev",
           "prompt_key": "research.assessment.user",
+          "input": {"flag": "$.input.flag"},
           "choices": ["yes", "no"],
           "routes": {"yes": "ok", "no": "ok"}
         },
@@ -194,11 +195,37 @@ fn provider_decision_is_rejected() {
       }
     }"#;
     let (document, sha) = load(raw);
-    let error = match start_run(document, &sha, "run".into(), Json::empty_object(), 0) {
-        Err(error) => error,
-        Ok(_) => panic!("expected provider preflight error"),
+    let input = Json::object([("flag".into(), Json::Bool(true))]);
+    let (mut machine, outcome) = start_run(document, &sha, "run".into(), input, 0).unwrap();
+    let invocation_id = match outcome.effects.first() {
+        Some(Effect::InvokeProvider {
+            invocation_id,
+            provider,
+            input,
+            choices,
+            ..
+        }) => {
+            assert_eq!(provider, "jev");
+            assert_eq!(input.get("flag").and_then(Json::as_bool), Some(true));
+            assert_eq!(choices.len(), 2);
+            invocation_id.clone()
+        }
+        other => panic!("expected invoke_provider effect, got {other:?}"),
     };
-    assert!(error.message.contains("provider"));
+    let step = machine.complete(
+        &invocation_id,
+        Json::object([("choice".into(), Json::from("yes"))]),
+        1,
+    );
+    assert_eq!(step.status, RunStatus::Completed);
+    assert_eq!(
+        machine
+            .output()
+            .get("ask")
+            .and_then(|value| value.get("choice"))
+            .and_then(Json::as_str),
+        Some("yes")
+    );
 }
 
 #[test]

@@ -29,6 +29,21 @@ pub enum Binding {
 
 pub type Bindings = IndexMap<String, Binding>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CachePolicy {
+    Off,
+    Exact,
+}
+
+impl CachePolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Exact => "exact",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Task {
@@ -41,6 +56,14 @@ pub enum Node {
         condition: Json,
         true_route: String,
         false_route: String,
+    },
+    ProviderDecision {
+        provider: String,
+        prompt_key: String,
+        input: Bindings,
+        choices: Vec<String>,
+        routes: IndexMap<String, String>,
+        cache_policy: CachePolicy,
     },
     Fork {
         branches: IndexMap<String, String>,
@@ -194,13 +217,17 @@ fn parse_task(node_id: &str, node: &Json) -> Result<Node> {
 }
 
 fn parse_decision(node_id: &str, node: &Json) -> Result<Node> {
-    let evaluator = required_node_str(node_id, node, "evaluator")?;
-    if evaluator != "expression" {
-        return Err(RuntimeError::unsupported(
-            "decision provider evaluators are not executable in SWE phase 2",
-        )
-        .with_path(format!("nodes.{node_id}.evaluator")));
+    match required_node_str(node_id, node, "evaluator")? {
+        "expression" => parse_expression_decision(node_id, node),
+        "provider" => parse_provider_decision(node_id, node),
+        other => Err(
+            RuntimeError::preflight(format!("unknown decision evaluator {other:?}"))
+                .with_path(format!("nodes.{node_id}.evaluator")),
+        ),
     }
+}
+
+fn parse_expression_decision(node_id: &str, node: &Json) -> Result<Node> {
     let routes = node
         .get("routes")
         .and_then(Json::as_object)
@@ -232,6 +259,98 @@ fn parse_decision(node_id: &str, node: &Json) -> Result<Node> {
         true_route,
         false_route,
     })
+}
+
+fn parse_provider_decision(node_id: &str, node: &Json) -> Result<Node> {
+    let provider = required_node_str(node_id, node, "provider")?.to_string();
+    let prompt_key = required_node_str(node_id, node, "prompt_key")?.to_string();
+    let choices = parse_choices(node_id, node)?;
+    let routes = parse_provider_routes(node_id, node, &choices)?;
+    Ok(Node::ProviderDecision {
+        provider,
+        prompt_key,
+        input: parse_bindings(node_id, node.get("input"))?,
+        choices,
+        routes,
+        cache_policy: parse_cache_policy(node_id, node)?,
+    })
+}
+
+fn parse_choices(node_id: &str, node: &Json) -> Result<Vec<String>> {
+    let raw = node
+        .get("choices")
+        .and_then(Json::as_array)
+        .ok_or_else(|| {
+            RuntimeError::preflight("provider decision requires choices")
+                .with_path(format!("nodes.{node_id}.choices"))
+        })?;
+    let mut choices = Vec::with_capacity(raw.len());
+    for item in raw {
+        let choice = item.as_str().ok_or_else(|| {
+            RuntimeError::preflight("provider choices must be strings")
+                .with_path(format!("nodes.{node_id}.choices"))
+        })?;
+        if choices.iter().any(|seen| seen == choice) {
+            return Err(
+                RuntimeError::preflight(format!("duplicate provider choice {choice:?}"))
+                    .with_path(format!("nodes.{node_id}.choices")),
+            );
+        }
+        choices.push(choice.to_string());
+    }
+    if choices.len() < 2 {
+        return Err(
+            RuntimeError::preflight("provider decision requires at least two choices")
+                .with_path(format!("nodes.{node_id}.choices")),
+        );
+    }
+    Ok(choices)
+}
+
+fn parse_provider_routes(
+    node_id: &str,
+    node: &Json,
+    choices: &[String],
+) -> Result<IndexMap<String, String>> {
+    let raw = node
+        .get("routes")
+        .and_then(Json::as_object)
+        .ok_or_else(|| {
+            RuntimeError::preflight("provider decision requires routes")
+                .with_path(format!("nodes.{node_id}.routes"))
+        })?;
+    let mut routes = IndexMap::with_capacity(raw.len());
+    for (choice, target) in raw {
+        let target = target.as_str().ok_or_else(|| {
+            RuntimeError::preflight("provider routes must map choices to node ids")
+                .with_path(format!("nodes.{node_id}.routes"))
+        })?;
+        if !choices.iter().any(|known| known == choice) {
+            return Err(RuntimeError::preflight(format!(
+                "provider route {choice:?} is not a declared choice"
+            ))
+            .with_path(format!("nodes.{node_id}.routes")));
+        }
+        routes.insert(choice.clone(), target.to_string());
+    }
+    if routes.len() != choices.len() {
+        return Err(RuntimeError::preflight(
+            "provider routes must cover every choice exactly once",
+        )
+        .with_path(format!("nodes.{node_id}.routes")));
+    }
+    Ok(routes)
+}
+
+fn parse_cache_policy(node_id: &str, node: &Json) -> Result<CachePolicy> {
+    match node.get("cache_policy").and_then(Json::as_str) {
+        None | Some("off") => Ok(CachePolicy::Off),
+        Some("exact") => Ok(CachePolicy::Exact),
+        Some(other) => Err(
+            RuntimeError::preflight(format!("unknown cache_policy {other:?}"))
+                .with_path(format!("nodes.{node_id}.cache_policy")),
+        ),
+    }
 }
 
 fn parse_fork(node_id: &str, node: &Json) -> Result<Node> {

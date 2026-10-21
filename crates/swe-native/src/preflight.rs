@@ -8,7 +8,7 @@ pub fn assert_supported(definition: &CompiledDefinition) -> Result<()> {
     for (node_id, node) in &definition.nodes {
         match node {
             Node::Task { .. } => assert_task_supported(node_id, definition.document.get("nodes"))?,
-            Node::Decision { .. } => {}
+            Node::Decision { .. } | Node::ProviderDecision { .. } => {}
             Node::Fork { .. } | Node::Join { .. } | Node::Map { .. } | Node::End { .. } => {}
         }
     }
@@ -30,50 +30,6 @@ fn assert_task_supported(node_id: &str, nodes: Option<&Json>) -> Result<()> {
     }
     if let Some(policy) = raw.get("cache_policy").and_then(Json::as_str) {
         if policy == "exact" {
-            return Err(RuntimeError::unsupported(
-                "cache_policy exact is not executable in SWE phase 2",
-            )
-            .with_path(format!("nodes.{node_id}.cache_policy")));
-        }
-    }
-    Ok(())
-}
-
-pub fn reject_provider_document(document: &Json) -> Result<()> {
-    let Some(nodes) = document.get("nodes").and_then(Json::as_object) else {
-        return Ok(());
-    };
-    for (node_id, node) in nodes {
-        match node.get("type").and_then(Json::as_str) {
-            Some("wait") => {
-                return Err(RuntimeError::unsupported(
-                    "wait nodes are not executable in SWE phase 2",
-                )
-                .with_path(format!("nodes.{node_id}.type")));
-            }
-            Some("subworkflow") => {
-                return Err(RuntimeError::unsupported(
-                    "subworkflow nodes are not executable in SWE phase 2",
-                )
-                .with_path(format!("nodes.{node_id}.type")));
-            }
-            Some("decision")
-                if node.get("evaluator").and_then(Json::as_str) == Some("provider") =>
-            {
-                return Err(RuntimeError::unsupported(
-                    "decision provider evaluators are not executable in SWE phase 2",
-                )
-                .with_path(format!("nodes.{node_id}.evaluator")));
-            }
-            _ => {}
-        }
-        if node.get("retry").is_some() {
-            return Err(
-                RuntimeError::unsupported("retry is not executable in SWE phase 2")
-                    .with_path(format!("nodes.{node_id}.retry")),
-            );
-        }
-        if node.get("cache_policy").and_then(Json::as_str) == Some("exact") {
             return Err(RuntimeError::unsupported(
                 "cache_policy exact is not executable in SWE phase 2",
             )

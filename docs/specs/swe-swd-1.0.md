@@ -1,13 +1,19 @@
 # Socialism Workflow Engine (SWE) / SWD 1.0
 
-**Status:** Schema/parser (PR #398) + in-memory Rust/PyO3 runtime (phase 2)  
-**Runtime:** `crates/swe-native` + `app.swe.runtime`. No OverGraph writes, no research cutover.
+**Status:** Schema/parser (PR #398), in-memory Rust/PyO3 runtime (phase 2),
+OverGraph run store + crash-durable resume (phase 3), provider decisions +
+exact Jev cache (phase 4)  
+**Runtime:** `crates/swe-native` + `app.swe.runtime`. Durable runs in
+`app.services.overgraph.workflows`, Jev cache in
+`app.services.overgraph.jev_cache`. No research cutover yet (phase 5).
 
 ## Goal
 
 One small local workflow engine for research, expert/model routing, parallel agents, tools, and later crawl/ingest. Declarative JSON (YAML is authoring syntax). Rust core + Python async handlers in later PRs. OverGraph holds run history and the Jev cache, one catalog directory per customer and top-level feature.
 
-Inventory of current `main`: [swe-inventory.md](swe-inventory.md).
+Inventory of current `main`: [swe-inventory.md](swe-inventory.md). Runtime:
+[swe-runtime.md](swe-runtime.md). Durable runs: [swe-overgraph.md](swe-overgraph.md).
+Providers: [swe-provider.md](swe-provider.md).
 
 ## This PR
 
@@ -49,10 +55,10 @@ Customer id and feature id come from host context, never from YAML. Allowed feat
 
 ## Follow-up PRs
 
-1. **This PR** — inventory, schema, parser/validator, tests, docs
-2. Rust/PyO3 runtime: `task`, `decision(expression)`, `fork`, `join`, `map`, `end` + Python asyncio dispatch — [swe-runtime.md](swe-runtime.md)
-3. OverGraph adapter: isolation, `immediate` WAL, atomic transitions, recovery, run events
-4. Jev provider + SHA-256 cache L1/L2 + single-flight, reuse `EvidenceScreenCache` contracts
+1. **Done** — inventory, schema, parser/validator, tests, docs
+2. **Done** — Rust/PyO3 runtime: `task`, `decision(expression)`, `fork`, `join`, `map`, `end` + Python asyncio dispatch — [swe-runtime.md](swe-runtime.md)
+3. **Done** — OverGraph adapter: isolation, `immediate` WAL, atomic transitions, recovery, run events — [swe-overgraph.md](swe-overgraph.md)
+4. **Done** — Jev provider + SHA-256 cache L1/L2 + single-flight, reuse `EvidenceScreenCache` contracts — [swe-provider.md](swe-provider.md)
 5. Research integration and differential tests; delete replaced orchestration
 6. Expert/model/subagent adapters. `wait`, UI, webcrawl later
 

@@ -23,6 +23,18 @@ struct MapStart<'a> {
     next: Option<String>,
 }
 
+struct ProviderStart<'a> {
+    node_id: &'a str,
+    scope_id: &'a str,
+    branch_name: Option<String>,
+    instance_id: String,
+    provider: String,
+    prompt_key: String,
+    input: IndexMap<String, crate::definition::Binding>,
+    choices: Vec<String>,
+    cache_policy: crate::definition::CachePolicy,
+}
+
 impl Machine {
     pub fn schedule(
         &mut self,
@@ -101,6 +113,24 @@ impl Machine {
             Node::Fork { branches, join } => {
                 self.start_fork(node_id, scope_id, branch_name, instance_id, branches, join)
             }
+            Node::ProviderDecision {
+                provider,
+                prompt_key,
+                input,
+                choices,
+                cache_policy,
+                routes: _,
+            } => self.start_provider_decision(ProviderStart {
+                node_id,
+                scope_id,
+                branch_name,
+                instance_id,
+                provider,
+                prompt_key,
+                input,
+                choices,
+                cache_policy,
+            }),
             Node::Map {
                 items,
                 child,
@@ -170,6 +200,65 @@ impl Machine {
             branch_path,
             handler,
             input,
+        });
+        Ok(())
+    }
+
+    fn start_provider_decision(&mut self, start: ProviderStart<'_>) -> Result<()> {
+        let context = self.build_context(start.scope_id)?;
+        let input = if start.input.is_empty() {
+            Json::empty_object()
+        } else {
+            self.bind(&start.input, &context)?
+        };
+        let invocation_id = start.instance_id.clone();
+        let lineage = self.scope_or_err(start.scope_id)?.lineage();
+        let payload = Json::object([
+            ("provider".into(), Json::from(start.provider.as_str())),
+            ("prompt_key".into(), Json::from(start.prompt_key.as_str())),
+            (
+                "choices".into(),
+                Json::Array(
+                    start
+                        .choices
+                        .iter()
+                        .map(|choice| Json::from(choice.as_str()))
+                        .collect(),
+                ),
+            ),
+        ]);
+        self.emit(
+            EventKind::ProviderInvoked,
+            Some(start.instance_id.clone()),
+            Some(start.node_id.to_string()),
+            Some(lineage),
+            None,
+            payload,
+        )?;
+        self.invocations.insert(
+            invocation_id.clone(),
+            Invocation {
+                id: invocation_id.clone(),
+                instance_id: start.instance_id,
+                node_id: start.node_id.to_string(),
+                scope_id: start.scope_id.to_string(),
+                branch_name: start.branch_name,
+                handler: start.provider.clone(),
+                status: InvocationStatus::Pending,
+                output: None,
+            },
+        );
+        let branch_path = self.scope_or_err(start.scope_id)?.branch_path.clone();
+        self.effects.push(crate::effects::Effect::InvokeProvider {
+            run_id: self.run_id.clone(),
+            invocation_id,
+            node_id: start.node_id.to_string(),
+            branch_path,
+            provider: start.provider,
+            prompt_key: start.prompt_key,
+            input,
+            choices: start.choices,
+            cache_policy: start.cache_policy.as_str(),
         });
         Ok(())
     }

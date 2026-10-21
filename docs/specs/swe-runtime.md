@@ -1,21 +1,37 @@
-# SWE runtime (phase 2)
+# SWE runtime (through phase 4)
 
-**Status:** In-memory Rust/PyO3 execution kernel  
-**Not in this PR:** OverGraph persistence, Jev cache, research cutover
+**Status:** In-memory Rust/PyO3 execution kernel, durable OverGraph run store
+(phase 3) and provider decisions with an exact Jev cache (phase 4)  
+**Not yet:** research cutover (phase 5)
 
 ## Public API
 
 Python compiles with the existing `compile_definition(...)` / `compile_swd_text(...)`.
 The adapter `app.swe.runtime.run_workflow` sends the frozen document and its
-SHA-256 to `swe_native.Machine` and runs registered `async` handlers.
+SHA-256 to `swe_native.Machine` and runs registered `async` handlers and decision
+providers.
+
+```python
+run_workflow(compiled, handlers, input_data, *, resources=None, run_id=None, clock=None, concurrency=32)
+WorkflowRunner(compiled, handlers, *, resources=None, run_store=None, clock=None, concurrency=32)
+resume_run(compiled, handlers, *, resources, run_store, run_id, clock=None, concurrency=32)
+WorkflowResources(providers={}, prompts=None, cache=None, cancel_event=None)
+```
 
 ```text
 compile_definition → Machine.start(document, sha256, run_id, input, now_ms)
-                 ← InvokeHandler effects
+                 ← InvokeHandler / InvokeProvider effects
 Python asyncio tasks (outside the Rust lock / GIL)
                  → Machine.complete / fail / cancel / tick
                  ← more effects or a terminal status
 ```
+
+`run_workflow` is the unpersisted path. `WorkflowRunner(..., run_store=...)`
+persists every transition atomically and `resume` continues a crashed run
+(see [swe-overgraph.md](swe-overgraph.md)). `WorkflowResources` carries the
+provider registry, the active prompt map, the decision cache and the cancel
+event; a missing provider, prompt or cache fails preflight instead of falling
+back.
 
 Rust never calls Python. Python never waits on a handler while the machine lock
 is held. `py.allow_threads` wraps every Rust mutation.
@@ -39,6 +55,7 @@ Low-level module: `swe_native` (`sha256_hex`, `canonical_json_bytes`,
 | --- | --- |
 | `task` | Bind `input`, invoke a Python handler, store `$.<node>.result` |
 | `decision` (`expression`) | Evaluate in Rust. Routes are exactly `true` / `false` |
+| `decision` (`provider`) | Render the active prompt, invoke the named provider, route on the chosen value. Choices are declared in the node; an undeclared choice fails the run |
 | `fork` | Spawn named branches; results stay per branch |
 | `join` (`mode=all`, `on_failure=fail`) | Wait for every branch; `outputs` use `$.branches.<name>.result` |
 | `map` | Fan-out over an array; wait for all children even without a join |
@@ -50,11 +67,14 @@ barrier, not fire-and-forget.
 
 ## Reserved (preflight reject)
 
-`decision.evaluator=provider`, `wait`, `subworkflow`, `cache_policy: exact`,
-and any `retry` block. An accepted definition never silently ignores declared
-features.
+`wait`, `subworkflow`, and any `retry` block. `cache_policy: exact` is supported
+on provider decisions only (phase 4); on task nodes it stays rejected. An
+accepted definition never silently ignores declared features.
 
 `output_schema` is validated in Python with jsonschema before `complete`.
+
+Provider decisions and the L1/L2 exact cache are documented in
+[swe-provider.md](swe-provider.md).
 
 ## Limits
 
@@ -89,18 +109,21 @@ and emits `CancelInvocation` for siblings.
 In-memory only, append-only `EventSink`:
 
 `RunStarted`, `NodeScheduled`, `NodeStarted`, `NodeCompleted`, `NodeFailed`,
-`BranchSpawned`, `JoinSatisfied`, `DecisionTaken`, `RunCompleted` /
-`RunFailed` / `RunCancelled`.
+`BranchSpawned`, `JoinSatisfied`, `DecisionTaken`, `ProviderInvoked`,
+`ProviderCompleted`, `RunCompleted` / `RunFailed` / `RunCancelled`.
 
 Each event has `run_id`, a run-local monotonic `seq`, definition SHA, optional
 node instance id, and lineage (`branch_path`, fork/map instance, `loop_epoch`).
-This is the seam for OverGraph append in phase 3. No durability is claimed.
+The in-memory sink is the source for the durable OverGraph event append in
+`swe-overgraph.md`; the sink itself makes no durability claim.
 
 ## Isolation
 
 The machine is per run. Two concurrent runs of the same definition do not share
-branch ids or outputs. Research, Jev, OverGraph, and expert routing stay
-outside this crate.
+branch ids or outputs. The crate and `app.swe.runtime` stay free of research,
+Jev, OverGraph, and expert routing imports: the run store, providers and cache
+are injected as adapters (`app.services.overgraph.workflows`,
+`app.swe.providers`, `app.services.overgraph.jev_cache`).
 
 ## Map memory (phase 2)
 

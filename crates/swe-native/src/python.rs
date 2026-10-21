@@ -330,6 +330,31 @@ fn effect_to_py(py: Python<'_>, effect: &Effect) -> PyResult<Py<PyAny>> {
             dict.set_item("handler", handler)?;
             dict.set_item("input", json_to_py(py, input)?)?;
         }
+        Effect::InvokeProvider {
+            run_id,
+            invocation_id,
+            node_id,
+            branch_path,
+            provider,
+            prompt_key,
+            input,
+            choices,
+            cache_policy,
+        } => {
+            dict.set_item("run_id", run_id)?;
+            dict.set_item("invocation_id", invocation_id)?;
+            dict.set_item("node_id", node_id)?;
+            dict.set_item("branch_path", branch_path)?;
+            dict.set_item("provider", provider)?;
+            dict.set_item("prompt_key", prompt_key)?;
+            dict.set_item("input", json_to_py(py, input)?)?;
+            let choice_list = PyList::empty(py);
+            for choice in choices {
+                choice_list.append(choice)?;
+            }
+            dict.set_item("choices", choice_list)?;
+            dict.set_item("cache_policy", cache_policy)?;
+        }
         Effect::CancelInvocation { invocation_id } => {
             dict.set_item("invocation_id", invocation_id)?;
         }

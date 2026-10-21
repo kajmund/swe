@@ -2,10 +2,10 @@ use indexmap::IndexMap;
 
 use crate::definition::Node;
 use crate::effects::{Effect, RunStatus};
-use crate::error::{Result, RuntimeError};
+use crate::error::{ErrorKind, Result, RuntimeError};
 use crate::events::EventKind;
 use crate::json::Json;
-use crate::machine::state::{InvocationStatus, Machine, ScopeKind, WorkStatus};
+use crate::machine::state::{Invocation, InvocationStatus, Machine, ScopeKind, WorkStatus};
 
 impl Machine {
     pub fn complete_invocation(&mut self, invocation_id: &str, output: Json) -> Result<bool> {
@@ -34,26 +34,105 @@ impl Machine {
             stored.status = InvocationStatus::Completed;
             stored.output = Some(output.clone());
         }
-        let wrapped = Json::object([("result".into(), output.clone())]);
-        self.store_local(&invocation.scope_id, &invocation.node_id, wrapped.clone())?;
+        let node = self.definition.node(&invocation.node_id)?.clone();
+        match node {
+            Node::Task { next, .. } => {
+                let wrapped = Json::object([("result".into(), output.clone())]);
+                self.store_local(&invocation.scope_id, &invocation.node_id, wrapped.clone())?;
+                self.emit(
+                    EventKind::NodeCompleted,
+                    Some(invocation.instance_id.clone()),
+                    Some(invocation.node_id.clone()),
+                    Some(self.scope_or_err(&invocation.scope_id)?.lineage()),
+                    Some(format!("$.{}", invocation.node_id)),
+                    wrapped,
+                )?;
+                if let Some(next) = next {
+                    self.schedule(&next, &invocation.scope_id, invocation.branch_name)?;
+                } else {
+                    self.complete_scope_work(&invocation.scope_id, output)?;
+                }
+            }
+            Node::ProviderDecision {
+                choices, routes, ..
+            } => {
+                self.complete_provider_decision(&invocation, output, &choices, &routes)?;
+            }
+            _ => {
+                return Err(RuntimeError::internal(format!(
+                    "invocation for non-invocable node {}",
+                    invocation.node_id
+                )))
+            }
+        }
+        Ok(false)
+    }
+
+    fn complete_provider_decision(
+        &mut self,
+        invocation: &Invocation,
+        output: Json,
+        choices: &[String],
+        routes: &IndexMap<String, String>,
+    ) -> Result<()> {
+        let choice = output
+            .get("choice")
+            .and_then(Json::as_str)
+            .ok_or_else(|| {
+                RuntimeError::new(
+                    ErrorKind::Type,
+                    format!(
+                        "provider decision {} requires a string choice",
+                        invocation.node_id
+                    ),
+                )
+                .with_path(format!("nodes.{}", invocation.node_id))
+            })?
+            .to_string();
+        if !choices.iter().any(|known| known == &choice) {
+            return Err(RuntimeError::new(
+                ErrorKind::Type,
+                format!(
+                    "unknown provider choice {choice:?} for node {}",
+                    invocation.node_id
+                ),
+            )
+            .with_path(format!("nodes.{}", invocation.node_id)));
+        }
+        let route = routes.get(&choice).cloned().ok_or_else(|| {
+            RuntimeError::internal(format!(
+                "provider route missing for choice {choice:?} on {}",
+                invocation.node_id
+            ))
+        })?;
+        let lineage = self.scope_or_err(&invocation.scope_id)?.lineage();
+        let result_ref = Some(format!("$.{}", invocation.node_id));
+        self.store_local(&invocation.scope_id, &invocation.node_id, output.clone())?;
+        self.emit(
+            EventKind::ProviderCompleted,
+            Some(invocation.instance_id.clone()),
+            Some(invocation.node_id.clone()),
+            Some(lineage.clone()),
+            result_ref.clone(),
+            output.clone(),
+        )?;
+        self.emit(
+            EventKind::DecisionTaken,
+            Some(invocation.instance_id.clone()),
+            Some(invocation.node_id.clone()),
+            Some(lineage.clone()),
+            result_ref.clone(),
+            output.clone(),
+        )?;
         self.emit(
             EventKind::NodeCompleted,
             Some(invocation.instance_id.clone()),
             Some(invocation.node_id.clone()),
-            Some(self.scope_or_err(&invocation.scope_id)?.lineage()),
-            Some(format!("$.{}", invocation.node_id)),
-            wrapped,
+            Some(lineage),
+            result_ref,
+            output,
         )?;
-        let next = match self.definition.node(&invocation.node_id)? {
-            Node::Task { next, .. } => next.clone(),
-            _ => None,
-        };
-        if let Some(next) = next {
-            self.schedule(&next, &invocation.scope_id, invocation.branch_name)?;
-        } else {
-            self.complete_scope_work(&invocation.scope_id, output)?;
-        }
-        Ok(false)
+        self.schedule(&route, &invocation.scope_id, invocation.branch_name.clone())
     }
 
     pub fn fail_invocation(&mut self, invocation_id: &str, error: RuntimeError) -> Result<bool> {

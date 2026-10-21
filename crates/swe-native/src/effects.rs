@@ -37,6 +37,17 @@ pub enum Effect {
         handler: String,
         input: Json,
     },
+    InvokeProvider {
+        run_id: String,
+        invocation_id: String,
+        node_id: String,
+        branch_path: String,
+        provider: String,
+        prompt_key: String,
+        input: Json,
+        choices: Vec<String>,
+        cache_policy: &'static str,
+    },
     CancelInvocation {
         invocation_id: String,
     },
@@ -46,6 +57,7 @@ impl Effect {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::InvokeHandler { .. } => "invoke_handler",
+            Self::InvokeProvider { .. } => "invoke_provider",
             Self::CancelInvocation { .. } => "cancel_invocation",
         }
     }

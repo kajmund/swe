@@ -11,7 +11,6 @@ use crate::effects::{RunStatus, StepOutcome};
 use crate::error::{Result, RuntimeError};
 use crate::events::{EventKind, MemoryEventSink, RuntimeEvent};
 use crate::json::Json;
-use crate::preflight::reject_provider_document;
 
 use self::state::{Machine, Scope, ScopeKind};
 
@@ -24,7 +23,6 @@ impl Machine {
         input: Json,
         now_ms: u64,
     ) -> Result<(Self, StepOutcome)> {
-        reject_provider_document(&definition.document)?;
         let input = canonicalize(&input)?;
         let deadline_ms =
             now_ms.saturating_add(u64::from(definition.limits.timeout_seconds) * 1000);
@@ -199,4 +197,164 @@ pub fn start_run(
 ) -> Result<(Machine, StepOutcome)> {
     let definition = CompiledDefinition::load(document, sha256)?;
     Machine::start(definition, run_id, input, now_ms)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canonicalize::sha256_hex;
+    use crate::convert::parse_json_str;
+    use crate::definition::CompiledDefinition;
+    use crate::effects::Effect;
+    use crate::error::ErrorKind;
+    use crate::json::Json;
+
+    const DOCUMENT: &str = r#"{
+        "version": "1.0",
+        "name": "provider_test",
+        "entrypoint": "evaluate",
+        "limits": {"max_steps": 10, "max_depth": 2, "timeout_seconds": 30},
+        "nodes": {
+            "evaluate": {
+                "type": "decision",
+                "evaluator": "provider",
+                "provider": "fake",
+                "prompt_key": "research.assessment.user",
+                "input": {"question": "$.input.question"},
+                "choices": ["sufficient", "insufficient"],
+                "routes": {"sufficient": "done", "insufficient": "incomplete"},
+                "cache_policy": "exact"
+            },
+            "done": {"type": "end", "status": "completed"},
+            "incomplete": {"type": "end", "status": "incomplete"}
+        }
+    }"#;
+
+    fn start() -> (WorkflowMachine, StepOutcome) {
+        let document = parse_json_str(DOCUMENT).unwrap();
+        let sha = sha256_hex(&document).unwrap();
+        let input = parse_json_str(r#"{"question": "is it sufficient?"}"#).unwrap();
+        start_run(document, &sha, "run-test".to_string(), input, 1_000).unwrap()
+    }
+
+    fn invocation_id(outcome: &StepOutcome) -> String {
+        match &outcome.effects[0] {
+            Effect::InvokeProvider { invocation_id, .. } => invocation_id.clone(),
+            other => panic!("unexpected effect: {other:?}"),
+        }
+    }
+
+    fn provider_document(routes: &str, choices: &str) -> String {
+        format!(
+            r#"{{"version":"1.0","name":"provider_test","entrypoint":"evaluate","limits":{{"max_steps":10,"max_depth":2,"timeout_seconds":30}},"nodes":{{"evaluate":{{"type":"decision","evaluator":"provider","provider":"fake","prompt_key":"research.assessment.user","input":{{}},"choices":{choices},"routes":{routes}}},"done":{{"type":"end","status":"completed"}}}}}}"#
+        )
+    }
+
+    fn load(raw: &str) -> Result<CompiledDefinition> {
+        let document = parse_json_str(raw)?;
+        let sha = sha256_hex(&document)?;
+        CompiledDefinition::load(document, &sha)
+    }
+
+    #[test]
+    fn provider_decision_emits_invoke_provider_effect() {
+        let (_machine, outcome) = start();
+        match outcome.effects.as_slice() {
+            [Effect::InvokeProvider {
+                provider,
+                prompt_key,
+                input,
+                choices,
+                cache_policy,
+                ..
+            }] => {
+                assert_eq!(provider, "fake");
+                assert_eq!(prompt_key, "research.assessment.user");
+                assert_eq!(
+                    input.get("question").and_then(Json::as_str),
+                    Some("is it sufficient?")
+                );
+                assert_eq!(
+                    choices,
+                    &vec!["sufficient".to_string(), "insufficient".to_string()]
+                );
+                assert_eq!(*cache_policy, "exact");
+            }
+            other => panic!("unexpected effects: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn provider_choice_routes_to_declared_route() {
+        let (mut machine, outcome) = start();
+        let invocation_id = invocation_id(&outcome);
+        let completion = machine.complete(
+            &invocation_id,
+            parse_json_str(r#"{"choice": "sufficient", "cache": "miss"}"#).unwrap(),
+            1_001,
+        );
+        assert_eq!(completion.status, RunStatus::Completed);
+        assert_eq!(
+            machine
+                .output()
+                .get("evaluate")
+                .and_then(|value| value.get("choice"))
+                .and_then(Json::as_str),
+            Some("sufficient")
+        );
+        let kinds: Vec<&str> = machine
+            .events()
+            .iter()
+            .map(|event| event.kind.as_str())
+            .collect();
+        assert!(kinds.contains(&"ProviderInvoked"));
+        assert!(kinds.contains(&"ProviderCompleted"));
+        assert!(kinds.contains(&"DecisionTaken"));
+        assert!(kinds.contains(&"RunCompleted"));
+    }
+
+    #[test]
+    fn unknown_provider_choice_fails_the_run_with_a_typed_error() {
+        let (mut machine, outcome) = start();
+        let invocation_id = invocation_id(&outcome);
+        let completion = machine.complete(
+            &invocation_id,
+            parse_json_str(r#"{"choice": "maybe"}"#).unwrap(),
+            1_001,
+        );
+        assert_eq!(completion.status, RunStatus::Failed);
+        let error = machine.error().unwrap();
+        assert!(matches!(error.kind, ErrorKind::Type));
+        assert!(error.message.contains("unknown provider choice"));
+    }
+
+    #[test]
+    fn provider_routes_must_cover_every_choice() {
+        let error = load(&provider_document(
+            r#"{"sufficient":"done"}"#,
+            r#"["sufficient","insufficient"]"#,
+        ))
+        .unwrap_err();
+        assert!(error.message.contains("cover every choice"));
+    }
+
+    #[test]
+    fn provider_route_must_be_a_declared_choice() {
+        let error = load(&provider_document(
+            r#"{"sufficient":"done","maybe":"done"}"#,
+            r#"["sufficient","insufficient"]"#,
+        ))
+        .unwrap_err();
+        assert!(error.message.contains("not a declared choice"));
+    }
+
+    #[test]
+    fn duplicate_provider_choices_are_rejected() {
+        let error = load(&provider_document(
+            r#"{"sufficient":"done"}"#,
+            r#"["sufficient","sufficient"]"#,
+        ))
+        .unwrap_err();
+        assert!(error.message.contains("duplicate provider choice"));
+    }
 }
