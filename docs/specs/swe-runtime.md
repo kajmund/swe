@@ -158,8 +158,9 @@ engine itself never imports research.
 - **Run store:** the OverGraph run store is not production-wired in the cutover;
   the bridge accepts one for tests and measurement only (`swe-overgraph.md`).
 
-`loop_control.run_research_loop` is kept for now but is unreachable from
-production; it is removed in the follow-up delete PR.
+The old in-process `loop_control.run_research_loop` and its fan-out shell were
+deleted in the cutover's delete-PR. `execution._run_research_loop` is the only
+loop seam and it always calls the bridge; there is no fallback path.
 
 ## Map memory (phase 2)
 
