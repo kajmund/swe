@@ -59,7 +59,7 @@ Customer id and feature id come from host context, never from YAML. Allowed feat
 2. **Done** — Rust/PyO3 runtime: `task`, `decision(expression)`, `fork`, `join`, `map`, `end` + Python asyncio dispatch — [swe-runtime.md](swe-runtime.md)
 3. **Done** — OverGraph adapter: isolation, `immediate` WAL, atomic transitions, recovery, run events — [swe-overgraph.md](swe-overgraph.md)
 4. **Done** — Jev provider + SHA-256 cache L1/L2 + single-flight, reuse `EvidenceScreenCache` contracts — [swe-provider.md](swe-provider.md)
-5. Research integration and differential tests; delete replaced orchestration
+5. **Done** — research integration on SWE (`research/swe_bridge.py`), differential tests and deletion of the replaced orchestration — [swe-cutover.md](swe-cutover.md)
 6. Expert/model/subagent adapters. `wait`, UI, webcrawl later
 
 Out of v1: distributed schedulers, brokers, arbitrary Python in YAML, auto-deletion, SWE-owned agent memory, a second Jev/research engine.
