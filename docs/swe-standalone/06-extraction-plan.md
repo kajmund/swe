@@ -282,8 +282,8 @@ swe = { git = "https://github.com/kajmund/swe", tag = "v0.1.0", subdirectory = "
 
 Det nya repot blir **publikt** och dual-licensierat MIT OR Apache-2.0 för
 extraktionsmålet. Publikt innebär distribution: `THIRD-PARTY-NOTICES` och en
-licensgrind i CI är därför publiceringskrav, inte förbättringar. Kvar att besluta:
-**namn och organisation**: `kajmund/swe`; crates `swe-native`/`swe-budget` (lediga),
+licensgrind i CI är därför publiceringskrav, inte förbättringar. Beslutade namn:
+**repo och organisation**: `kajmund/swe`; crates `swe-native`/`swe-budget` (lediga),
 PyPI-distribution `swe-engine` (`swe` är upptaget, importnamnet förblir `swe`).
 
 ## AI-agentförfattarskap (dokumenterat 2026-11-01)

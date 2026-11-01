@@ -46,13 +46,13 @@ def test_canonical_bytes_match_python_oracle() -> None:
 def test_yaml_json_sha_matches_across_languages() -> None:
     native = require_native()
     compiled_json = compile_definition(
-        load_swd_json((FIXTURES / "research_parallel.json").read_text(encoding="utf-8")),
+        load_swd_json((FIXTURES / "provider_parallel.json").read_text(encoding="utf-8")),
         handlers=EXAMPLE_HANDLERS,
         providers=EXAMPLE_PROVIDERS,
         prompt_keys=EXAMPLE_PROMPT_KEYS,
     )
     compiled_yaml = compile_definition(
-        load_swd_yaml((FIXTURES / "research_parallel.yaml").read_text(encoding="utf-8")),
+        load_swd_yaml((FIXTURES / "provider_parallel.yaml").read_text(encoding="utf-8")),
         handlers=EXAMPLE_HANDLERS,
         providers=EXAMPLE_PROVIDERS,
         prompt_keys=EXAMPLE_PROMPT_KEYS,

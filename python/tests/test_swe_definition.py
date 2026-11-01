@@ -24,8 +24,8 @@ from swe_helpers import (
     FIXTURES,
 )
 
-EXAMPLE_YAML = FIXTURES / "research_parallel.yaml"
-EXAMPLE_JSON = FIXTURES / "research_parallel.json"
+EXAMPLE_YAML = FIXTURES / "provider_parallel.yaml"
+EXAMPLE_JSON = FIXTURES / "provider_parallel.json"
 
 
 def _compile(document: object) -> CompiledDefinition:
@@ -52,13 +52,13 @@ def test_json_and_yaml_have_the_same_hash() -> None:
     )
     assert json_doc.sha256 == yaml_doc.sha256
     assert yaml_doc.sha256 == text_doc.sha256
-    assert json_doc.entrypoint == "investigate"
+    assert json_doc.entrypoint == "dispatch"
     assert len(json_doc.sha256) == 64
 
 
 def test_unknown_node_type_is_rejected() -> None:
     document = json.loads(EXAMPLE_JSON.read_text(encoding="utf-8"))
-    document["nodes"]["search_contracts"]["type"] = "magic"
+    document["nodes"]["fetch_catalog"]["type"] = "magic"
     with pytest.raises(SwdValidationError, match="unknown node type"):
         _compile(document)
 
@@ -68,7 +68,7 @@ def test_unknown_handler_is_rejected() -> None:
     with pytest.raises(SwdValidationError, match="unknown handler"):
         compile_definition(
             document,
-            handlers=frozenset({"research.other"}),
+            handlers=frozenset({"demo.other"}),
             providers=EXAMPLE_PROVIDERS,
             prompt_keys=EXAMPLE_PROMPT_KEYS,
         )
@@ -104,8 +104,8 @@ def test_non_terminal_loop_is_rejected() -> None:
                 "condition": {"const": True},
                 "routes": {"true": "ping", "false": "done"},
             },
-            "ping": {"type": "task", "handler": "research.execute_need", "next": "pong"},
-            "pong": {"type": "task", "handler": "research.execute_need", "next": "ping"},
+            "ping": {"type": "task", "handler": "demo.execute_item", "next": "pong"},
+            "pong": {"type": "task", "handler": "demo.execute_item", "next": "ping"},
             "done": {"type": "end", "status": "completed"},
         },
     }
@@ -138,7 +138,7 @@ def test_map_definition_compiles() -> None:
                 "concurrency": 8,
                 "join": "after_needs",
             },
-            "run_need": {"type": "task", "handler": "research.execute_need"},
+            "run_need": {"type": "task", "handler": "demo.execute_item"},
             "after_needs": {"type": "join", "mode": "all", "next": "done"},
             "done": {"type": "end", "status": "completed"},
         },
@@ -167,10 +167,10 @@ def test_compiled_document_is_immutable() -> None:
         compiled.document["name"] = "mutated"  # type: ignore[index]
     nodes = compiled.document["nodes"]
     with pytest.raises(TypeError):
-        nodes["investigate"] = {}
-    investigate = nodes["investigate"]
+        nodes["dispatch"] = {}
+    dispatch = nodes["dispatch"]
     with pytest.raises(TypeError):
-        investigate["type"] = "task"
+        dispatch["type"] = "task"
     choices = nodes["evaluate"]["choices"]
     with pytest.raises(TypeError):
         choices[0] = "mutated"  # type: ignore[index]
@@ -178,12 +178,12 @@ def test_compiled_document_is_immutable() -> None:
 
 def test_compiled_document_matches_canonical_hash() -> None:
     document = json.loads(EXAMPLE_JSON.read_text(encoding="utf-8"))
-    document["nodes"]["search_contracts"]["input"] = {
+    document["nodes"]["fetch_catalog"]["input"] = {
         "label": {"const": "e\u0301"},
         "count": {"const": 1.0},
     }
     compiled = _compile(document)
-    payload = compiled.document["nodes"]["search_contracts"]["input"]
+    payload = compiled.document["nodes"]["fetch_catalog"]["input"]
     assert payload["label"]["const"] == "é"
     assert payload["count"]["const"] == 1
     assert compiled.sha256 == sha256_hex(compiled.document)
@@ -207,7 +207,7 @@ def test_inline_provider_question_is_rejected() -> None:
 
 def test_unknown_prompt_key_is_rejected() -> None:
     document = json.loads(EXAMPLE_JSON.read_text(encoding="utf-8"))
-    document["nodes"]["evaluate"]["prompt_key"] = "research.not_a_catalog_key"
+    document["nodes"]["evaluate"]["prompt_key"] = "demo.not_a_catalog_key"
     with pytest.raises(SwdValidationError, match="unknown prompt_key"):
         _compile(document)
 
@@ -236,7 +236,7 @@ def test_provider_node_with_injected_prompt_keys_compiles() -> None:
 
 def test_unknown_prompt_key_is_rejected_against_injected_set() -> None:
     document = json.loads(EXAMPLE_JSON.read_text(encoding="utf-8"))
-    document["nodes"]["evaluate"]["prompt_key"] = "research.not_in_set"
+    document["nodes"]["evaluate"]["prompt_key"] = "demo.not_in_set"
     with pytest.raises(SwdValidationError, match="unknown prompt_key"):
         compile_definition(
             document,

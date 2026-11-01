@@ -1,36 +1,36 @@
 {
   "version": "1.0",
-  "name": "research_parallel",
-  "entrypoint": "investigate",
+  "name": "provider_parallel",
+  "entrypoint": "dispatch",
   "limits": {
     "max_steps": 100,
     "max_depth": 10,
     "timeout_seconds": 1800
   },
   "nodes": {
-    "investigate": {
+    "dispatch": {
       "type": "fork",
       "branches": {
-        "contracts": "search_contracts",
-        "legal": "search_legal"
+        "catalog": "fetch_catalog",
+        "pricing": "fetch_pricing"
       },
       "join": "combine"
     },
-    "search_contracts": {
+    "fetch_catalog": {
       "type": "task",
-      "handler": "research.search_contracts"
+      "handler": "demo.fetch_catalog"
     },
-    "search_legal": {
+    "fetch_pricing": {
       "type": "task",
-      "handler": "research.search_legal_sources"
+      "handler": "demo.fetch_pricing"
     },
     "combine": {
       "type": "join",
       "mode": "all",
       "on_failure": "fail",
       "outputs": {
-        "contracts": "$.branches.contracts.result",
-        "legal": "$.branches.legal.result"
+        "catalog": "$.branches.catalog.result",
+        "pricing": "$.branches.pricing.result"
       },
       "next": "check_budget"
     },
@@ -51,32 +51,32 @@
     "evaluate": {
       "type": "decision",
       "evaluator": "provider",
-      "provider": "jev",
-      "prompt_key": "research.assessment.user",
+      "provider": "mock.decision",
+      "prompt_key": "demo.assessment",
       "input": {
-        "contracts": "$.combine.contracts",
-        "legal": "$.combine.legal"
+        "catalog": "$.combine.catalog",
+        "pricing": "$.combine.pricing"
       },
       "choices": ["sufficient", "insufficient", "uncertain"],
       "routes": {
-        "sufficient": "synthesize",
-        "insufficient": "follow_up",
-        "uncertain": "inspect_context"
+        "sufficient": "summarize",
+        "insufficient": "refine",
+        "uncertain": "inspect"
       }
     },
-    "follow_up": {
+    "refine": {
       "type": "task",
-      "handler": "research.plan_follow_up",
-      "next": "investigate"
+      "handler": "demo.refine",
+      "next": "dispatch"
     },
-    "inspect_context": {
+    "inspect": {
       "type": "task",
-      "handler": "research.inspect_context",
+      "handler": "demo.inspect",
       "next": "evaluate"
     },
-    "synthesize": {
+    "summarize": {
       "type": "task",
-      "handler": "research.synthesize",
+      "handler": "demo.summarize",
       "next": "end_complete"
     },
     "end_complete": {

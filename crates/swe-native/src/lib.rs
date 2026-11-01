@@ -1,4 +1,4 @@
-//! SWE in-memory execution kernel. No OverGraph, Jev, or research knowledge.
+//! SWE in-memory execution kernel with no storage, provider, or domain coupling.
 
 mod canonicalize;
 mod convert;

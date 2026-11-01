@@ -1,9 +1,9 @@
 """Exact decision-cache contract for provider decisions.
 
-The engine owns the cache identity and the interface. The storage layer
-(`app.services.overgraph.jev_cache`) implements `DecisionCache`; nothing in
-`swe` imports OverGraph. Keeping the key here means every caller and every
-cache implementation agrees on what "the same decision" means.
+The engine owns the cache identity and the interface. Host storage adapters
+implement `DecisionCache`; the engine imports no storage backend. Keeping the
+key here means every caller and backend agrees on what "the same decision"
+means.
 """
 
 from __future__ import annotations

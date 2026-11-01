@@ -31,7 +31,7 @@ PROVIDER_FIXTURE = {
             "type": "decision",
             "evaluator": "provider",
             "provider": "fake",
-            "prompt_key": "research.assessment.user",
+            "prompt_key": "demo.assessment",
             "choices": ["yes", "no"],
             "routes": {"yes": "done", "no": "done"},
         },
@@ -42,7 +42,7 @@ PROVIDER_FIXTURE = {
 
 async def test_research_fixture_requires_registered_provider() -> None:
     compiled = compile_definition(
-        load_swd_json((FIXTURES / "research_parallel.json").read_text(encoding="utf-8")),
+        load_swd_json((FIXTURES / "provider_parallel.json").read_text(encoding="utf-8")),
         handlers=EXAMPLE_HANDLERS,
         providers=EXAMPLE_PROVIDERS,
         prompt_keys=EXAMPLE_PROMPT_KEYS,

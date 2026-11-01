@@ -1,8 +1,8 @@
 """Durable run-store contract shared by the SWE adapter and its implementations.
 
 `swe.runtime` writes one `RunRecord` per transition and replays
-`InvocationRecord`s on resume. `app.services.overgraph.workflows` implements the
-contract, so the runtime stays independent of any persistence backend.
+`InvocationRecord`s on resume. Applications implement this contract for their
+durable storage, so the runtime stays independent of any persistence backend.
 
 `WorkflowResources` is the other half of the same contract: the host-supplied
 resources a run may use. It lives here so the durable-run types and the
@@ -47,7 +47,7 @@ class InvocationRecord:
 
 
 class RunStore(Protocol):
-    """Durable run sink, implemented by `app.services.overgraph.workflows`."""
+    """Durable run sink implemented by the embedding application."""
 
     async def record(
         self,
