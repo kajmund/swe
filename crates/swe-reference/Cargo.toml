@@ -1,0 +1,20 @@
+[package]
+name = "swe-reference"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.83"
+description = "Domain-neutral reference experiment: SWE kernel + Sweycoin ledger driving a supplier-selection investigation"
+license = "UNLICENSED"
+publish = false
+
+[[bin]]
+name = "swe-reference"
+path = "src/main.rs"
+
+[lib]
+name = "swe_reference"
+path = "src/lib.rs"
+
+[dependencies]
+swe-native = { path = "../swe-native" }
+swe-budget = { path = "../swe-budget" }

@@ -219,7 +219,7 @@ mod tests {
                 "type": "decision",
                 "evaluator": "provider",
                 "provider": "fake",
-                "prompt_key": "research.assessment.user",
+                "prompt_key": "demo.decision.user",
                 "input": {"question": "$.input.question"},
                 "choices": ["sufficient", "insufficient"],
                 "routes": {"sufficient": "done", "insufficient": "incomplete"},
@@ -246,7 +246,7 @@ mod tests {
 
     fn provider_document(routes: &str, choices: &str) -> String {
         format!(
-            r#"{{"version":"1.0","name":"provider_test","entrypoint":"evaluate","limits":{{"max_steps":10,"max_depth":2,"timeout_seconds":30}},"nodes":{{"evaluate":{{"type":"decision","evaluator":"provider","provider":"fake","prompt_key":"research.assessment.user","input":{{}},"choices":{choices},"routes":{routes}}},"done":{{"type":"end","status":"completed"}}}}}}"#
+            r#"{{"version":"1.0","name":"provider_test","entrypoint":"evaluate","limits":{{"max_steps":10,"max_depth":2,"timeout_seconds":30}},"nodes":{{"evaluate":{{"type":"decision","evaluator":"provider","provider":"fake","prompt_key":"demo.decision.user","input":{{}},"choices":{choices},"routes":{routes}}},"done":{{"type":"end","status":"completed"}}}}}}"#
         )
     }
 
@@ -269,7 +269,7 @@ mod tests {
                 ..
             }] => {
                 assert_eq!(provider, "fake");
-                assert_eq!(prompt_key, "research.assessment.user");
+                assert_eq!(prompt_key, "demo.decision.user");
                 assert_eq!(
                     input.get("question").and_then(Json::as_str),
                     Some("is it sufficient?")

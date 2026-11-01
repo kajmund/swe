@@ -185,8 +185,8 @@ fn provider_decision_invokes_a_provider_and_routes_on_choice() {
         "ask": {
           "type": "decision",
           "evaluator": "provider",
-          "provider": "jev",
-          "prompt_key": "research.assessment.user",
+          "provider": "fake",
+          "prompt_key": "demo.decision.user",
           "input": {"flag": "$.input.flag"},
           "choices": ["yes", "no"],
           "routes": {"yes": "ok", "no": "ok"}
@@ -205,7 +205,7 @@ fn provider_decision_invokes_a_provider_and_routes_on_choice() {
             choices,
             ..
         }) => {
-            assert_eq!(provider, "jev");
+            assert_eq!(provider, "fake");
             assert_eq!(input.get("flag").and_then(Json::as_bool), Some(true));
             assert_eq!(choices.len(), 2);
             invocation_id.clone()

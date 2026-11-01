@@ -61,7 +61,7 @@ pub struct RuntimeEvent {
     pub payload: Json,
 }
 
-/// Narrow append-only boundary for a later OverGraph sink.
+/// Narrow append-only boundary for a durable sink supplied by the host.
 pub trait EventSink {
     fn append(&mut self, event: RuntimeEvent) -> Result<()>;
 }

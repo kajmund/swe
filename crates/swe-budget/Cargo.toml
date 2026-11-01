@@ -1,0 +1,12 @@
+[package]
+name = "swe-budget"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.83"
+description = "Generic Sweycoin budget ledger: reserve, settle, release, replay"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+name = "swe_budget"
+path = "src/lib.rs"

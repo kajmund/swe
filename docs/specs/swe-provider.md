@@ -78,7 +78,7 @@ cancels the Python provider task, and a provider that outlives
 
 ```python
 resources = WorkflowResources(
-    providers={"jev": make_jev_provider()},
+    providers={"assessment": assessment_provider},
     prompts=active_prompts,      # require_active_prompts(...) map
     cache=JevDecisionCache(),    # required for any cache_policy: exact
 )
@@ -101,21 +101,26 @@ callable returns a choice string or an object containing `choice` plus optional
 metadata (for example `confidence`). The adapter validates the choice against the
 declared choices before completing the invocation.
 
-## Jev provider
+## Jev provider — removed (B1)
 
-`app.swe.providers.make_jev_provider` reuses the existing System One research
-surface instead of reimplementing it:
+The previous `app.swe.providers.make_jev_provider` was a `decision(provider)`
+adapter around JEV System One. It had **no production caller**: production
+research decides through `app.services.research.fast_controller`, which calls
+`classify_research_decision` from the compact research state directly. The
+adapter was therefore only exercised by tests.
 
-* `HttpJevSystemOne.ask` as the client,
-* `fast_controller.ASSESSMENT_QUESTIONS` for the Noul questions,
-* `classify_research_decision` with the `research_jev_*` thresholds for the
-  choice,
-* `research_jev_available` / `research_jev_model` for configuration.
+B1 moved it out of the engine and the project owner decided to delete it rather
+than keep a generic SWE interface with no consumer. Rationale and evidence:
+`docs/swe-standalone/02-inventory-python.md` E10 and
+`docs/swe-standalone/08-verification-log.md` §7.5.
 
-The rendered prompt is the Jev `state`. The Jev outcome vocabulary is fixed:
-`sufficient | insufficient | uncertain`. If the workflow does not declare that
-choice, the run fails; there is no provider or model fallback. The returned
-metadata contains `provider`, `model`, `confidence`, and `latency_ms`.
+The **provider contract** it exercised is unchanged and still public: a node
+declares `provider` and `prompt_key`, the host supplies a callable through
+`WorkflowResources.providers`, the adapter renders the declared prompt, and the
+returned `choice` is validated against the node's declared choices. A choice
+outside them fails the run; there is no provider or model fallback. Re-adding a
+JEV decision provider is a Host concern and belongs in
+`app/services/research/`, not in the engine.
 
 ## Exact cache
 

@@ -123,7 +123,7 @@ The machine is per run. Two concurrent runs of the same definition do not share
 branch ids or outputs. The crate and `app.swe.runtime` stay free of research,
 Jev, OverGraph, and expert routing imports: the run store, providers and cache
 are injected as adapters (`app.services.overgraph.workflows`,
-`app.swe.providers`, `app.services.overgraph.jev_cache`).
+`app.services.research` (host providers), `app.services.overgraph.jev_cache`).
 
 ## Research wave loop
 

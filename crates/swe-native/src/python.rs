@@ -10,9 +10,13 @@ use crate::canonicalize::{canonical_json_bytes, sha256_hex};
 use crate::effects::{Effect, StepOutcome};
 use crate::error::RuntimeError;
 use crate::events::RuntimeEvent;
+use crate::evidence::{
+    resolve_need, Admissibility, EvidenceAssessment, EvidencePolicy, Provenance,
+};
 use crate::expression::evaluate_expression;
 use crate::json::Json;
 use crate::machine::{start_run, WorkflowMachine};
+use crate::needs::NeedRef;
 
 #[pymodule]
 fn swe_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -20,6 +24,9 @@ fn swe_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_sha256_hex, m)?)?;
     m.add_function(wrap_pyfunction!(py_canonical_json_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(py_evaluate_expression, m)?)?;
+    m.add_function(wrap_pyfunction!(py_resolve_evidence, m)?)?;
+    m.add_function(wrap_pyfunction!(py_derive_needs, m)?)?;
+    m.add_function(wrap_pyfunction!(py_operation_gate, m)?)?;
     Ok(())
 }
 
@@ -408,4 +415,287 @@ fn opt_str(value: Option<&str>) -> Option<&str> {
 
 fn runtime_to_py(error: RuntimeError) -> PyErr {
     PyValueError::new_err(format!("{}: {}", error.kind, error.message))
+}
+
+// ---------------------------------------------------------------------------
+// Differential-test surface (B2).
+//
+// These functions expose the generic need/evidence/operation semantics to the
+// Python projection so a differential test can run the same input through the
+// engine and through the adapter and require identical outcomes. They are the
+// only supported way for a host to obtain those states: the adapter must never
+// compute them itself.
+// ---------------------------------------------------------------------------
+
+#[pyfunction]
+#[pyo3(name = "resolve_evidence")]
+fn py_resolve_evidence(
+    _py: Python<'_>,
+    need: Bound<'_, PyAny>,
+    assessments: Bound<'_, PyAny>,
+    uncertain_blocks_scope: bool,
+    require_provenance: bool,
+) -> PyResult<Py<PyAny>> {
+    let need = json_from_py(&need)?;
+    let items = json_from_py(&assessments)?;
+    let need_ref = need_from_json(&need).map_err(runtime_to_py_unknown)?;
+    let candidates = items
+        .as_array()
+        .ok_or_else(|| PyValueError::new_err("assessments must be an array"))?
+        .iter()
+        .map(assessment_from_json)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(runtime_to_py_unknown)?;
+    let policy = EvidencePolicy {
+        uncertain_blocks_scope,
+        require_provenance,
+    };
+    let (status, evidence) = resolve_need(&candidates, &policy);
+    Python::with_gil(|py| {
+        let evidence: Vec<Json> = evidence
+            .iter()
+            .map(|entry| {
+                crate::python::object_json(vec![
+                    ("fact", Json::String(entry.need.fact.clone())),
+                    ("subject", Json::String(entry.need.subject.clone())),
+                    (
+                        "value",
+                        entry.value.clone().map_or(Json::Null, Json::String),
+                    ),
+                    ("status", Json::String(entry.status.as_str().to_string())),
+                    (
+                        "source_id",
+                        entry.source_id.clone().map_or(Json::Null, Json::String),
+                    ),
+                    ("reason_code", Json::String(entry.reason_code.clone())),
+                ])
+            })
+            .collect();
+        let payload = crate::python::object_json(vec![
+            ("schema_version", Json::from_u64(1)),
+            ("fact", Json::String(need_ref.fact)),
+            ("subject", Json::String(need_ref.subject)),
+            ("status", Json::String(status.as_str().to_string())),
+            ("evidence", Json::Array(evidence)),
+        ]);
+        json_to_py(py, &payload)
+    })
+}
+
+pub(crate) fn object_json(pairs: Vec<(&str, Json)>) -> Json {
+    Json::object(
+        pairs
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value)),
+    )
+}
+
+fn need_from_json(value: &Json) -> std::result::Result<NeedRef, String> {
+    let fact = value
+        .get("fact")
+        .and_then(Json::as_str)
+        .ok_or("need.fact must be a string")?;
+    let subject = value
+        .get("subject")
+        .and_then(Json::as_str)
+        .ok_or("need.subject must be a string")?;
+    Ok(NeedRef::new(fact, subject))
+}
+
+fn assessment_from_json(value: &Json) -> std::result::Result<EvidenceAssessment, String> {
+    let need = need_from_json(value)?;
+    let admissibility = match value.get("admissibility").and_then(Json::as_str) {
+        Some("Admitted") => Admissibility::Admitted,
+        Some("NotAdmitted") => Admissibility::NotAdmitted,
+        Some("Uncertain") => Admissibility::Uncertain,
+        other => return Err(format!("unknown admissibility {other:?}")),
+    };
+    let provenance = value
+        .get("provenance")
+        .and_then(Json::as_object)
+        .map(|object| Provenance {
+            source_id: object
+                .get("source_id")
+                .and_then(Json::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            locator: object
+                .get("locator")
+                .and_then(Json::as_str)
+                .map(ToString::to_string),
+            content_hash: object
+                .get("content_hash")
+                .and_then(Json::as_str)
+                .map(ToString::to_string),
+            retrieved_at_ms: object
+                .get("retrieved_at_ms")
+                .and_then(Json::as_number)
+                .and_then(serde_json::Number::as_u64),
+            provider: object
+                .get("provider")
+                .and_then(Json::as_str)
+                .map(ToString::to_string),
+        });
+    Ok(EvidenceAssessment {
+        need,
+        value: value
+            .get("value")
+            .and_then(Json::as_str)
+            .map(ToString::to_string),
+        admissibility,
+        equivalence_key: value
+            .get("equivalence_key")
+            .and_then(Json::as_str)
+            .map(ToString::to_string),
+        conflict_scope: value
+            .get("conflict_scope")
+            .and_then(Json::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        operational_role: value
+            .get("operational_role")
+            .and_then(Json::as_str)
+            .map(ToString::to_string),
+        reason_code: value
+            .get("reason_code")
+            .and_then(Json::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        policy_version: value
+            .get("policy_version")
+            .and_then(Json::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        provenance,
+    })
+}
+
+#[pyfunction]
+#[pyo3(name = "derive_needs")]
+fn py_derive_needs(_py: Python<'_>, required: Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let required = json_from_py(&required)?;
+    let items = required
+        .as_array()
+        .ok_or_else(|| PyValueError::new_err("required must be an array"))?;
+    let needs = items
+        .iter()
+        .map(need_from_json)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(runtime_to_py_unknown)?;
+    let derived = crate::needs::derive_needs(&needs);
+    Python::with_gil(|py| {
+        let payload = Json::Array(
+            derived
+                .iter()
+                .map(|need| {
+                    object_json(vec![
+                        ("schema_version", Json::from_u64(1)),
+                        ("fact", Json::String(need.reference.fact.clone())),
+                        ("subject", Json::String(need.reference.subject.clone())),
+                        ("id", Json::String(need.reference.id())),
+                        ("priority", Json::String(need.priority.as_str().to_string())),
+                        (
+                            "cardinality",
+                            Json::String(need.cardinality.as_str().to_string()),
+                        ),
+                    ])
+                })
+                .collect(),
+        );
+        json_to_py(py, &payload)
+    })
+}
+
+#[pyfunction]
+#[pyo3(name = "operation_gate")]
+fn py_operation_gate(
+    _py: Python<'_>,
+    operation: &str,
+    required: Bound<'_, PyAny>,
+    states: Bound<'_, PyAny>,
+) -> PyResult<Py<PyAny>> {
+    let required = json_from_py(&required)?;
+    let states = json_from_py(&states)?;
+    let inputs = required
+        .as_array()
+        .ok_or_else(|| PyValueError::new_err("required must be an array"))?
+        .iter()
+        .map(need_from_json)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(runtime_to_py_unknown)?;
+    let mut resolved: Vec<(NeedRef, crate::needs::NeedStatus)> = Vec::new();
+    for state in states
+        .as_array()
+        .ok_or_else(|| PyValueError::new_err("states must be an array"))?
+    {
+        let need = need_from_json(state).map_err(runtime_to_py_unknown)?;
+        let status = match state.get("status").and_then(Json::as_str) {
+            Some("RESOLVED") => crate::needs::NeedStatus::Resolved,
+            Some("AMBIGUOUS") => crate::needs::NeedStatus::Ambiguous,
+            Some("UNRESOLVED") => crate::needs::NeedStatus::Unresolved,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown need status {other:?}"
+                )))
+            }
+        };
+        resolved.push((need, status));
+    }
+    let spec = crate::operations::OperationSpec::new(operation, inputs);
+    gate_payload(&spec, &resolved)
+}
+
+fn gate_payload(
+    spec: &crate::operations::OperationSpec,
+    resolved: &[(NeedRef, crate::needs::NeedStatus)],
+) -> PyResult<Py<PyAny>> {
+    let verdict = spec.gate(resolved);
+    Python::with_gil(|py| {
+        let payload = match &verdict {
+            Ok(()) => object_json(vec![
+                ("schema_version", Json::from_u64(1)),
+                ("satisfied", Json::Bool(true)),
+                ("conclusion", Json::String("ready".to_string())),
+                ("missing", Json::Array(Vec::new())),
+            ]),
+            // A malformed state list is not an abstention: it is a caller bug.
+            // Report it as such so it can never be mistaken for a conclusion.
+            Err(crate::operations::GateError::DuplicateState { need }) => {
+                return Err(PyValueError::new_err(format!(
+                    "duplicate need status for {}: the gate refuses to guess which one wins",
+                    need.id()
+                )))
+            }
+            Err(crate::operations::GateError::Unsatisfied(failure)) => object_json(vec![
+                ("schema_version", Json::from_u64(1)),
+                ("satisfied", Json::Bool(false)),
+                (
+                    "conclusion",
+                    Json::String("INSUFFICIENT_EVIDENCE".to_string()),
+                ),
+                ("detail", Json::String(failure.to_string())),
+                (
+                    "missing",
+                    Json::Array(
+                        failure
+                            .missing
+                            .iter()
+                            .map(|input| {
+                                object_json(vec![
+                                    ("fact", Json::String(input.need.fact.clone())),
+                                    ("subject", Json::String(input.need.subject.clone())),
+                                    ("status", Json::String(input.status.as_str().to_string())),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ),
+            ]),
+        };
+        json_to_py(py, &payload)
+    })
+}
+
+fn runtime_to_py_unknown(message: String) -> PyErr {
+    PyValueError::new_err(message)
 }
