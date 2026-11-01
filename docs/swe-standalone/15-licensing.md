@@ -47,9 +47,9 @@ också att historiken syns — därav att AI-agentförfattarskapet är dokumente
   kontrollen), medan **importpaketet fortfarande heter `swe`** — det påverkar inte
   någon kod, bara paketets namn i `python/pyproject.toml`, backendens beroende och
   lockfilerna.
-- **Repo:** `kajmund/swe` är **planerat** (beslut 2026-11-01); det publika repot
-  skapas i flytten. GitHub-API:t svarar 404 i dag (ännu inte skapat, eller
-  privat), så "publikt" är ett beslut, inte en verifierad registrering.
+- **Repo:** [`kajmund/swe`](https://github.com/kajmund/swe) skapades i PR 4 och
+  verifierades publikt (`isPrivate=false`) 2026-11-01 efter att både PR-körningen
+  och push-körningen på mergade `main` var gröna.
 
 En kollision som den här är exakt varför registry-publicering väntar till efter
 flytten: namnen är verifierade lediga, licensen är beslutad och äganderätten
