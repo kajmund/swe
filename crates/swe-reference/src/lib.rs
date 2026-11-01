@@ -38,6 +38,7 @@ pub use host::{
     ResumeConfig, RunConfig, RunReport, SegmentReport, Tariffs, ACCOUNT,
 };
 pub use journal::{
+    contract_events, contract_journal_header, journal_events_from_json, journal_events_to_json,
     read_journal, tariff_sha256, write_journal, Journal, JournalCompletedInvocation,
 };
 pub use mock_provider::MockSupplierFacts;

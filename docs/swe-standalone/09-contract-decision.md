@@ -1,11 +1,14 @@
 # 09 — Kontraktsbeslut för B1–B3
 
-**Status:** Beslutsunderlag enligt projektägarens direktiv. Detta dokument ska
-godkännas **före** PR 1 (B1). Det ändrar ingen produktionskod.
+**Status:** **Godkänt och fryst som kontraktsbaslinje v1 av projektägaren
+2026-11-01.** Baslinjen ska överföras oförändrad till målrepot i PR 4; framtida
+wire-ändringar följer versions- och dokumentationsgrindarna.
 **Gäller:** PR 1 (`10`), PR 2 (`11`) och PR 3 (`12`). Ordningen enligt
 `07-go-no-go.md` §0: **kontraktsdesign först, implementation sedan.**
 **Principer från specen:** deterministiska kontrakt har företräde; inga
 parallella implementationslager; ingen onödig bakåtkompatibilitet.
+**Historik:** beslutet fattades före B1; sökvägarna `backend/app/swe` avser dåvarande
+placering (efter B4: `python/swe`).
 
 ## 1. Syfte
 

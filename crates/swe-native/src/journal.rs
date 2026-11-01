@@ -217,6 +217,11 @@ pub struct Journal {
     closed: BTreeMap<String, ()>,
     charges: BTreeMap<String, ChargeState>,
     charge_of: BTreeMap<String, String>,
+    /// The amount each charge reserved, so a settlement can be checked against
+    /// it. A reservation is a ceiling: the ledger settles the actual cost and
+    /// releases the unspent remainder, so a settlement may be lower but never
+    /// higher.
+    reserved_amounts: BTreeMap<String, u64>,
 }
 
 impl Journal {
@@ -276,6 +281,7 @@ impl Journal {
                 charge_id,
                 attempt_id,
                 delivery_key,
+                amount_milli,
                 ..
             } => {
                 if !self.attempts.contains_key(attempt_id) {
@@ -303,8 +309,14 @@ impl Journal {
                 self.charges
                     .insert(charge_id.clone(), ChargeState::Reserved);
                 self.charge_of.insert(charge_id.clone(), attempt_id.clone());
+                self.reserved_amounts
+                    .insert(charge_id.clone(), *amount_milli);
             }
-            JournalEvent::ChargeSettled { charge_id, .. } => {
+            JournalEvent::ChargeSettled {
+                charge_id,
+                amount_milli,
+                ..
+            } => {
                 match self.charges.get(charge_id) {
                     Some(ChargeState::Settled) => {
                         return Err(JournalError::DuplicateSettlement(charge_id.clone()))
@@ -321,6 +333,16 @@ impl Journal {
                     if !self.closed.contains_key(attempt) {
                         return Err(JournalError::Conflict(format!(
                             "charge {charge_id} cannot settle before its attempt is confirmed"
+                        )));
+                    }
+                }
+                // A reservation is a ceiling: the ledger settles the actual
+                // cost and releases the unspent remainder, so a settlement may
+                // be lower than the reservation but never higher.
+                if let Some(reserved) = self.reserved_amounts.get(charge_id) {
+                    if amount_milli > reserved {
+                        return Err(JournalError::Conflict(format!(
+                            "charge {charge_id} settled for {amount_milli} milli but only {reserved} milli was reserved"
                         )));
                     }
                 }
@@ -742,6 +764,68 @@ mod tests {
         journal.append(reserve("c1", "a1", "key-1")).unwrap();
         journal.append(reserve("c2", "a2", "key-2")).unwrap();
         assert_eq!(journal.settled_total(), 0);
+    }
+
+    #[test]
+    fn a_settlement_cannot_exceed_the_reservation() {
+        // A reservation is a ceiling: settling more than was reserved would
+        // silently write cost the ledger never agreed to.
+        let mut journal = Journal::new();
+        journal.append(start("a1", Delivery::Pure)).unwrap();
+        journal.append(reserve("c1", "a1", "key")).unwrap();
+        journal
+            .append(JournalEvent::ResultConfirmed {
+                attempt_id: "a1".to_string(),
+                outcome: CompletionOutcome::Ok(Json::Null),
+                confirmed_at_ms: 2,
+            })
+            .unwrap();
+        let outcome = journal.append(JournalEvent::ChargeSettled {
+            charge_id: "c1".to_string(),
+            amount_milli: 501,
+            settled_at_ms: 3,
+        });
+        assert!(matches!(outcome, Err(JournalError::Conflict(_))));
+        assert!(outcome.unwrap_err().to_string().contains("reserved"));
+        // The charge is still reserved, not settled above the ceiling.
+        assert_eq!(journal.charge_state("c1"), Some(ChargeState::Reserved));
+
+        // The reserved amount itself settles.
+        journal
+            .append(JournalEvent::ChargeSettled {
+                charge_id: "c1".to_string(),
+                amount_milli: 500,
+                settled_at_ms: 4,
+            })
+            .expect("the recorded amount settles");
+        assert_eq!(journal.charge_state("c1"), Some(ChargeState::Settled));
+        assert_eq!(journal.settled_total(), 500);
+    }
+
+    #[test]
+    fn a_partial_settlement_charges_the_actual_amount() {
+        // The ledger settles the actual cost and releases the unspent
+        // remainder, so a settlement below the reservation is accepted and the
+        // journal totals what was actually charged.
+        let mut journal = Journal::new();
+        journal.append(start("a1", Delivery::Pure)).unwrap();
+        journal.append(reserve("c1", "a1", "key")).unwrap();
+        journal
+            .append(JournalEvent::ResultConfirmed {
+                attempt_id: "a1".to_string(),
+                outcome: CompletionOutcome::Ok(Json::Null),
+                confirmed_at_ms: 2,
+            })
+            .unwrap();
+        journal
+            .append(JournalEvent::ChargeSettled {
+                charge_id: "c1".to_string(),
+                amount_milli: 200,
+                settled_at_ms: 3,
+            })
+            .expect("a settlement below the reservation is accepted");
+        assert_eq!(journal.charge_state("c1"), Some(ChargeState::Settled));
+        assert_eq!(journal.settled_total(), 200);
     }
 
     #[test]

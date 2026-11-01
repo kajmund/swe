@@ -7,7 +7,7 @@
 ## Public API
 
 Python compiles with the existing `compile_definition(...)` / `compile_swd_text(...)`.
-The adapter `app.swe.runtime.run_workflow` sends the frozen document and its
+The adapter `swe.runtime.run_workflow` sends the frozen document and its
 SHA-256 to `swe_native.Machine` and runs registered `async` handlers and decision
 providers.
 
@@ -120,7 +120,7 @@ The in-memory sink is the source for the durable OverGraph event append in
 ## Isolation
 
 The machine is per run. Two concurrent runs of the same definition do not share
-branch ids or outputs. The crate and `app.swe.runtime` stay free of research,
+branch ids or outputs. The crate and `swe.runtime` stay free of research,
 Jev, OverGraph, and expert routing imports: the run store, providers and cache
 are injected as adapters (`app.services.overgraph.workflows`,
 `app.services.research` (host providers), `app.services.overgraph.jev_cache`).

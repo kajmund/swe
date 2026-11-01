@@ -8,6 +8,8 @@ PR 1 och PR 2 mergade.
 under ett liveness-antagande. Exakt-engångs**exekvering av externa verktyg** är
 inte en garant och får inte påstås. Ett obekräftat försök betyder **okänt**
 utfall — inte att åtgärden inte kördes.
+**Historik:** dokumentet beskriver läget före B4; sökvägarna `backend/app/swe`
+avser dåvarande placering (efter B4: `python/swe`).
 
 ## 1. Vad som finns idag
 

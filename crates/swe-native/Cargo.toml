@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.83"
 description = "In-memory SWD 1.0 execution kernel for Socialism Workflow Engine"
-license = "UNLICENSED"
+license = "MIT OR Apache-2.0"
 publish = false
 
 [lib]
@@ -30,7 +30,3 @@ optional = true
 
 [dev-dependencies]
 serde_json = { version = "=1.0.140", features = ["preserve_order"] }
-
-[profile.release]
-lto = false
-codegen-units = 16

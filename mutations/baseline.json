@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "why": "Every critical kernel mutation is classified. `detected` must redden at least one test; `equivalent` and `excepted` must keep the suite green and say why. The gate fails closed on a mutation that cannot be applied, because a replacement that matches nothing would otherwise pass by doing nothing. See scripts/check_mutations.py and docs/swe-standalone/14-mutation-gate.md. A detected mutation must also name the tests it reddens (expected_red); a non-zero exit from a build error or an unrelated test does not count as detection.",
+  "mutations": [
+    {
+      "id": "gate-duplicate-guard-removed",
+      "file": "crates/swe-native/src/operations.rs",
+      "find": "fn ensure_unique_state(states: &[(NeedRef, NeedStatus)]) -> Result<(), GateError> {\n    let mut seen = std::collections::BTreeSet::new();\n    for (need, _) in states {\n        if !seen.insert(need.clone()) {\n            return Err(GateError::DuplicateState { need: need.clone() });\n        }\n    }\n    Ok(())\n}",
+      "replace": "fn ensure_unique_state(states: &[(NeedRef, NeedStatus)]) -> Result<(), GateError> {\n    let _ = states;\n    Ok(())\n}",
+      "classification": "detected",
+      "expected_red": [
+        "operations::tests::a_duplicated_status_is_refused_and_names_the_need",
+        "operations::tests::a_duplicate_is_refused_even_when_both_statuses_agree",
+        "operations::tests::the_duplicate_verdict_does_not_depend_on_input_order",
+        "operations::tests::the_named_duplicate_follows_input_order_not_identity_order",
+        "operations::tests::a_duplicate_is_not_reported_as_insufficient_evidence"
+      ]
+    },
+    {
+      "id": "gate-accepts-every-status",
+      "file": "crates/swe-native/src/operations.rs",
+      "find": "                        if status.is_resolved() {\n                            None",
+      "replace": "                        if true {\n                            None",
+      "classification": "detected",
+      "expected_red": [
+        "operations::tests::gate_blocks_partial_inputs",
+        "operations::tests::an_unresolved_need_cannot_vanish_from_the_gate",
+        "operations::tests::ambiguous_is_not_accepted_by_the_gate"
+      ]
+    },
+    {
+      "id": "gate-names-wrong-missing-status",
+      "file": "crates/swe-native/src/operations.rs",
+      "find": "                            Some(MissingInput {\n                                need: required.clone(),\n                                status,\n                            })",
+      "replace": "                            Some(MissingInput {\n                                need: required.clone(),\n                                status: NeedStatus::Unresolved,\n                            })",
+      "classification": "detected",
+      "expected_red": [
+        "operations::tests::the_gate_reports_why_each_input_is_missing"
+      ]
+    },
+    {
+      "id": "journal-second-reservation-for-one-delivery",
+      "file": "crates/swe-native/src/journal.rs",
+      "find": "                if already_reserved {\n                    return Err(JournalError::Conflict(format!(\n                        \"delivery {delivery_key} already has a reservation\"\n                    )));\n                }",
+      "replace": "                if false {\n                    return Err(JournalError::Conflict(format!(\n                        \"delivery {delivery_key} already has a reservation\"\n                    )));\n                }",
+      "classification": "detected",
+      "expected_red": [
+        "journal::tests::one_delivery_reserves_at_most_one_charge"
+      ]
+    },
+    {
+      "id": "journal-unknown-charge-releasable",
+      "file": "crates/swe-native/src/journal.rs",
+      "find": "                    Some(ChargeState::Reserved) => {}\n                    // Releasing a charge whose cost is unknown would write that\n                    // unknown off as zero, which the contract forbids.",
+      "replace": "                    Some(ChargeState::Reserved) | Some(ChargeState::PendingReconciliation) => {}\n                    // Releasing a charge whose cost is unknown would write that\n                    // unknown off as zero, which the contract forbids.",
+      "classification": "detected",
+      "expected_red": [
+        "journal::tests::an_unknown_cost_cannot_be_released_without_evidence"
+      ]
+    },
+    {
+      "id": "journal-settlement-of-a-pending-charge",
+      "file": "crates/swe-native/src/journal.rs",
+      "find": "                    Some(ChargeState::Settled) => {\n                        return Err(JournalError::DuplicateSettlement(charge_id.clone()))\n                    }",
+      "replace": "                    Some(ChargeState::Settled) => {}",
+      "classification": "detected",
+      "expected_red": [
+        "journal::tests::a_charge_cannot_settle_twice"
+      ]
+    },
+    {
+      "id": "equivalent-set-type-in-the-duplicate-guard",
+      "file": "crates/swe-native/src/operations.rs",
+      "find": "fn ensure_unique_state(states: &[(NeedRef, NeedStatus)]) -> Result<(), GateError> {\n    let mut seen = std::collections::BTreeSet::new();",
+      "replace": "fn ensure_unique_state(states: &[(NeedRef, NeedStatus)]) -> Result<(), GateError> {\n    let mut seen = std::collections::HashSet::new();",
+      "classification": "equivalent",
+      "reason": "BTreeSet and HashSet have identical membership semantics; the set is only used to detect that a need appeared twice, and the named duplicate is still the first one in input order because the loop is unchanged."
+    },
+    {
+      "id": "excepted-duplicate-error-wording",
+      "file": "crates/swe-native/src/operations.rs",
+      "find": "the gate refuses a state list that names {} twice: which status wins would depend on order",
+      "replace": "the gate refuses a state list that names {} twice",
+      "classification": "excepted",
+      "reason": "Human-readable error prose is not part of the machine contract. What is contractual is the conclusion string (INSUFFICIENT_EVIDENCE), the error type, and the NeedRef named. The wording is deliberately not pinned by tests, so a wording improvement must not redden the suite."
+    },
+    {
+      "id": "journal-decoder-defaults-a-missing-amount",
+      "file": "crates/swe-reference/src/journal.rs",
+      "find": "                charge_id: field_str(item, \"charge_id\")?.to_string(),\n                amount_milli: field_u64(item, \"amount_milli\")?,\n                settled_at_ms: field_u64(item, \"settled_at_ms\")?,",
+      "replace": "                charge_id: field_str(item, \"charge_id\")?.to_string(),\n                amount_milli: item.get(\"amount_milli\").and_then(crate::as_u64).unwrap_or(0),\n                settled_at_ms: field_u64(item, \"settled_at_ms\")?,",
+      "classification": "detected",
+      "expected_red": [
+        "a_journal_event_missing_a_required_number_is_refused"
+      ]
+    },
+    {
+      "id": "settlement-may-exceed-the-reservation",
+      "file": "crates/swe-native/src/journal.rs",
+      "find": "                    if amount_milli > reserved {",
+      "replace": "                    if false {",
+      "classification": "detected",
+      "expected_red": [
+        "journal::tests::a_settlement_cannot_exceed_the_reservation"
+      ]
+    }
+  ]
+}

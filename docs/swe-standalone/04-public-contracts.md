@@ -6,6 +6,9 @@
 Rust library (with a Python host binding) by Socialism or any other project.
 **Rule applied:** reuse existing contracts where they are already generic; do
 not invent an abstraction that duplicates one that already exists.
+**B4-uppdatering:** Python-paketet ligger nu i `python/swe` (importnamn `swe`).
+Referenser till `backend/app/swe` nedan beskriver läget före B1/B4 och är historik;
+kontrakten i sig gäller fortfarande.
 
 Legend for the "today" column:
 

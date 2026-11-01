@@ -1,0 +1,44 @@
+version: "1.0"
+name: runtime_parallel
+entrypoint: investigate
+limits:
+  max_steps: 100
+  max_depth: 10
+  timeout_seconds: 30
+nodes:
+  investigate:
+    type: fork
+    branches:
+      contracts: search_contracts
+      legal: search_legal
+    join: combine
+  search_contracts:
+    type: task
+    handler: demo.search_contracts
+  search_legal:
+    type: task
+    handler: demo.search_legal
+  combine:
+    type: join
+    mode: all
+    on_failure: fail
+    outputs:
+      contracts: "$.branches.contracts.result"
+      legal: "$.branches.legal.result"
+    next: check_budget
+  check_budget:
+    type: decision
+    evaluator: expression
+    condition:
+      lt:
+        - var: "$.run.steps_used"
+        - var: "$.run.max_steps"
+    routes:
+      "true": end_complete
+      "false": end_incomplete
+  end_complete:
+    type: end
+    status: completed
+  end_incomplete:
+    type: end
+    status: incomplete

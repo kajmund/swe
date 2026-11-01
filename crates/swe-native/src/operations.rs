@@ -8,8 +8,8 @@
 //! comparison.
 //!
 //! The domain supplies the executors (what an operation computes and how facts
-//! are normalised). It supplies them through [`execute`], which keeps the gate
-//! structurally in front of every executor.
+//! are normalised). The gate is the executable boundary: an executor runs only
+//! after [`OperationSpec::gate`] has accepted its inputs.
 
 use std::fmt;
 
@@ -96,9 +96,9 @@ impl OperationSpec {
 
 /// Refuse a state list that names the same need twice.
 ///
-/// The single implementation of that rule: both [`OperationSpec::gate`] and
-/// [`execute`] call it, so there is one place where a duplicate is defined and
-/// one place to mutate when testing it.
+/// The single implementation of that rule: [`OperationSpec::gate`] calls it, so
+/// there is one place where a duplicate is defined and one place to mutate when
+/// testing it.
 fn ensure_unique_state(states: &[(NeedRef, NeedStatus)]) -> Result<(), GateError> {
     let mut seen = std::collections::BTreeSet::new();
     for (need, _) in states {
@@ -192,141 +192,6 @@ pub enum OpOutcome {
     NeedMore(NeedRef),
     /// The gate refused to run it.
     InsufficientEvidence(GateFailure),
-}
-
-/// Why an investigation stopped without an answer.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum StopReason {
-    /// The gate refused: at least one required input was missing.
-    InsufficientEvidence(GateFailure),
-    /// The operation asked for the identical need twice.
-    RepeatedNeed(NeedRef),
-    /// The round budget ran out before the operation could answer.
-    RoundLimit(u32),
-    /// The operation itself reported it could not decide.
-    ExecutorGaveUp,
-}
-
-impl StopReason {
-    /// The stable wire spelling a host reports to a caller.
-    pub fn conclusion(&self) -> &'static str {
-        match self {
-            Self::InsufficientEvidence(_)
-            | Self::RepeatedNeed(_)
-            | Self::RoundLimit(_)
-            | Self::ExecutorGaveUp => "INSUFFICIENT_EVIDENCE",
-        }
-    }
-
-    pub fn detail(&self) -> String {
-        match self {
-            Self::InsufficientEvidence(failure) => failure.to_string(),
-            Self::RepeatedNeed(need) => format!("INSUFFICIENT_EVIDENCE: repeated need {need}"),
-            Self::RoundLimit(rounds) => {
-                format!("INSUFFICIENT_EVIDENCE: no answer within {rounds} round(s)")
-            }
-            Self::ExecutorGaveUp => {
-                "INSUFFICIENT_EVIDENCE: the operation could not decide from verified evidence"
-                    .to_string()
-            }
-        }
-    }
-}
-
-/// The result of investigating until the operation can answer.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Investigation {
-    Answer(String),
-    Stopped(StopReason),
-}
-
-impl Investigation {
-    pub fn conclusion(&self) -> &'static str {
-        match self {
-            Self::Answer(_) => "answered",
-            Self::Stopped(reason) => reason.conclusion(),
-        }
-    }
-}
-
-/// Run one operation under its gate, bounded by a round budget.
-///
-/// The gate runs **before** the executor on every round, including the first.
-/// `resolve` attempts to satisfy a discovered need and returns whether it
-/// succeeded.
-///
-/// Returns the typed [`GateError`] rather than a conclusion when the state list
-/// is malformed: a duplicate status is a bug in the caller, and turning it into
-/// `INSUFFICIENT_EVIDENCE` would report it as a fact about the world.
-pub fn execute<X, R>(
-    spec: &OperationSpec,
-    states: &mut Vec<(NeedRef, NeedStatus)>,
-    mut executor: X,
-    mut resolve: R,
-    max_rounds: u32,
-) -> Result<Investigation, GateError>
-where
-    X: FnMut() -> OpOutcome,
-    R: FnMut(&NeedRef) -> Option<NeedStatus>,
-{
-    // The same rule as the gate's, applied before the loop: with a round budget
-    // of zero the loop body never runs, and a malformed list would then look
-    // like a clean round-limit stop — a conclusion about the world.
-    ensure_unique_state(states)?;
-    let mut seen: Vec<NeedRef> = Vec::new();
-    for _ in 0..max_rounds {
-        match spec.gate(states) {
-            Ok(()) => {}
-            // A genuine refusal is a conclusion: the operation did not run.
-            Err(GateError::Unsatisfied(failure)) => {
-                return Ok(Investigation::Stopped(StopReason::InsufficientEvidence(
-                    failure,
-                )));
-            }
-            // A malformed state list is not a conclusion. Propagate it.
-            Err(duplicate @ GateError::DuplicateState { .. }) => return Err(duplicate),
-        }
-        match executor() {
-            OpOutcome::Answer(answer) => return Ok(Investigation::Answer(answer)),
-            OpOutcome::InsufficientEvidence(failure) => {
-                return Ok(Investigation::Stopped(StopReason::InsufficientEvidence(
-                    failure,
-                )));
-            }
-            OpOutcome::NeedMore(need) => {
-                // The loop guard lives here, not in the caller: an operation
-                // that keeps asking for the same fact can never progress.
-                if seen.contains(&need) {
-                    return Ok(Investigation::Stopped(StopReason::RepeatedNeed(need)));
-                }
-                seen.push(need.clone());
-                match resolve(&need) {
-                    Some(status) => {
-                        // A resolver that answers for a need the state list
-                        // already holds would create the duplicate the gate
-                        // refuses. Catch it here, where it is created.
-                        if states.iter().any(|(known, _)| known == &need) {
-                            return Err(GateError::DuplicateState { need });
-                        }
-                        states.push((need, status));
-                    }
-                    None => {
-                        return Ok(Investigation::Stopped(StopReason::InsufficientEvidence(
-                            GateFailure {
-                                operation: spec.name.clone(),
-                                outcome: spec.on_missing,
-                                missing: vec![MissingInput {
-                                    need,
-                                    status: NeedStatus::Unresolved,
-                                }],
-                            },
-                        )));
-                    }
-                }
-            }
-        }
-    }
-    Ok(Investigation::Stopped(StopReason::RoundLimit(max_rounds)))
 }
 
 #[cfg(test)]
@@ -451,6 +316,38 @@ mod tests {
     }
 
     #[test]
+    fn the_gate_reports_why_each_input_is_missing() {
+        // The status is the reason: reporting every refusal as UNRESOLVED would
+        // hide whether the evidence was absent or ambiguous.
+        let spec = spec(&["doc-a", "doc-b"]);
+        let states = vec![(need("fact_a", "doc-a"), NeedStatus::Ambiguous)];
+        let failure = spec
+            .gate(&states)
+            .expect_err("both inputs are unusable")
+            .unsatisfied()
+            .expect("a real verdict")
+            .clone();
+        assert_eq!(failure.missing.len(), 2);
+        assert_eq!(failure.missing[0].status, NeedStatus::Ambiguous);
+        assert_eq!(failure.missing[1].status, NeedStatus::Unresolved);
+
+        // A usable input is not reported at all.
+        let states = vec![
+            (need("fact_a", "doc-a"), NeedStatus::Resolved),
+            (need("fact_a", "doc-b"), NeedStatus::Ambiguous),
+        ];
+        let failure = spec
+            .gate(&states)
+            .expect_err("doc-b is ambiguous")
+            .unsatisfied()
+            .expect("a real verdict")
+            .clone();
+        assert_eq!(failure.missing.len(), 1);
+        assert_eq!(failure.missing[0].need.id(), "doc-b.fact_a");
+        assert_eq!(failure.missing[0].status, NeedStatus::Ambiguous);
+    }
+
+    #[test]
     fn gate_passes_when_every_input_is_resolved() {
         let spec = spec(&["doc-a", "doc-b"]);
         assert!(spec.gate(&all_resolved(&spec)).is_ok());
@@ -472,226 +369,5 @@ mod tests {
         let spec = spec(&["doc-a"]);
         let states = vec![(need("fact_a", "doc-a"), NeedStatus::Ambiguous)];
         assert!(spec.gate(&states).is_err());
-    }
-
-    #[test]
-    fn execute_refuses_a_caller_supplied_duplicate_instead_of_abstaining() {
-        // A malformed state list must not be laundered into a conclusion. The
-        // caller hears about its bug; the world hears nothing.
-        let spec = spec(&["doc-a"]);
-        let mut states = vec![
-            (need("fact_a", "doc-a"), NeedStatus::Resolved),
-            (need("fact_a", "doc-a"), NeedStatus::Ambiguous),
-        ];
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || OpOutcome::Answer("x".into()),
-            |_| None,
-            3,
-        );
-        match outcome {
-            Err(GateError::DuplicateState { need }) => assert_eq!(need.id(), "doc-a.fact_a"),
-            other => panic!("expected a typed duplicate error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn a_zero_round_budget_cannot_hide_a_duplicate() {
-        // The gate runs inside the loop, so a round budget of zero would let a
-        // malformed state list slip through as a clean round-limit stop. The
-        // list is validated before the loop for exactly this case.
-        let spec = spec(&["doc-a"]);
-        let mut states = vec![
-            (need("fact_a", "doc-a"), NeedStatus::Resolved),
-            (need("fact_a", "doc-a"), NeedStatus::Ambiguous),
-        ];
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || OpOutcome::Answer("x".into()),
-            |_| None,
-            0,
-        );
-        assert!(
-            matches!(outcome, Err(GateError::DuplicateState { .. })),
-            "a duplicate must not become a round-limit conclusion, got {outcome:?}"
-        );
-    }
-
-    #[test]
-    fn execute_refuses_a_duplicate_that_the_resolver_creates() {
-        // The engine loop can create the duplicate itself: the resolver answers
-        // for a need the state list already holds. That is caught where it is
-        // created, not silently merged.
-        let spec = spec(&["doc-a"]);
-        let mut states = vec![(need("fact_a", "doc-a"), NeedStatus::Resolved)];
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || OpOutcome::NeedMore(need("fact_a", "doc-a")),
-            |_| Some(NeedStatus::Resolved),
-            3,
-        );
-        match outcome {
-            Err(GateError::DuplicateState { need }) => assert_eq!(need.id(), "doc-a.fact_a"),
-            other => panic!("expected a typed duplicate error, got {other:?}"),
-        }
-        // When the need is already unresolved the gate refuses before the
-        // executor runs, so the resolver is never consulted and no duplicate is
-        // created. That is an abstention, not an error.
-        let mut states = vec![(need("fact_a", "doc-a"), NeedStatus::Unresolved)];
-        let mut resolved_calls = 0;
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || OpOutcome::NeedMore(need("fact_a", "doc-a")),
-            |_| {
-                resolved_calls += 1;
-                Some(NeedStatus::Resolved)
-            },
-            3,
-        );
-        assert_eq!(resolved_calls, 0, "the gate must run before the executor");
-        assert!(matches!(
-            outcome,
-            Ok(Investigation::Stopped(StopReason::InsufficientEvidence(_)))
-        ));
-    }
-
-    #[test]
-    fn executor_never_runs_on_partial_inputs() {
-        let spec = spec(&["doc-a", "doc-b"]);
-        let mut states = vec![(need("fact_a", "doc-a"), NeedStatus::Resolved)];
-        let mut calls = 0;
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || {
-                calls += 1;
-                OpOutcome::Answer("should not run".into())
-            },
-            |_| None,
-            4,
-        )
-        .expect("execute must not see a malformed state list");
-        assert_eq!(calls, 0, "the gate must reject before the executor runs");
-        assert!(matches!(
-            outcome,
-            Investigation::Stopped(StopReason::InsufficientEvidence(_))
-        ));
-    }
-
-    #[test]
-    fn need_more_is_resolved_and_the_operation_reruns() {
-        let spec = spec(&["doc-a"]);
-        let mut states = all_resolved(&spec);
-        let mut rounds = 0;
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || {
-                rounds += 1;
-                if rounds == 1 {
-                    OpOutcome::NeedMore(need("condition", "doc-x"))
-                } else {
-                    OpOutcome::Answer("rule applies".into())
-                }
-            },
-            |_| Some(NeedStatus::Resolved),
-            3,
-        )
-        .expect("execute must not see a malformed state list");
-        assert_eq!(outcome.conclusion(), "answered");
-        assert_eq!(rounds, 2);
-    }
-
-    #[test]
-    fn an_unresolvable_discovered_need_ends_in_insufficient_evidence() {
-        let spec = spec(&["doc-a"]);
-        let mut states = all_resolved(&spec);
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || OpOutcome::NeedMore(need("condition", "doc-x")),
-            |_| None,
-            3,
-        )
-        .expect("execute must not see a malformed state list");
-        assert_eq!(outcome.conclusion(), "INSUFFICIENT_EVIDENCE");
-    }
-
-    #[test]
-    fn identical_need_more_twice_ends_the_investigation() {
-        let spec = spec(&["doc-a"]);
-        let mut states = all_resolved(&spec);
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || OpOutcome::NeedMore(need("condition", "doc-x")),
-            |_| Some(NeedStatus::Resolved),
-            5,
-        )
-        .expect("execute must not see a malformed state list");
-        assert!(matches!(
-            outcome,
-            Investigation::Stopped(StopReason::RepeatedNeed(_))
-        ));
-    }
-
-    #[test]
-    fn the_gate_runs_every_round() {
-        let spec = spec(&["doc-a", "doc-b"]);
-        let mut states = vec![(need("fact_a", "doc-a"), NeedStatus::Resolved)];
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || OpOutcome::Answer("never".into()),
-            |_| Some(NeedStatus::Resolved),
-            4,
-        )
-        .expect("execute must not see a malformed state list");
-        // doc-b was never resolved because the executor never ran to discover it.
-        assert_eq!(outcome.conclusion(), "INSUFFICIENT_EVIDENCE");
-    }
-
-    #[test]
-    fn round_limit_is_a_clean_stop() {
-        let spec = spec(&[]);
-        let mut states = vec![];
-        let mut rounds = 0;
-        let outcome = execute(
-            &spec,
-            &mut states,
-            || {
-                rounds += 1;
-                OpOutcome::NeedMore(need("more", &format!("doc-{rounds}")))
-            },
-            |_| Some(NeedStatus::Resolved),
-            3,
-        )
-        .expect("execute must not see a malformed state list");
-        assert_eq!(outcome.conclusion(), "INSUFFICIENT_EVIDENCE");
-        assert!(matches!(
-            outcome,
-            Investigation::Stopped(StopReason::RoundLimit(3))
-        ));
-    }
-
-    #[test]
-    fn every_stop_reason_reports_insufficient_evidence() {
-        let spec = spec(&["doc-a"]);
-        let error = spec.gate(&[]).unwrap_err();
-        let failure = error.unsatisfied().expect("a real verdict").clone();
-        for reason in [
-            StopReason::InsufficientEvidence(failure.clone()),
-            StopReason::RepeatedNeed(need("x", "doc-x")),
-            StopReason::RoundLimit(1),
-            StopReason::ExecutorGaveUp,
-        ] {
-            assert_eq!(reason.conclusion(), "INSUFFICIENT_EVIDENCE");
-            assert!(reason.detail().starts_with("INSUFFICIENT_EVIDENCE"));
-        }
-        assert_eq!(Investigation::Answer("x".into()).conclusion(), "answered");
     }
 }

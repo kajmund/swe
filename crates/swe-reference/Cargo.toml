@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.83"
 description = "Domain-neutral reference experiment: SWE kernel + Sweycoin ledger driving a supplier-selection investigation"
-license = "UNLICENSED"
+license = "MIT OR Apache-2.0"
 publish = false
 
 [[bin]]
@@ -18,3 +18,8 @@ path = "src/lib.rs"
 [dependencies]
 swe-native = { path = "../swe-native" }
 swe-budget = { path = "../swe-budget" }
+
+[dev-dependencies]
+#  Already in the workspace lock via swe-native; here to hash contract fixture
+#  bytes exactly as they are stored, not their canonicalised form.
+sha2 = "0.10"

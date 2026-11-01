@@ -20,9 +20,9 @@ adapter renders the decision prompt, calls a registered provider, and optionally
 resolves the answer through an exact L1/L2 cache.
 
 Definitions, registry checks, and prompt-catalog validation stay in
-`app.swe.definition`. Runtime preflight stays in `app.swe.runtime_preflight`.
-Dispatch lives in `app.swe.runtime_dispatch`. The cache contract and key live in
-`app.swe.cache`; `app.services.overgraph.jev_cache` implements it, and the engine
+`swe.definition`. Runtime preflight stays in `swe.runtime_preflight`.
+Dispatch lives in `swe.runtime_dispatch`. The cache contract and key live in
+`swe.cache`; `app.services.overgraph.jev_cache` implements it, and the engine
 never imports the OverGraph storage layer.
 
 ## Provider decision node
@@ -103,7 +103,7 @@ declared choices before completing the invocation.
 
 ## Jev provider — removed (B1)
 
-The previous `app.swe.providers.make_jev_provider` was a `decision(provider)`
+The previous `swe.providers.make_jev_provider` was a `decision(provider)`
 adapter around JEV System One. It had **no production caller**: production
 research decides through `app.services.research.fast_controller`, which calls
 `classify_research_decision` from the compact research state directly. The
@@ -167,4 +167,4 @@ Not claimed:
   rendering, unknown provider/prompt, out-of-contract choice, provider exception,
   deadline, exact cache hit/miss, cache preflight, key stability, single-flight,
   L2 across instances, Jev adapter mapping) and
-  `backend/tests/test_swe_runtime_preflight.py`.
+  `python/tests/test_swe_runtime_preflight.py`.

@@ -1,0 +1,69 @@
+version: "1.0"
+name: research_parallel
+entrypoint: investigate
+limits:
+  max_steps: 100
+  max_depth: 10
+  timeout_seconds: 1800
+nodes:
+  investigate:
+    type: fork
+    branches:
+      contracts: search_contracts
+      legal: search_legal
+    join: combine
+  search_contracts:
+    type: task
+    handler: research.search_contracts
+  search_legal:
+    type: task
+    handler: research.search_legal_sources
+  combine:
+    type: join
+    mode: all
+    on_failure: fail
+    outputs:
+      contracts: "$.branches.contracts.result"
+      legal: "$.branches.legal.result"
+    next: check_budget
+  check_budget:
+    type: decision
+    evaluator: expression
+    condition:
+      lt:
+        - var: "$.run.steps_used"
+        - var: "$.run.max_steps"
+    routes:
+      "true": evaluate
+      "false": end_incomplete
+  evaluate:
+    type: decision
+    evaluator: provider
+    provider: jev
+    prompt_key: research.assessment.user
+    input:
+      contracts: "$.combine.contracts"
+      legal: "$.combine.legal"
+    choices: [sufficient, insufficient, uncertain]
+    routes:
+      sufficient: synthesize
+      insufficient: follow_up
+      uncertain: inspect_context
+  follow_up:
+    type: task
+    handler: research.plan_follow_up
+    next: investigate
+  inspect_context:
+    type: task
+    handler: research.inspect_context
+    next: evaluate
+  synthesize:
+    type: task
+    handler: research.synthesize
+    next: end_complete
+  end_complete:
+    type: end
+    status: completed
+  end_incomplete:
+    type: end
+    status: incomplete

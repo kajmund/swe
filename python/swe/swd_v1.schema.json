@@ -1,0 +1,319 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://socialism.local/swe/swd-1.0.schema.json",
+  "title": "Socialism Workflow Definition 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "entrypoint", "limits", "nodes"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "name": { "$ref": "#/$defs/workflowName" },
+    "entrypoint": { "$ref": "#/$defs/nodeId" },
+    "limits": { "$ref": "#/$defs/limits" },
+    "nodes": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/nodeId" },
+      "additionalProperties": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "workflowName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "nodeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "handlerName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "promptKey": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "providerName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+    },
+    "jsonPath": {
+      "type": "string",
+      "pattern": "^\\$(\\.[A-Za-z_][A-Za-z0-9_]*|\\.[0-9]+)*$"
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_steps", "max_depth", "timeout_seconds"],
+      "properties": {
+        "max_steps": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "max_depth": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_attempts"],
+      "properties": {
+        "max_attempts": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "backoff_ms": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+        "jitter": { "type": "boolean" }
+      }
+    },
+    "cachePolicy": { "enum": ["off", "exact"] },
+    "bindings": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/$defs/jsonPath" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["const"],
+            "properties": { "const": true }
+          }
+        ]
+      }
+    },
+    "expr": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["var"],
+          "properties": {
+            "var": { "$ref": "#/$defs/jsonPath" },
+            "default": true
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["const"],
+          "properties": { "const": true }
+        },
+        { "$ref": "#/$defs/binaryExpr" },
+        { "$ref": "#/$defs/notExpr" },
+        { "$ref": "#/$defs/existsExpr" }
+      ]
+    },
+    "binaryExpr": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "eq": { "$ref": "#/$defs/exprPair" },
+        "ne": { "$ref": "#/$defs/exprPair" },
+        "lt": { "$ref": "#/$defs/exprPair" },
+        "lte": { "$ref": "#/$defs/exprPair" },
+        "gt": { "$ref": "#/$defs/exprPair" },
+        "gte": { "$ref": "#/$defs/exprPair" },
+        "and": { "$ref": "#/$defs/exprPair" },
+        "or": { "$ref": "#/$defs/exprPair" },
+        "in": { "$ref": "#/$defs/exprPair" },
+        "add": { "$ref": "#/$defs/exprPair" },
+        "sub": { "$ref": "#/$defs/exprPair" },
+        "mul": { "$ref": "#/$defs/exprPair" },
+        "div": { "$ref": "#/$defs/exprPair" }
+      }
+    },
+    "exprPair": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/expr" }
+    },
+    "notExpr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["not"],
+      "properties": { "not": { "$ref": "#/$defs/expr" } }
+    },
+    "existsExpr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exists"],
+      "properties": {
+        "exists": {
+          "oneOf": [
+            { "$ref": "#/$defs/jsonPath" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["var"],
+              "properties": { "var": { "$ref": "#/$defs/jsonPath" } }
+            }
+          ]
+        }
+      }
+    },
+    "node": {
+      "oneOf": [
+        { "$ref": "#/$defs/taskNode" },
+        { "$ref": "#/$defs/expressionDecisionNode" },
+        { "$ref": "#/$defs/providerDecisionNode" },
+        { "$ref": "#/$defs/forkNode" },
+        { "$ref": "#/$defs/joinNode" },
+        { "$ref": "#/$defs/mapNode" },
+        { "$ref": "#/$defs/waitNode" },
+        { "$ref": "#/$defs/subworkflowNode" },
+        { "$ref": "#/$defs/endNode" }
+      ]
+    },
+    "taskNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "handler"],
+      "properties": {
+        "type": { "const": "task" },
+        "handler": { "$ref": "#/$defs/handlerName" },
+        "input": { "$ref": "#/$defs/bindings" },
+        "output_schema": { "type": "object" },
+        "cache_policy": { "$ref": "#/$defs/cachePolicy" },
+        "retry": { "$ref": "#/$defs/retry" },
+        "next": { "$ref": "#/$defs/nodeId" }
+      }
+    },
+    "expressionDecisionNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "evaluator", "condition", "routes"],
+      "properties": {
+        "type": { "const": "decision" },
+        "evaluator": { "const": "expression" },
+        "condition": { "$ref": "#/$defs/expr" },
+        "routes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["true", "false"],
+          "properties": {
+            "true": { "$ref": "#/$defs/nodeId" },
+            "false": { "$ref": "#/$defs/nodeId" }
+          }
+        }
+      }
+    },
+    "providerDecisionNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "evaluator", "provider", "prompt_key", "choices", "routes"],
+      "properties": {
+        "type": { "const": "decision" },
+        "evaluator": { "const": "provider" },
+        "provider": { "$ref": "#/$defs/providerName" },
+        "prompt_key": { "$ref": "#/$defs/promptKey" },
+        "input": { "$ref": "#/$defs/bindings" },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "routes": {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": { "$ref": "#/$defs/nodeId" }
+        },
+        "cache_policy": { "$ref": "#/$defs/cachePolicy" }
+      }
+    },
+    "forkNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "branches", "join"],
+      "properties": {
+        "type": { "const": "fork" },
+        "branches": {
+          "type": "object",
+          "minProperties": 2,
+          "propertyNames": { "$ref": "#/$defs/nodeId" },
+          "additionalProperties": { "$ref": "#/$defs/nodeId" }
+        },
+        "join": { "$ref": "#/$defs/nodeId" }
+      }
+    },
+    "joinNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "join" },
+        "mode": { "const": "all" },
+        "on_failure": { "const": "fail" },
+        "outputs": { "$ref": "#/$defs/bindings" },
+        "next": { "$ref": "#/$defs/nodeId" }
+      }
+    },
+    "mapNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "items", "child"],
+      "properties": {
+        "type": { "const": "map" },
+        "items": { "$ref": "#/$defs/jsonPath" },
+        "child": { "$ref": "#/$defs/nodeId" },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "join": { "$ref": "#/$defs/nodeId" },
+        "next": { "$ref": "#/$defs/nodeId" }
+      }
+    },
+    "waitNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "wait" },
+        "signal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+        "next": { "$ref": "#/$defs/nodeId" }
+      }
+    },
+    "subworkflowNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "workflow"],
+      "properties": {
+        "type": { "const": "subworkflow" },
+        "workflow": { "$ref": "#/$defs/workflowName" },
+        "version": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "input": { "$ref": "#/$defs/bindings" },
+        "next": { "$ref": "#/$defs/nodeId" }
+      }
+    },
+    "endNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "status"],
+      "properties": {
+        "type": { "const": "end" },
+        "status": { "enum": ["completed", "incomplete", "failed", "cancelled"] }
+      }
+    }
+  }
+}

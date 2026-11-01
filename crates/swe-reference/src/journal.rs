@@ -354,7 +354,11 @@ pub fn read_journal(path: &Path) -> DemoResult<Journal> {
     Journal::from_json(&value)
 }
 
-fn journal_events_to_json(events: &[swe_native::JournalEvent]) -> Json {
+/// The journal v1 wire encoding of the engine's event log.
+///
+/// Public because the journal file format is a frozen contract (see
+/// `contracts/`), not an implementation detail.
+pub fn journal_events_to_json(events: &[swe_native::JournalEvent]) -> Json {
     use swe_native::JournalEvent as E;
     Json::Array(
         events
@@ -447,7 +451,7 @@ fn journal_events_to_json(events: &[swe_native::JournalEvent]) -> Json {
     )
 }
 
-fn journal_events_from_json(value: &Json) -> DemoResult<Vec<swe_native::JournalEvent>> {
+pub fn journal_events_from_json(value: &Json) -> DemoResult<Vec<swe_native::JournalEvent>> {
     use swe_native::{Delivery, JournalEvent as E};
     // An unreadable event log is a corrupt journal, not an empty one.
     let items = value
@@ -464,50 +468,46 @@ fn journal_events_from_json(value: &Json) -> DemoResult<Vec<swe_native::JournalE
                 action: field_str(item, "action")?.to_string(),
                 delivery: Delivery::parse(field_str(item, "delivery")?)
                     .ok_or_else(|| DemoError::new("unknown delivery in journal"))?,
-                started_at_ms: item.get("started_at_ms").and_then(u64_of).unwrap_or(0),
+                started_at_ms: field_u64(item, "started_at_ms")?,
             },
             "ResultConfirmed" => E::ResultConfirmed {
                 attempt_id: field_str(item, "attempt_id")?.to_string(),
                 outcome: completion_outcome_from_json(field(item, "outcome")?)?,
-                confirmed_at_ms: item.get("confirmed_at_ms").and_then(u64_of).unwrap_or(0),
+                confirmed_at_ms: field_u64(item, "confirmed_at_ms")?,
             },
             "AttemptAbandoned" => E::AttemptAbandoned {
                 attempt_id: field_str(item, "attempt_id")?.to_string(),
                 reason: field_str(item, "reason")?.to_string(),
-                abandoned_at_ms: item.get("abandoned_at_ms").and_then(u64_of).unwrap_or(0),
+                abandoned_at_ms: field_u64(item, "abandoned_at_ms")?,
             },
             "ChargeReserved" => E::ChargeReserved {
                 charge_id: field_str(item, "charge_id")?.to_string(),
                 attempt_id: field_str(item, "attempt_id")?.to_string(),
                 delivery_key: field_str(item, "delivery_key")?.to_string(),
-                amount_milli: item.get("amount_milli").and_then(u64_of).unwrap_or(0),
-                tariff_milli: item.get("tariff_milli").and_then(u64_of).unwrap_or(0),
-                reserved_at_ms: item.get("reserved_at_ms").and_then(u64_of).unwrap_or(0),
+                amount_milli: field_u64(item, "amount_milli")?,
+                tariff_milli: field_u64(item, "tariff_milli")?,
+                reserved_at_ms: field_u64(item, "reserved_at_ms")?,
             },
             "ChargeSettled" => E::ChargeSettled {
                 charge_id: field_str(item, "charge_id")?.to_string(),
-                amount_milli: item.get("amount_milli").and_then(u64_of).unwrap_or(0),
-                settled_at_ms: item.get("settled_at_ms").and_then(u64_of).unwrap_or(0),
+                amount_milli: field_u64(item, "amount_milli")?,
+                settled_at_ms: field_u64(item, "settled_at_ms")?,
             },
             "ChargeReleased" => E::ChargeReleased {
                 charge_id: field_str(item, "charge_id")?.to_string(),
                 reason: field_str(item, "reason")?.to_string(),
-                released_at_ms: item.get("released_at_ms").and_then(u64_of).unwrap_or(0),
+                released_at_ms: field_u64(item, "released_at_ms")?,
             },
             "ChargePendingReconciliation" => E::ChargePendingReconciliation {
                 charge_id: field_str(item, "charge_id")?.to_string(),
                 reason: field_str(item, "reason")?.to_string(),
-                at_ms: item.get("at_ms").and_then(u64_of).unwrap_or(0),
+                at_ms: field_u64(item, "at_ms")?,
             },
             other => return Err(DemoError::new(format!("unknown journal event {other:?}"))),
         };
         events.push(event);
     }
     Ok(events)
-}
-
-fn u64_of(value: &Json) -> Option<u64> {
-    crate::as_u64(value)
 }
 
 /// Lossless encoding of a completion outcome: Ok, Err and Cancelled stay three
@@ -567,6 +567,112 @@ fn dependency_versions_from_json(
         );
     }
     Ok(versions)
+}
+
+/// The frozen `journal-v1-header.json` fixture.
+pub fn contract_journal_header() -> Json {
+    let document = crate::workflow::workflow_document();
+    obj([
+        (
+            "schema_version",
+            Json::from_u64(u64::from(swe_native::JOURNAL_SCHEMA_VERSION)),
+        ),
+        ("run_id", Json::from("run-contract-v1")),
+        (
+            "definition_sha256",
+            Json::from(sha256_hex(&document).expect("hash")),
+        ),
+        (
+            "contract_version",
+            Json::from_u64(u64::from(CONTRACT_VERSION)),
+        ),
+        (
+            "dependency_versions",
+            dependency_versions_to_json(&current_dependency_versions()),
+        ),
+    ])
+}
+
+/// The frozen `journal-v1-events.json` fixture: every event kind the v1 format
+/// defines, including an unconfirmed external charge.
+pub fn contract_events() -> Json {
+    use swe_native::{CompletionOutcome, Delivery, JournalEvent as E};
+    let events = vec![
+        E::AttemptStarted {
+            attempt_id: "dk1:1".to_string(),
+            delivery_key: "dk1".to_string(),
+            invocation_id: "inv-1".to_string(),
+            action: "demo.action".to_string(),
+            delivery: Delivery::Pure,
+            started_at_ms: 1_700_000_000_000,
+        },
+        E::ChargeReserved {
+            charge_id: "ch-1".to_string(),
+            attempt_id: "dk1:1".to_string(),
+            delivery_key: "dk1".to_string(),
+            amount_milli: 1_000,
+            tariff_milli: 1_000,
+            reserved_at_ms: 1_700_000_000_001,
+        },
+        E::ResultConfirmed {
+            attempt_id: "dk1:1".to_string(),
+            outcome: CompletionOutcome::Ok(obj([("answer", Json::from("a value"))])),
+            confirmed_at_ms: 1_700_000_000_002,
+        },
+        E::ChargeSettled {
+            charge_id: "ch-1".to_string(),
+            amount_milli: 1_000,
+            settled_at_ms: 1_700_000_000_003,
+        },
+        E::AttemptStarted {
+            attempt_id: "dk2:1".to_string(),
+            delivery_key: "dk2".to_string(),
+            invocation_id: "inv-2".to_string(),
+            action: "demo.external".to_string(),
+            delivery: Delivery::ExternalIdempotent,
+            started_at_ms: 1_700_000_000_004,
+        },
+        E::ChargeReserved {
+            charge_id: "ch-2".to_string(),
+            attempt_id: "dk2:1".to_string(),
+            delivery_key: "dk2".to_string(),
+            amount_milli: 2_000,
+            tariff_milli: 2_000,
+            reserved_at_ms: 1_700_000_000_005,
+        },
+        E::ChargePendingReconciliation {
+            charge_id: "ch-2".to_string(),
+            reason: "external side effect unknown after crash".to_string(),
+            at_ms: 1_700_000_000_006,
+        },
+        E::AttemptAbandoned {
+            attempt_id: "dk3:1".to_string(),
+            reason: "cancelled before dispatch".to_string(),
+            abandoned_at_ms: 1_700_000_000_007,
+        },
+        E::AttemptStarted {
+            attempt_id: "dk4:1".to_string(),
+            delivery_key: "dk4".to_string(),
+            invocation_id: "inv-4".to_string(),
+            action: "demo.released".to_string(),
+            delivery: Delivery::Pure,
+            started_at_ms: 1_700_000_000_008,
+        },
+        E::ChargeReserved {
+            charge_id: "ch-4".to_string(),
+            attempt_id: "dk4:1".to_string(),
+            delivery_key: "dk4".to_string(),
+            amount_milli: 300,
+            tariff_milli: 300,
+            reserved_at_ms: 1_700_000_000_009,
+        },
+        E::ChargeReleased {
+            charge_id: "ch-4".to_string(),
+            reason: "operation reported no cost".to_string(),
+            released_at_ms: 1_700_000_000_010,
+        },
+    ];
+    journal_events_to_json(&events)
 }
 
 #[cfg(test)]

@@ -620,6 +620,10 @@ impl Ledger {
         }
     }
 
+    // Private helper whose parameters are exactly the fields of `Event`. A
+    // struct here would just move the same eight values to every call site, so
+    // the arity is the record's, not an accident.
+    #[allow(clippy::too_many_arguments)]
     fn push_event(
         &mut self,
         kind: EventKind,

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "swe-engine"
+version = "0.1.0"
+description = "Python host adapter for the SWE (SWD 1.0) execution kernel"
+requires-python = ">=3.12"
+license = { text = "MIT OR Apache-2.0" }
+# The engine package itself imports only these two libraries. The optional
+# `swe_native` PyO3 extension is built from crates/swe-native (maturin) and is
+# installed separately; `swe.runtime` imports it lazily and fails with a typed
+# error when it is absent.
+dependencies = [
+    "jsonschema>=4.26.0",
+    "pyyaml>=6.0.3",
+]
+
+[dependency-groups]
+# Test tooling for the standalone package. The minimums match the backend's
+# specifiers; this package's own lock resolves newer (pytest 9.2.0,
+# pytest-asyncio 1.4.1). It does not share the backend's venv.
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["swe"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-m 'not smoke'"
+markers = [
+    "integration: hits network or optional heavy deps",
+    "smoke: manual live OASIS simulation (opt-in)",
+    "swe_runtime: requires the compiled swe_native PyO3 extension",
+]
