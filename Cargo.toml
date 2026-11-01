@@ -1,14 +1,3 @@
-# The SWE extraction target.
-#
-# These three crates are what would move to their own repository, so the
-# workspace is exactly that set: `cargo test --workspace` here is the same
-# command the standalone project will run.
-#
-# `crates/swe-gym` is deliberately NOT a member. It is a Socialism experiment
-# with its own governance, legal-domain fixtures and CI job; pulling it in would
-# couple the extraction target to the experiment it must be separable from.
-# See docs/swe-standalone/05-gym-split.md (G4).
-
 [workspace]
 resolver = "2"
 members = [
@@ -16,19 +5,14 @@ members = [
     "crates/swe-native",
     "crates/swe-reference",
 ]
-# Not a member: it is a Socialism experiment with its own governance, fixtures
-# and CI job. Excluded explicitly so it stays a standalone crate instead of
-# failing with "believes it's in a workspace".
-exclude = ["crates/swe-gym"]
-
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.83"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/kajmund/swe"
+homepage = "https://github.com/kajmund/swe"
 
-# Release profile for the workspace. It lived in `swe-native` before the
-# workspace existed; once a root exists, member profiles are ignored, so it
-# moves here rather than becoming dead configuration.
 [profile.release]
 lto = false
 codegen-units = 16

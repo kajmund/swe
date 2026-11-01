@@ -137,23 +137,23 @@ async def test_two_runs_are_isolated() -> None:
 async def test_deterministic_parallel_fixture() -> None:
     compiled = compile_swd_text(
         (FIXTURES / "runtime_parallel.yaml").read_text(encoding="utf-8"),
-        handlers=frozenset({"demo.search_contracts", "demo.search_legal"}),
+        handlers=frozenset({"demo.fetch_catalog", "demo.fetch_pricing"}),
     )
 
-    async def contracts(_payload: dict[str, object]) -> dict[str, str]:
-        return {"hits": "contracts"}
+    async def catalog(_payload: dict[str, object]) -> dict[str, str]:
+        return {"hits": "catalog"}
 
-    async def legal(_payload: dict[str, object]) -> dict[str, str]:
-        return {"hits": "legal"}
+    async def pricing(_payload: dict[str, object]) -> dict[str, str]:
+        return {"hits": "pricing"}
 
     result = await run_workflow(
         compiled,
-        {"demo.search_contracts": contracts, "demo.search_legal": legal},
+        {"demo.fetch_catalog": catalog, "demo.fetch_pricing": pricing},
         {},
     )
     assert result.status == "completed"
-    assert result.output["combine"]["contracts"] == {"hits": "contracts"}
-    assert result.output["combine"]["legal"] == {"hits": "legal"}
+    assert result.output["combine"]["catalog"] == {"hits": "catalog"}
+    assert result.output["combine"]["pricing"] == {"hits": "pricing"}
 
 
 async def test_nested_fork_and_loop_back_to_same_fork() -> None:

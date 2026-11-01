@@ -1,0 +1,49 @@
+# Third-party notices
+
+This file records the dependencies used by SWE 0.1.0. Rust dependencies may be
+statically linked into the `swe_native` wheel, so their discovered license
+texts follow the inventory. Python dependencies are installed as separate
+distributions and carry their own license files; they are inventoried here so a
+lockfile change cannot silently change the license surface.
+
+Generated for Rust with `cargo about generate --all-features --locked about.hbs`.
+
+## Python dependencies
+
+| Package | Version | License |
+| --- | --- | --- |
+| attrs | 26.1.0 | MIT |
+| colorama | 0.4.6 | BSD-3-Clause |
+| iniconfig | 2.3.1 | MIT |
+| jsonschema | 4.26.0 | MIT |
+| jsonschema-specifications | 2025.9.1 | MIT |
+| packaging | 26.3 | Apache-2.0 OR BSD-2-Clause |
+| pluggy | 1.7.0 | MIT |
+| Pygments | 2.21.0 | BSD-2-Clause |
+| pytest | 9.2.0 | MIT |
+| pytest-asyncio | 1.4.1 | Apache-2.0 |
+| PyYAML | 6.0.3 | MIT |
+| referencing | 0.37.0 | MIT |
+| rpds-py | 2026.9.1 | MIT |
+| typing-extensions | 4.16.0 | PSF-2.0 |
+
+## Rust dependencies
+
+| Crate | Version | License expression |
+| --- | --- | --- |
+{{#each crates}}
+{{#if package.source}}
+| [{{package.name}}]({{#if package.repository}}{{package.repository}}{{else}}https://crates.io/crates/{{package.name}}{{/if}}) | {{package.version}} | {{license}} |
+{{/if}}
+{{/each}}
+
+## Rust dependency license texts
+
+{{#each overview}}
+### {{name}}
+
+```text
+{{text}}
+```
+
+{{/each}}

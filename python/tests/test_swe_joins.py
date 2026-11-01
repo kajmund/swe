@@ -30,8 +30,8 @@ def _fanout() -> dict[str, object]:
                 "branches": {"left": "task_a", "right": "task_b"},
                 "join": "together",
             },
-            "task_a": {"type": "task", "handler": "research.execute_need"},
-            "task_b": {"type": "task", "handler": "research.execute_need"},
+            "task_a": {"type": "task", "handler": "demo.execute_item"},
+            "task_b": {"type": "task", "handler": "demo.execute_item"},
             "together": {"type": "join", "mode": "all", "next": "done"},
             "done": {"type": "end", "status": "completed"},
         },
@@ -87,8 +87,8 @@ def test_join_cannot_have_two_owners() -> None:
         "branches": {"p": "task_p", "q": "task_q"},
         "join": "together",
     }
-    nodes["task_p"] = {"type": "task", "handler": "research.execute_need"}
-    nodes["task_q"] = {"type": "task", "handler": "research.execute_need"}
+    nodes["task_p"] = {"type": "task", "handler": "demo.execute_item"}
+    nodes["task_q"] = {"type": "task", "handler": "demo.execute_item"}
     with pytest.raises(SwdValidationError, match="owned by both"):
         _compile(document)
 
@@ -133,7 +133,7 @@ def test_map_child_cannot_terminate_before_join() -> None:
             },
             "run_need": {
                 "type": "task",
-                "handler": "research.execute_need",
+                "handler": "demo.execute_item",
                 "next": "done",
             },
             "after_needs": {"type": "join", "mode": "all", "next": "done"},
@@ -161,9 +161,9 @@ def test_nested_fork_completes_inner_join_before_outer() -> None:
                 "branches": {"a": "task_a", "b": "task_b"},
                 "join": "inner_join",
             },
-            "task_a": {"type": "task", "handler": "research.execute_need"},
-            "task_b": {"type": "task", "handler": "research.execute_need"},
-            "task_c": {"type": "task", "handler": "research.execute_need"},
+            "task_a": {"type": "task", "handler": "demo.execute_item"},
+            "task_b": {"type": "task", "handler": "demo.execute_item"},
+            "task_c": {"type": "task", "handler": "demo.execute_item"},
             "inner_join": {"type": "join", "mode": "all"},
             "outer_join": {"type": "join", "mode": "all", "next": "done"},
             "done": {"type": "end", "status": "completed"},
@@ -192,11 +192,11 @@ def test_inner_branch_cannot_skip_to_outer_join() -> None:
             },
             "task_a": {
                 "type": "task",
-                "handler": "research.execute_need",
+                "handler": "demo.execute_item",
                 "next": "outer_join",
             },
-            "task_b": {"type": "task", "handler": "research.execute_need"},
-            "task_c": {"type": "task", "handler": "research.execute_need"},
+            "task_b": {"type": "task", "handler": "demo.execute_item"},
+            "task_c": {"type": "task", "handler": "demo.execute_item"},
             "inner_join": {"type": "join", "mode": "all"},
             "outer_join": {"type": "join", "mode": "all", "next": "done"},
             "done": {"type": "end", "status": "completed"},

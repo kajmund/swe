@@ -3,9 +3,14 @@ name = "swe-native"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.83"
-description = "In-memory SWD 1.0 execution kernel for Socialism Workflow Engine"
-license = "MIT OR Apache-2.0"
-publish = false
+description = "Deterministic in-memory execution kernel for SWD 1.0 workflows"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["workflow", "runtime", "deterministic"]
+categories = ["asynchronous"]
+publish = true
 
 [lib]
 name = "swe_native"

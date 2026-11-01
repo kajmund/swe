@@ -7,11 +7,17 @@ name = "swe-native"
 version = "0.1.0"
 description = "PyO3 bindings for the SWE in-memory runtime"
 requires-python = ">=3.12"
-license = { text = "MIT OR Apache-2.0" }
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-NOTICES"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
 ]
+
+[project.urls]
+Homepage = "https://github.com/kajmund/swe"
+Repository = "https://github.com/kajmund/swe"
+Issues = "https://github.com/kajmund/swe/issues"
 
 [tool.maturin]
 manifest-path = "Cargo.toml"

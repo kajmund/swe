@@ -7,14 +7,14 @@ from pathlib import Path
 FIXTURES = Path(__file__).parent
 EXAMPLE_HANDLERS = frozenset(
     {
-        "research.search_contracts",
-        "research.search_legal_sources",
-        "research.plan_follow_up",
-        "research.inspect_context",
-        "research.synthesize",
-        "research.execute_need",
+        "demo.fetch_catalog",
+        "demo.fetch_pricing",
+        "demo.refine",
+        "demo.inspect",
+        "demo.summarize",
+        "demo.execute_item",
     }
 )
-EXAMPLE_PROVIDERS = frozenset({"jev"})
-EXAMPLE_PROMPT_KEY = "research.assessment.user"
+EXAMPLE_PROVIDERS = frozenset({"mock.decision"})
+EXAMPLE_PROMPT_KEY = "demo.assessment"
 EXAMPLE_PROMPT_KEYS = frozenset({EXAMPLE_PROMPT_KEY})

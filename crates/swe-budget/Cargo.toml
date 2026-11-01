@@ -4,8 +4,12 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.83"
 description = "Generic Sweycoin budget ledger: reserve, settle, release, replay"
-license = "MIT OR Apache-2.0"
-publish = false
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["budget", "ledger", "workflow"]
+categories = ["data-structures"]
+publish = true
 
 [lib]
 name = "swe_budget"

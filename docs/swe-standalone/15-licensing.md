@@ -13,9 +13,9 @@
 | Repo | **`kajmund/swe`** |
 | crates.io | `swe-native`, `swe-budget` (båda lediga vid kontroll 2026-11-01) |
 | PyPI-distribution | **`swe-engine`** — `swe` är upptaget; importnamnet är fortfarande `swe` |
-| Publicering | `publish = false` till flytten/PR 4 — namnen är verifierade lediga 2026-11-01 |
+| Publicering | Manifesten förbereds med `publish = true` i PR 4; faktisk registry-publicering och taggning sker först efter målrepo-CI och konsument-PR |
 
-## Vad som ligger i trädet nu
+## Vad som låg i källträdet före PR 4
 
 - `LICENSE-MIT` och `LICENSE-APACHE` i `crates/swe-native`, `crates/swe-budget`,
   `crates/swe-reference` och `python/`.
@@ -27,9 +27,9 @@
   levereras i cargo-registret, med vår egen copyright-rad i MIT-filen —
   inte avskrivna från minnet.
 
-Filerna ligger i varje paketkatalog, inte i repo-roten, eftersom repo-roten
-fortfarande innehåller kod som **inte** licensieras. När SWE flyttas blir
-`LICENSE-MIT`/`LICENSE-APACHE` rotfiler i det nya repot.
+Filerna låg i varje paketkatalog, inte i repo-roten, eftersom källrepots rot
+fortfarande innehåller kod som **inte** licensieras. I PR 4 blir
+`LICENSE-MIT`/`LICENSE-APACHE` även rotfiler i det nya repot.
 
 Synligheten är en förutsättning för licensen, inte en detalj: ett publikt repo
 **distribuerar** koden, och då gäller MIT/Apache-2.0:s krav på att licens- och
@@ -51,11 +51,11 @@ också att historiken syns — därav att AI-agentförfattarskapet är dokumente
   skapas i flytten. GitHub-API:t svarar 404 i dag (ännu inte skapat, eller
   privat), så "publikt" är ett beslut, inte en verifierad registrering.
 
-En kollision som den här är exakt varför `publish = false` står kvar till
+En kollision som den här är exakt varför registry-publicering väntar till efter
 flytten: namnen är verifierade lediga, licensen är beslutad och äganderätten
-bekräftad, men publicering är ett separat steg i PR 4.
+bekräftad, men faktisk publicering är ett separat steg efter PR 4.
 
-## Medvetet uppskjutet till PR 4
+## Genomfört i PR 4
 
 - `THIRD-PARTY-NOTICES`: MIT och Apache-2.0 kräver att licens- och
   upphovsrättstexter följer med vid distribution av binärer/wheels. Alla 41
@@ -63,15 +63,15 @@ bekräftad, men publicering är ett separat steg i PR 4.
   Python-paket (`python/uv.lock`: 15 poster inklusive projektet `swe-engine`
   självt; 6 i runtime-kedjan) är permissiva; `unicode-ident` är
   `(MIT OR Apache-2.0) AND Unicode-3.0` och kräver sin Unicode-text.
-  Genereras lämpligen med `cargo-about`/`cargo-deny` när det nya repot finns.
-- Licensgrind i CI (t.ex. `cargo-deny` med tillåten lista) — samma skäl.
-- PEP 639 `license-files` i `pyproject.toml`; nuvarande `license = { text = ... }`
-  fungerar med alla byggare men får inte med sig licenstexterna i hjulet
-  automatiskt.
-- `repository`/`homepage` i `Cargo.toml` och `pyproject.toml`: sätts i flytten när
-  `kajmund/swe` finns; `cargo package` varnar i dag för att de saknas.
-- `publish = false` → `true` i flytten/PR 4; namn, licens och äganderätt är redan
-  verifierade/beslutade.
+  genereras med `cargo-about`; native-wheelen inkluderar notiserna och fulla
+  licenstexter.
+- `scripts/check_licenses.py` jämför manifest, 41 Rust- och 14 Python-beroenden,
+  rot-/paketlicenser och notices fail-closed i CI.
+- PEP 639 `license-files` och SPDX-uttryck finns i båda `pyproject.toml`.
+- `repository`/`homepage` pekar på `https://github.com/kajmund/swe` i Cargo- och
+  Python-metadata.
+- `publish = true` gäller `swe-native` och `swe-budget`; ingen registry har
+  publicerats av PR 4.
 
 ## Grund för beslutet
 
