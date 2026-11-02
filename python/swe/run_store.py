@@ -12,6 +12,7 @@ injected resources are declared together.
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -62,6 +63,36 @@ class RunStore(Protocol):
     async def replay_results(self, run_id: str) -> Mapping[str, InvocationRecord]: ...
 
     async def events(self, run_id: str) -> list[dict[str, Any]]: ...
+
+
+class MemoryRunStore:
+    """In-process RunStore for tests, offer recovery, and local hosts."""
+
+    def __init__(self) -> None:
+        self.runs: dict[str, RunRecord] = {}
+        self.invocations: dict[str, dict[str, InvocationRecord]] = defaultdict(dict)
+        self.event_log: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+    async def record(
+        self,
+        run: RunRecord,
+        *,
+        events: Sequence[Mapping[str, Any]] = (),
+        invocation: InvocationRecord | None = None,
+    ) -> None:
+        self.runs[run.run_id] = run
+        self.event_log[run.run_id].extend(dict(event) for event in events)
+        if invocation is not None:
+            self.invocations[run.run_id][invocation.invocation_id] = invocation
+
+    async def load_run(self, run_id: str) -> RunRecord | None:
+        return self.runs.get(run_id)
+
+    async def replay_results(self, run_id: str) -> Mapping[str, InvocationRecord]:
+        return dict(self.invocations.get(run_id, {}))
+
+    async def events(self, run_id: str) -> list[dict[str, Any]]:
+        return list(self.event_log.get(run_id, []))
 
 
 @dataclass(frozen=True)

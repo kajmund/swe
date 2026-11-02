@@ -1,0 +1,70 @@
+{
+  "cache": {
+    "bytes_used": 24317,
+    "cold": {
+      "bytes_used": 24320,
+      "coalesced": 0,
+      "computes": 10000,
+      "entries": 256,
+      "errors": 0,
+      "evictions": 9744,
+      "expiries": 0,
+      "hits": 0,
+      "misses": 10000,
+      "p50_latency_ms": 2.829579,
+      "p95_latency_ms": 3.490906,
+      "peak_entries": 256,
+      "peak_in_flight": 64
+    },
+    "computes": 10001,
+    "concurrency": 64,
+    "environment": {
+      "cpu_count": 4,
+      "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+      "python": "3.12.3"
+    },
+    "generated_at": "2026-11-02T01:32:15.970087+00:00",
+    "max_bytes": 8388608,
+    "operations": 10000,
+    "peak_entries": 256,
+    "peak_in_flight": 64,
+    "schema_version": 1,
+    "throughput_ops_per_second": 22882.812,
+    "wall_ms": 874.018,
+    "warm": {
+      "bytes_used": 24317,
+      "coalesced": 0,
+      "computes": 10001,
+      "entries": 256,
+      "errors": 0,
+      "evictions": 9745,
+      "expiries": 0,
+      "hits": 10000,
+      "misses": 10001,
+      "p50_latency_ms": 0.56506,
+      "p95_latency_ms": 3.337674,
+      "peak_entries": 256,
+      "peak_in_flight": 64
+    }
+  },
+  "offers": {
+    "approved": 10000,
+    "concurrency": 64,
+    "environment": {
+      "cpu_count": 4,
+      "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+      "python": "3.12.3"
+    },
+    "generated_at": "2026-11-02T01:32:21.412163+00:00",
+    "operations": 10000,
+    "p50_latency_ms": 0.073398,
+    "p95_latency_ms": 17.627093,
+    "peak_in_flight": 64,
+    "reused": 10000,
+    "schema_version": 1,
+    "throughput_ops_per_second": 3818.218,
+    "unique_offer_ids": 10000,
+    "wall_ms": 5238.045
+  },
+  "schema_version": 1
+}

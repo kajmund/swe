@@ -6,3 +6,6 @@ All notable changes to this project are documented here.
 
 - Extract the generic SWE kernel, Python host, budget ledger, reference app,
   frozen contracts, and verification gates into an independent repository.
+- Add ActionOffer 0.x and a bounded exact `DecisionCache` L1, with approve
+  going through existing SWE dispatch, budget, cancellation, and journal
+  recovery. Frozen wire contracts and `decision_cache_key` are unchanged.

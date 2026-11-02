@@ -23,6 +23,9 @@ Homepage = "https://github.com/kajmund/swe"
 Repository = "https://github.com/kajmund/swe"
 Issues = "https://github.com/kajmund/swe/issues"
 
+[project.scripts]
+swe-offer-cache-benchmark = "swe.offers:benchmark_main"
+
 [dependency-groups]
 # Test tooling for the standalone package. The minimums match the backend's
 # specifiers; this package's own lock resolves newer (pytest 9.2.0,
