@@ -164,7 +164,7 @@ impl Machine {
         handler: String,
         bindings: IndexMap<String, crate::definition::Binding>,
     ) -> Result<()> {
-        let context = self.build_context(scope_id)?;
+        let context = self.build_binding_context(scope_id, &bindings)?;
         let input = if bindings.is_empty() {
             default_task_input(self.scope_or_err(scope_id)?)
         } else {
@@ -205,7 +205,7 @@ impl Machine {
     }
 
     fn start_provider_decision(&mut self, start: ProviderStart<'_>) -> Result<()> {
-        let context = self.build_context(start.scope_id)?;
+        let context = self.build_binding_context(start.scope_id, &start.input)?;
         let input = if start.input.is_empty() {
             Json::empty_object()
         } else {
@@ -395,28 +395,31 @@ impl Machine {
 
     pub fn spawn_map_children(&mut self, map_id: &str, child: &str) -> Result<()> {
         loop {
-            let (index, item, parent, inflight) = {
+            let (index, item) = {
                 let map = self.scope_or_err(map_id)?;
-                let inflight = map
-                    .children
-                    .iter()
-                    .filter(|child| child.status == WorkStatus::Running)
-                    .count() as u32;
+                // Children are spawned in input order. The difference between
+                // the next index and completed work is therefore the current
+                // in-flight count, without an O(concurrency) scan per spawn.
+                let completed = map.items.len().saturating_sub(map.remaining);
+                let inflight = map.next_child.saturating_sub(completed) as u32;
                 if inflight >= map.concurrency || map.next_child >= map.items.len() {
                     return Ok(());
                 }
                 let index = map.next_child;
-                (index, map.items[index].clone(), map.clone(), inflight)
+                (index, map.items[index].clone())
             };
-            let _ = inflight;
             let child_id = format!("{map_id}[{index}]");
-            let mut child_scope =
-                child_scope(&parent, child_id.clone(), ScopeKind::MapChild, parent.depth);
-            child_scope.item = Some(item);
-            child_scope.index = Some(index);
-            child_scope.branch_path = join_path(&parent.branch_path, &format!("{index}"));
-            child_scope.map_instance_id = Some(map_id.to_string());
-            child_scope.owner_node = parent.owner_node.clone();
+            let child_scope = {
+                let parent = self.scope_or_err(map_id)?;
+                let mut scope =
+                    child_scope(parent, child_id.clone(), ScopeKind::MapChild, parent.depth);
+                scope.item = Some(item);
+                scope.index = Some(index);
+                scope.branch_path = join_path(&parent.branch_path, &format!("{index}"));
+                scope.map_instance_id = Some(map_id.to_string());
+                scope.owner_node = parent.owner_node.clone();
+                scope
+            };
             self.scopes.insert(child_id.clone(), child_scope);
             if let Some(map) = self.scopes.get_mut(map_id) {
                 map.next_child += 1;
@@ -427,10 +430,11 @@ impl Machine {
                     result: None,
                 });
             }
+            let owner_node = self.scope_or_err(map_id)?.owner_node.clone();
             self.emit(
                 EventKind::BranchSpawned,
                 Some(child_id.clone()),
-                parent.owner_node.clone(),
+                owner_node,
                 Some(self.scope_or_err(&child_id)?.lineage()),
                 None,
                 Json::object([("index".into(), Json::from_usize(index))]),

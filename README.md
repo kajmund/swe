@@ -46,6 +46,33 @@ decision. See [`contracts/README.md`](contracts/README.md) and
 The SWD v1 schema retains its original `$id` URI for wire compatibility; the
 URI is an identifier, not a network location or a runtime dependency.
 
+## Microtask batches
+
+`swe.microtasks` compiles a static dependency DAG into ordinary SWD 1.0 `map`
+stages. It reuses the existing bounded scheduler, cancellation, events, and
+`RunStore` replay path; it does not introduce another workflow format or wire
+contract.
+
+```python
+from swe.microtasks import Microtask, compile_microtasks
+
+batch = compile_microtasks(
+    [
+        Microtask("fetch"),
+        Microtask("validate", depends_on=("fetch",)),
+    ],
+    handler="job.execute",
+    concurrency=16,
+)
+result = await batch.run(handler)
+```
+
+Run the 10,000-operation synthetic gate with:
+
+```sh
+uv run swe-microtasks-benchmark --tasks 10000 --concurrency 64
+```
+
 ## Releases
 
 The workspace version is `0.1.0`. `swe-native` and `swe-budget` are prepared
