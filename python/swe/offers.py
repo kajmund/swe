@@ -249,6 +249,7 @@ class OfferStore(Protocol):
         *,
         expected: Collection[OfferStatus | None],
         record: OfferRecord,
+        expected_claimed_until_ms: Collection[int | None] | None = None,
     ) -> OfferRecord | None: ...
 
     async def wait(
@@ -307,13 +308,21 @@ class MemoryOfferStore:
         *,
         expected: Collection[OfferStatus | None],
         record: OfferRecord,
+        expected_claimed_until_ms: Collection[int | None] | None = None,
     ) -> OfferRecord | None:
         allowed = frozenset(expected)
+        allowed_leases = (
+            None if expected_claimed_until_ms is None else frozenset(expected_claimed_until_ms)
+        )
         async with self._condition:
             current = self.records.get(offer_id)
             status = None if current is None else current.status
             if status not in allowed:
                 return None
+            if allowed_leases is not None:
+                current_lease = None if current is None else current.claimed_until_ms
+                if current_lease not in allowed_leases:
+                    return None
             self.records[offer_id] = record
             self._condition.notify_all()
             return record
@@ -402,35 +411,39 @@ class MemoryOfferBudget:
         self.reserve_calls = 0
         self.settle_calls = 0
         self.release_calls = 0
+        self._lock = asyncio.Lock()
 
     async def reserve(self, *, account: str, amount_milli: int, key: str) -> None:
         del account
-        self.reserve_calls += 1
-        if key in self.settled or key in self.reserved:
-            return
-        self.released.discard(key)
-        self.reserved[key] = amount_milli
+        async with self._lock:
+            self.reserve_calls += 1
+            if key in self.settled or key in self.reserved:
+                return
+            self.released.discard(key)
+            self.reserved[key] = amount_milli
 
     async def settle(self, *, key: str, amount_milli: int) -> None:
-        self.settle_calls += 1
-        if key in self.settled:
-            return
-        reserved = self.reserved.pop(key, None)
-        if reserved is None:
-            raise ActionOfferError(f"budget key {key!r} was never reserved", kind="budget")
-        if amount_milli > reserved:
-            raise ActionOfferError(
-                f"budget key {key!r} settled for {amount_milli} over {reserved}",
-                kind="budget",
-            )
-        self.settled[key] = amount_milli
+        async with self._lock:
+            self.settle_calls += 1
+            if key in self.settled:
+                return
+            reserved = self.reserved.pop(key, None)
+            if reserved is None:
+                raise ActionOfferError(f"budget key {key!r} was never reserved", kind="budget")
+            if amount_milli > reserved:
+                raise ActionOfferError(
+                    f"budget key {key!r} settled for {amount_milli} over {reserved}",
+                    kind="budget",
+                )
+            self.settled[key] = amount_milli
 
     async def release(self, *, key: str) -> None:
-        self.release_calls += 1
-        if key in self.settled or key in self.released:
-            return
-        self.reserved.pop(key, None)
-        self.released.add(key)
+        async with self._lock:
+            self.release_calls += 1
+            if key in self.settled or key in self.released:
+                return
+            self.reserved.pop(key, None)
+            self.released.add(key)
 
 
 def propose_action(
@@ -459,6 +472,7 @@ def propose_action(
     action = _require_text(action_ref, "action_ref")
     handler_name = _require_handler(handler)
     bound, fingerprint, input_bound = _bound_input(input, input_fingerprint)
+    _task_bindings(bound)
     policy = _require_text(policy_version, "policy_version")
     context = _require_text(context_version, "context_version")
     scope = _require_text(auth_scope, "auth_scope")
@@ -563,21 +577,17 @@ class ActionOfferHost:
         self.clock: WorkflowClock | FrozenClock = clock or WorkflowClock()
         self.policy_version = policy_version
         self.context_version = context_version
-        self.tariff_milli = tariff_milli
+        self.tariff_milli = _require_non_negative_int(tariff_milli, "tariff_milli")
         self.budget_account = budget_account
-        self.timeout_seconds = timeout_seconds
-        self.concurrency = concurrency
+        self.timeout_seconds = _require_positive_int(timeout_seconds, "timeout_seconds")
+        self.concurrency = _require_positive_int(concurrency, "concurrency")
         if claim_lease_ms is None:
-            self.claim_lease_ms = timeout_seconds * 1000
-        elif isinstance(claim_lease_ms, bool) or claim_lease_ms < 1:
-            raise ActionOfferError("claim_lease_ms must be a positive integer", kind="invalid")
+            self.claim_lease_ms = self.timeout_seconds * 1000
         else:
-            self.claim_lease_ms = claim_lease_ms
-        if isinstance(definition_cache_max, bool) or definition_cache_max < 1:
-            raise ActionOfferError(
-                "definition_cache_max must be a positive integer", kind="invalid"
-            )
-        self._definition_cache_max = definition_cache_max
+            self.claim_lease_ms = _require_positive_int(claim_lease_ms, "claim_lease_ms")
+        self._definition_cache_max = _require_positive_int(
+            definition_cache_max, "definition_cache_max"
+        )
         self._definitions: OrderedDict[tuple[str, str], CompiledDefinition] = OrderedDict()
         self._claim_lock = asyncio.Lock()
         self._inflight: dict[str, asyncio.Future[OfferAcceptance]] = {}
@@ -596,7 +606,7 @@ class ActionOfferHost:
         resolved = ActionOffer.from_value(offer)
         now = self.clock.now_ms()
         self._assert_actor(resolved, auth_scope)
-        if not await self._completed_without_new_dispatch(resolved):
+        if not await self._can_finish_without_new_dispatch(resolved):
             self._assert_fresh(resolved, auth_scope=auth_scope, now_ms=now)
         delivery = offer_delivery_key(resolved.offer_id, resolved.action_ref)
         owner, flight = await self._claim(resolved.offer_id)
@@ -725,12 +735,13 @@ class ActionOfferHost:
         delivery: str,
         now: int,
     ) -> OfferAcceptance:
+        claimed_until_ms = now + self.claim_lease_ms
         claim = OfferRecord(
             offer=resolved,
             status=OfferStatus.APPROVING,
             delivery_key=delivery,
             decided_at_ms=now,
-            claimed_until_ms=now + self.claim_lease_ms,
+            claimed_until_ms=claimed_until_ms,
         )
         written = await self.store.transition(
             resolved.offer_id,
@@ -739,22 +750,25 @@ class ActionOfferHost:
         )
         if written is None:
             current = await self.store.load(resolved.offer_id)
-            return await self._follow_existing(resolved, delivery, now, current)
+            return await self._follow_existing(resolved, delivery, current)
         try:
-            return await self._approve_claimed(resolved, delivery, now)
+            return await self._approve_claimed(
+                resolved, delivery, claimed_until_ms=claimed_until_ms
+            )
         except BaseException:
-            await self._release_unstarted_claim(resolved, delivery)
+            await self._release_unstarted_claim(
+                resolved, delivery, claimed_until_ms=claimed_until_ms
+            )
             raise
 
     async def _follow_existing(
         self,
         resolved: ActionOffer,
         delivery: str,
-        now: int,
         current: OfferRecord | None,
     ) -> OfferAcceptance:
         if current is None:
-            return await self._approve_or_follow(resolved, delivery, now)
+            return await self._approve_or_follow(resolved, delivery, self.clock.now_ms())
         match current.status:
             case OfferStatus.APPROVED:
                 return self._reuse(resolved, current, delivery)
@@ -763,59 +777,114 @@ class ActionOfferHost:
             case OfferStatus.REVOKED:
                 raise ActionOfferError("offer was revoked", kind="revoked")
             case OfferStatus.PROPOSED:
-                return await self._approve_or_follow(resolved, delivery, now)
+                return await self._approve_or_follow(resolved, delivery, self.clock.now_ms())
             case OfferStatus.APPROVING:
-                finished = await self._try_finish_existing(resolved, delivery, now)
+                finished = await self._try_finish_existing(resolved, delivery)
                 if finished is not None:
                     return finished
-                remaining_ms = 0
-                if current.claimed_until_ms is not None:
-                    remaining_ms = max(0, current.claimed_until_ms - now)
-                timeout_s = min(self.timeout_seconds, remaining_ms / 1000) if remaining_ms else 0.0
-                await self.store.wait(
-                    resolved.offer_id,
-                    not_in={OfferStatus.APPROVING},
-                    timeout_s=timeout_s,
-                )
-                latest = await self.store.load(resolved.offer_id)
-                finished = await self._try_finish_existing(resolved, delivery, now)
-                if finished is not None:
-                    return finished
-                if latest is not None and latest.status is OfferStatus.APPROVING:
-                    lease_expired = (
-                        latest.claimed_until_ms is not None
-                        and self.clock.now_ms() >= latest.claimed_until_ms
+                timeout_s = self._lease_remaining_s(current)
+                if timeout_s > 0:
+                    await self.store.wait(
+                        resolved.offer_id,
+                        not_in={OfferStatus.APPROVING},
+                        timeout_s=timeout_s,
                     )
-                    if lease_expired:
-                        return await self._approve_claimed(resolved, delivery, now)
-                    raise ActionOfferError("offer is already being approved", kind="conflict")
-                return await self._follow_existing(resolved, delivery, now, latest)
+                    finished = await self._try_finish_existing(resolved, delivery)
+                    if finished is not None:
+                        return finished
+                latest = await self.store.load(resolved.offer_id)
+                if latest is not None and latest.status is OfferStatus.APPROVING:
+                    taken = await self._takeover_claim(resolved, delivery, latest)
+                    if taken is not None:
+                        try:
+                            return await self._approve_claimed(
+                                resolved,
+                                delivery,
+                                claimed_until_ms=taken.claimed_until_ms or self.clock.now_ms(),
+                            )
+                        except BaseException:
+                            await self._release_unstarted_claim(
+                                resolved,
+                                delivery,
+                                claimed_until_ms=taken.claimed_until_ms,
+                            )
+                            raise
+                    refreshed = await self.store.load(resolved.offer_id)
+                    if (
+                        refreshed is not None
+                        and refreshed.status is OfferStatus.APPROVING
+                        and (
+                            not self._lease_expired(refreshed)
+                            or refreshed.claimed_until_ms == latest.claimed_until_ms
+                        )
+                    ):
+                        raise ActionOfferError(
+                            "offer is already being approved", kind="conflict"
+                        )
+                    return await self._follow_existing(resolved, delivery, refreshed)
+                return await self._follow_existing(resolved, delivery, latest)
             case _ as unreachable:
                 assert_never(unreachable)
+
+    async def _takeover_claim(
+        self,
+        resolved: ActionOffer,
+        delivery: str,
+        current: OfferRecord,
+    ) -> OfferRecord | None:
+        if not self._lease_expired(current):
+            return None
+        now = self.clock.now_ms()
+        claimed_until_ms = now + self.claim_lease_ms
+        return await self.store.transition(
+            resolved.offer_id,
+            expected={OfferStatus.APPROVING},
+            expected_claimed_until_ms={current.claimed_until_ms},
+            record=OfferRecord(
+                offer=resolved,
+                status=OfferStatus.APPROVING,
+                delivery_key=delivery,
+                decided_at_ms=now,
+                claimed_until_ms=claimed_until_ms,
+            ),
+        )
+
+    def _lease_expired(self, record: OfferRecord) -> bool:
+        return self._lease_remaining_s(record) <= 0
+
+    def _lease_remaining_s(self, record: OfferRecord) -> float:
+        if record.claimed_until_ms is None:
+            return 0.0
+        remaining_ms = record.claimed_until_ms - self.clock.now_ms()
+        if remaining_ms <= 0:
+            return 0.0
+        return min(self.timeout_seconds, remaining_ms / 1000)
 
     async def _try_finish_existing(
         self,
         resolved: ActionOffer,
         delivery: str,
-        now: int,
     ) -> OfferAcceptance | None:
         existing = await self.store.load(resolved.offer_id)
         if existing is not None and existing.status is OfferStatus.APPROVED:
             return self._reuse(resolved, existing, delivery)
         persisted = await self._load_persisted_run(resolved)
         if persisted is not None and persisted.status == "completed":
-            return await self._finish_completed(resolved, delivery, persisted, now, reused=True)
+            return await self._finish_completed(resolved, delivery, persisted, reused=True)
         if persisted is not None and persisted.status != "running":
             raise ActionOfferError(
                 f"offer {resolved.offer_id} already ended with {persisted.status!r}",
                 kind=persisted.status,
             )
-        effect = await self.store.load_effect(delivery)
-        if effect is None:
-            return None
-        return await self._approve_claimed(resolved, delivery, now)
+        return None
 
-    async def _release_unstarted_claim(self, resolved: ActionOffer, delivery: str) -> None:
+    async def _release_unstarted_claim(
+        self,
+        resolved: ActionOffer,
+        delivery: str,
+        *,
+        claimed_until_ms: int | None,
+    ) -> None:
         persisted = await self._load_persisted_run(resolved)
         effect = await self.store.load_effect(delivery)
         if persisted is not None or effect is not None:
@@ -823,6 +892,7 @@ class ActionOfferHost:
         await self.store.transition(
             resolved.offer_id,
             expected={OfferStatus.APPROVING},
+            expected_claimed_until_ms={claimed_until_ms},
             record=OfferRecord(offer=resolved, status=OfferStatus.PROPOSED),
         )
 
@@ -845,16 +915,15 @@ class ActionOfferHost:
         self,
         resolved: ActionOffer,
         delivery: str,
-        now: int,
+        *,
+        claimed_until_ms: int,
     ) -> OfferAcceptance:
         existing = await self.store.load(resolved.offer_id)
         if existing is not None and existing.status is OfferStatus.APPROVED:
             return self._reuse(resolved, existing, delivery)
         persisted = await self._load_persisted_run(resolved)
         if persisted is not None and persisted.status == "completed":
-            return await self._finish_completed(
-                resolved, delivery, persisted, now, reused=True
-            )
+            return await self._finish_completed(resolved, delivery, persisted, reused=True)
         if persisted is not None and persisted.status != "running":
             raise ActionOfferError(
                 f"offer {resolved.offer_id} already ended with {persisted.status!r}",
@@ -871,6 +940,9 @@ class ActionOfferHost:
                 "unbound offer cannot be approved without matching input",
                 kind="unbound",
             )
+        if not await self._still_owns_claim(resolved.offer_id, claimed_until_ms):
+            current = await self.store.load(resolved.offer_id)
+            return await self._follow_existing(resolved, delivery, current)
         if self.budget is not None:
             await self.budget.reserve(
                 account=self.budget_account,
@@ -878,13 +950,18 @@ class ActionOfferHost:
                 key=delivery,
             )
         try:
+            if not await self._still_owns_claim(resolved.offer_id, claimed_until_ms):
+                current = await self.store.load(resolved.offer_id)
+                if self.budget is not None:
+                    await self.budget.release(key=delivery)
+                return await self._follow_existing(resolved, delivery, current)
             run = await self._dispatch(resolved, persisted, delivery)
         except BaseException:
             if self.budget is not None:
                 await self.budget.release(key=delivery)
             raise
         if run.status == "completed":
-            return await self._finish_completed(resolved, delivery, run, now, reused=False)
+            return await self._finish_completed(resolved, delivery, run, reused=False)
         if self.budget is not None:
             await self.budget.release(key=delivery)
         raise ActionOfferError(
@@ -892,12 +969,19 @@ class ActionOfferHost:
             kind=run.status,
         )
 
+    async def _still_owns_claim(self, offer_id: str, claimed_until_ms: int) -> bool:
+        current = await self.store.load(offer_id)
+        return (
+            current is not None
+            and current.status is OfferStatus.APPROVING
+            and current.claimed_until_ms == claimed_until_ms
+        )
+
     async def _finish_completed(
         self,
         resolved: ActionOffer,
         delivery: str,
         run: RunResult,
-        now: int,
         *,
         reused: bool,
     ) -> OfferAcceptance:
@@ -909,7 +993,7 @@ class ActionOfferHost:
             delivery_key=delivery,
             reused=reused,
         )
-        await self._remember(resolved, OfferStatus.APPROVED, acceptance, now)
+        await self._remember(resolved, OfferStatus.APPROVED, acceptance, self.clock.now_ms())
         return acceptance
 
     async def _reconcile_budget(self, delivery: str) -> None:
@@ -943,12 +1027,15 @@ class ActionOfferHost:
         if auth_scope != offer.auth_scope:
             raise ActionOfferError("caller is not authorized for this offer", kind="unauthorized")
 
-    async def _completed_without_new_dispatch(self, offer: ActionOffer) -> bool:
+    async def _can_finish_without_new_dispatch(self, offer: ActionOffer) -> bool:
         existing = await self.store.load(offer.offer_id)
         if existing is not None and existing.status is OfferStatus.APPROVED:
             return True
         persisted = await self._load_persisted_run(offer)
-        return persisted is not None and persisted.status == "completed"
+        if persisted is not None:
+            return True
+        delivery = offer_delivery_key(offer.offer_id, offer.action_ref)
+        return await self.store.load_effect(delivery) is not None
 
     def _reuse(
         self,
@@ -1043,6 +1130,7 @@ class ActionOfferHost:
         key = (offer.handler, sha256_hex(bindings))
         compiled = self._definitions.get(key)
         if compiled is not None:
+            self._definitions.move_to_end(key)
             return compiled
         compiled = compile_definition(
             {
@@ -1137,12 +1225,18 @@ def _task_bindings(input_data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[
     names: dict[str, str] = {}
     for key, value in thawed.items():
         if BINDING_KEY_RE.fullmatch(key):
-            bindings[key] = f"$.input.{key}"
-            names[key] = key
-            continue
-        alias = _const_binding_name(key)
-        bindings[alias] = {"const": value}
-        names[alias] = key
+            bind_name = key
+            bind_value: Any = f"$.input.{key}"
+        else:
+            bind_name = _const_binding_name(key)
+            bind_value = {"const": value}
+        if bind_name in bindings:
+            raise ActionOfferError(
+                f"offer input key {key!r} collides with another binding name",
+                kind="invalid",
+            )
+        bindings[bind_name] = bind_value
+        names[bind_name] = key
     return bindings, names
 
 
@@ -1204,6 +1298,22 @@ def _require_int(value: object, path: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ActionOfferError(f"{path} must be an integer", kind="invalid", path=path)
     return value
+
+
+def _require_positive_int(value: object, path: str) -> int:
+    number = _require_int(value, path)
+    if number < 1:
+        raise ActionOfferError(f"{path} must be a positive integer", kind="invalid", path=path)
+    return number
+
+
+def _require_non_negative_int(value: object, path: str) -> int:
+    number = _require_int(value, path)
+    if number < 0:
+        raise ActionOfferError(
+            f"{path} must be a non-negative integer", kind="invalid", path=path
+        )
+    return number
 
 
 def _optional_int(value: object, path: str) -> int | None:

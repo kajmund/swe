@@ -37,7 +37,10 @@ budget, and dispatch; neither duplicates them.
 | Concurrent approve/reject/revoke | Persistent `OfferStore.transition` CAS. Reject/revoke cannot start a claimed offer; a rejected/revoked offer cannot become `APPROVING`. |
 | Double accept / double external effect | Persistent `APPROVING` claim + `run_effect(delivery_key)` + `RunStore` replay + budget key. In-process single-flight is only a same-host fast path. |
 | Lost settle after completed run | Recovery path re-reserves and settles before remembering approval. Auth is still required after expiry; freshness is skipped only when a completed run already exists, so no new dispatch starts. |
-| Unbounded compiled-definition cache | Const-bearing definitions are not retained. Identifier-only documents use a bounded LRU. |
+| Unbounded compiled-definition cache | Const-bearing definitions are not retained. Identifier-only documents use a bounded LRU; hits refresh recency. |
+| Split-brain claim takeover | Takeover CASes `APPROVING` plus the observed `claimed_until_ms`. Lost owners cannot revert another host's claim. |
+| Alias collision on const keys | Non-identifier keys get `c_<sha256>` aliases; a colliding identifier is rejected at propose time. |
+| Expired offer after a completed effect | Freshness is skipped when a stored acceptance, run, or effect can finish without a new side effect. |
 | Cancelled waiter corrupts L1 | Shared flight is shielded; last waiter cancels compute; failures are not stored |
 | Wrong const reused via definition cache | Cache identity is handler plus canonical thawed bindings, including const values |
 | Nested frozen const cannot compile | `_task_bindings` deep-thaws input before embedding SWD constants |
@@ -58,10 +61,11 @@ Exact cache isolation is enforced in `scoped_cache_params` and
 Compiled offer definitions are cached by handler plus the SHA-256 of the
 thawed task bindings. SWD-valid identifier keys stay path bindings (`$.input.name`)
 so names like `input` and `run` are not overwritten by the machine context.
-They can still share a compiled document. Other keys such as `document-id` are
-embedded as thawed `const` values under a deterministic SWD-safe alias and
-restored to the original name before the handler runs, so two offers with the
-same keys and different values compile separately.
+They can still share a compiled document; cache hits refresh LRU recency.
+Other keys such as `document-id` are embedded as thawed `const` values under
+a deterministic SWD-safe alias and restored to the original name before the
+handler runs, so two offers with the same keys and different values compile
+separately. An identifier that equals another key's alias is rejected.
 
 Regression tests cover concurrent approve/reject/revoke, two-host approve,
 reject-then-approve, crash/retry across hosts, cross-tenant/policy/model

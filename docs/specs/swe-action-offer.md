@@ -57,17 +57,23 @@ then:
    Task bindings thaw nested JSON first. Identifier keys stay
    `$.input.<key>` path bindings so `input` and `run` keep their values;
    other keys become `const` values under a SWD-safe alias and are
-   restored before the handler. Freshness is rechecked before a new
-   dispatch after a claim wait. The in-host definition cache keys on
-   handler plus the canonical bindings, including those const values;
+   restored before the handler. Alias collisions are rejected. Freshness
+   is rechecked before a new dispatch after a claim wait, and skipped only
+   when a stored acceptance, run, or effect can be finished without a new
+   side effect. The in-host definition cache is a bounded LRU keyed on
+   handler plus the canonical identifier bindings; const-bearing
+   definitions are not retained. Claim takeover is a compare-and-set on
+   the expired `claimed_until_ms` so only one host may dispatch.
 6. settles on `completed` (idempotent), otherwise releases.
 
 Reject and revoke use the same compare-and-set. A rejected or revoked offer
 cannot enter `APPROVING`, so its handler never starts. An in-flight approve
 holds `APPROVING` and makes reject/revoke fail closed with `conflict`.
-Unstarted claims revert to `proposed` so another host can retry; a completed
-effect or run is not reverted. Claim leases (`claim_lease_ms`) let a second
-host finish a crashed approve without starting a second effect.
+Unstarted claims revert to `proposed` only when the caller still owns the
+lease and no effect or run exists. Claim leases (`claim_lease_ms`) let a
+second host finish a crashed approve by CAS-replacing an expired or missing
+lease; a live lease is not stolen, and a stored effect is not dispatched
+while another host still holds the claim.
 
 Double approve is idempotent: a completed run or stored effect is replayed
 and the handler is not called again. A cancelled or failed run is not treated

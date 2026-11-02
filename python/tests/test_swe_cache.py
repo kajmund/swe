@@ -132,6 +132,43 @@ async def test_exact_hit_and_miss_and_key_separation() -> None:
     assert metrics.computes == 3
 
 
+async def test_hits_refresh_lru_eviction_order() -> None:
+    clock = FrozenClock(now=0)
+    cache = InMemoryDecisionCache(max_entries=2, clock=clock)
+
+    async def compute(label: str) -> Mapping[str, Any]:
+        return {"choice": "yes", "label": label}
+
+    await cache.resolve("a", lambda: compute("a"), provider="p", prompt_key="k")
+    clock.advance(1)
+    await cache.resolve("b", lambda: compute("b"), provider="p", prompt_key="k")
+    clock.advance(1)
+    hit, reused = await cache.resolve("a", lambda: compute("a2"), provider="p", prompt_key="k")
+    assert reused is True
+    assert hit["label"] == "a"
+    clock.advance(1)
+    await cache.resolve("c", lambda: compute("c"), provider="p", prompt_key="k")
+    metrics = cache.metrics()
+    assert metrics.entries == 2
+    assert metrics.evictions == 1
+    kept, kept_hit = await cache.resolve(
+        "a",
+        lambda: compute("a3"),
+        provider="p",
+        prompt_key="k",
+    )
+    assert kept_hit is True
+    assert kept["label"] == "a"
+    missed, missed_hit = await cache.resolve(
+        "b",
+        lambda: compute("b2"),
+        provider="p",
+        prompt_key="k",
+    )
+    assert missed_hit is False
+    assert missed["label"] == "b2"
+
+
 async def test_ttl_and_deterministic_eviction() -> None:
     clock = FrozenClock(now=0)
     cache = InMemoryDecisionCache(max_entries=2, ttl_ms=10, clock=clock)
