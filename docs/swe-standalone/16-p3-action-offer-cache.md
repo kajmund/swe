@@ -40,7 +40,7 @@ budget, and dispatch; neither duplicates them.
 | Unbounded compiled-definition cache | Const-bearing definitions are not retained. Identifier-only documents use a bounded LRU; hits refresh recency. |
 | Split-brain claim takeover | Takeover CASes `APPROVING` plus the observed `claimed_until_ms`. Lost owners cannot revert another host's claim. |
 | Alias collision on const keys | Non-identifier keys get `c_<sha256>` aliases; a colliding identifier is rejected at propose time. |
-| Expired offer after a completed effect | Freshness is skipped when a stored acceptance, run, or effect can finish without a new side effect. |
+| Expired offer after a completed effect | Freshness is skipped when a stored acceptance, completed run, persisted invocation, or effect can finish without a new side effect. A `running` run with no handler result still requires freshness. |
 | Cancelled waiter corrupts L1 | Shared flight is shielded; last waiter cancels compute; failures are not stored |
 | Wrong const reused via definition cache | Cache identity is handler plus canonical thawed bindings, including const values |
 | Nested frozen const cannot compile | `_task_bindings` deep-thaws input before embedding SWD constants |

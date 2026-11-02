@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pytest
@@ -19,10 +19,10 @@ from swe.offers import (
     OfferStatus,
     offer_delivery_key,
 )
-from swe.run_store import MemoryRunStore, WorkflowResources
+from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord, WorkflowResources
 from swe.runtime_clock import FrozenClock
 
-from tests.test_swe_offers import _offer
+from tests.test_swe_offers import _CrashOnceStore, _offer
 
 
 async def _ok(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
@@ -351,3 +351,81 @@ async def test_reject_and_revoke_lose_to_completed_takeover() -> None:
         await host.reject(offer, auth_scope="tenant-a")
     with pytest.raises(ActionOfferError, match="cannot be revoked"):
         await host.revoke(offer.offer_id)
+
+
+async def test_expired_running_run_without_handler_does_not_dispatch() -> None:
+    pytest.importorskip("swe_native")
+    executions = 0
+
+    async def work(_payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        return {"ok": True}
+
+    clock = FrozenClock(now=10)
+    host = _host(work, run_store=_CrashOnStartStore(), clock=clock)
+    offer = _offer(expires_at_ms=50)
+    with pytest.raises(RuntimeError, match="crash before handler"):
+        await host.approve(offer, auth_scope="tenant-a")
+    assert executions == 0
+    clock.advance(50)
+    with pytest.raises(ActionOfferError, match="expired") as info:
+        await host.approve(offer, auth_scope="tenant-a")
+    assert info.value.kind == "expired"
+    assert executions == 0
+
+
+async def test_expired_running_run_with_invocation_replays() -> None:
+    pytest.importorskip("swe_native")
+    executions = 0
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        return {"published": payload["doc"]}
+
+    clock = FrozenClock(now=10)
+    host = _host(
+        work,
+        run_store=_CrashOnceStore(crash_after=1),
+        clock=clock,
+        budget=MemoryOfferBudget(),
+    )
+    offer = _offer(expires_at_ms=50)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        await host.approve(offer, auth_scope="tenant-a")
+    assert executions == 1
+    clock.advance(50)
+    recovered = await host.approve(offer, auth_scope="tenant-a")
+    assert recovered.run is not None
+    assert recovered.run.status == "completed"
+    assert executions == 1
+    assert host.budget is not None
+    assert len(host.budget.settled) == 1
+
+
+class _CrashOnStartStore:
+    def __init__(self) -> None:
+        self.inner = MemoryRunStore()
+        self.crashed = False
+
+    async def record(
+        self,
+        run: RunRecord,
+        *,
+        events: Sequence[Mapping[str, Any]] = (),
+        invocation: InvocationRecord | None = None,
+    ) -> None:
+        await self.inner.record(run, events=events, invocation=invocation)
+        if invocation is None and run.status == "running" and not self.crashed:
+            self.crashed = True
+            raise RuntimeError("crash before handler")
+
+    async def load_run(self, run_id: str) -> RunRecord | None:
+        return await self.inner.load_run(run_id)
+
+    async def replay_results(self, run_id: str) -> Mapping[str, InvocationRecord]:
+        return await self.inner.replay_results(run_id)
+
+    async def events(self, run_id: str) -> list[dict[str, Any]]:
+        return await self.inner.events(run_id)

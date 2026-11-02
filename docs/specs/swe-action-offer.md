@@ -59,8 +59,10 @@ then:
    other keys become `const` values under a SWD-safe alias and are
    restored before the handler. Alias collisions are rejected. Freshness
    is rechecked before a new dispatch after a claim wait, and skipped only
-   when a stored acceptance, run, or effect can be finished without a new
-   side effect. The in-host definition cache is a bounded LRU keyed on
+   when a stored acceptance, completed run, persisted invocation, or effect
+   can be finished without a new side effect. A `running` run with no
+   handler result still requires freshness. The in-host definition cache is
+   a bounded LRU keyed on
    handler plus the canonical identifier bindings; const-bearing
    definitions are not retained. Claim takeover is a compare-and-set on
    the expired `claimed_until_ms` so only one host may dispatch.

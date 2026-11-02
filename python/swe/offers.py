@@ -606,7 +606,7 @@ class ActionOfferHost:
         resolved = ActionOffer.from_value(offer)
         now = self.clock.now_ms()
         self._assert_actor(resolved, auth_scope)
-        if not await self._can_finish_without_new_dispatch(resolved):
+        if not await self._has_replayable_work(resolved):
             self._assert_fresh(resolved, auth_scope=auth_scope, now_ms=now)
         delivery = offer_delivery_key(resolved.offer_id, resolved.action_ref)
         owner, flight = await self._claim(resolved.offer_id)
@@ -929,7 +929,7 @@ class ActionOfferHost:
                 f"offer {resolved.offer_id} already ended with {persisted.status!r}",
                 kind=persisted.status,
             )
-        if persisted is None and await self.store.load_effect(delivery) is None:
+        if not await self._has_replayable_work(resolved):
             self._assert_fresh(
                 resolved,
                 auth_scope=resolved.auth_scope,
@@ -1027,15 +1027,24 @@ class ActionOfferHost:
         if auth_scope != offer.auth_scope:
             raise ActionOfferError("caller is not authorized for this offer", kind="unauthorized")
 
-    async def _can_finish_without_new_dispatch(self, offer: ActionOffer) -> bool:
+    async def _has_replayable_work(self, offer: ActionOffer) -> bool:
         existing = await self.store.load(offer.offer_id)
         if existing is not None and existing.status is OfferStatus.APPROVED:
             return True
         persisted = await self._load_persisted_run(offer)
-        if persisted is not None:
+        if persisted is not None and persisted.status == "completed":
             return True
         delivery = offer_delivery_key(offer.offer_id, offer.action_ref)
-        return await self.store.load_effect(delivery) is not None
+        if await self.store.load_effect(delivery) is not None:
+            return True
+        return await self._has_persisted_invocation(offer)
+
+    async def _has_persisted_invocation(self, offer: ActionOffer) -> bool:
+        store = self.run_store
+        if store is None:
+            return False
+        replay = await store.replay_results(offer_run_id(offer.offer_id))
+        return bool(replay)
 
     def _reuse(
         self,
