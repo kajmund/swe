@@ -51,5 +51,11 @@ Any input or prompt change therefore changes the key. `DecisionCache` is an
 async host protocol; implementations may provide process or durable storage and
 single-flight behavior. `cache_policy: off` reads and writes no cache.
 
+`InMemoryDecisionCache` is the reference L1. Auth, policy, model, and provider
+version are not first-class key fields in v1; hosts place them in `params`.
+`scoped_cache_params` and exact dispatch require `auth_scope`,
+`policy_version`, and `model` and fail closed if any are missing. See
+[`swe-exact-cache.md`](swe-exact-cache.md).
+
 This is an identity cache, not a semantic cache. The engine does not claim
 provider quality, cross-process coordination, or retry/fallback policy.

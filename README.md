@@ -73,6 +73,37 @@ Run the 10,000-operation synthetic gate with:
 uv run swe-microtasks-benchmark --tasks 10000 --concurrency 64
 ```
 
+## ActionOffer and exact cache
+
+`swe.offers` is a host-layer proposal type: create/surface is pure,
+approve/reject/revoke are explicit, and a accepted offer runs through the
+existing SWE runner. `swe.cache.InMemoryDecisionCache` is the reference exact
+L1. Durable storage stays a host adapter. The frozen v1 cache key is unchanged;
+`auth_scope`, `policy_version`, and `model` belong in `cache_params` and are
+required for exact resolves.
+
+```python
+from swe.offers import ActionOfferHost, OfferProvenance, propose_action
+
+offer = propose_action(
+    action_ref="demo.publish",
+    handler="demo.publish",
+    input={"doc": "a"},
+    policy_version="pol-1",
+    context_version="ctx-1",
+    auth_scope="tenant-a",
+    summary="Publish document a",
+    provenance=OfferProvenance("host", "alice", 0),
+)
+result = await host.approve(offer, auth_scope="tenant-a")
+```
+
+Run the 10,000-operation synthetic gate with:
+
+```sh
+uv run swe-offer-cache-benchmark --operations 10000 --concurrency 64
+```
+
 ## Releases
 
 The workspace version is `0.1.0`. `swe-native` and `swe-budget` are prepared

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from swe.prompt_render import render_prompt
-from swe.cache import DecisionCache, decision_cache_key
+from swe.cache import DecisionCache, assert_cache_isolation, decision_cache_key
 from swe.runtime_errors import SweHandlerError
 from swe.runtime_validate import require_json_value, validate_output_schema
 
@@ -174,13 +174,15 @@ async def _call_provider(
         raise SweHandlerError(
             f"cache_policy exact requires a provider cache for {request['provider']!r}",
         )
+    params = dict(getattr(provider, "cache_params", {}))
+    assert_cache_isolation(params, path="provider.cache_params")
     key = decision_cache_key(
         provider=request["provider"],
         prompt_key=request["prompt_key"],
         prompt=request["prompt"],
         input_data=request["input"],
         choices=request["choices"],
-        params=dict(getattr(provider, "cache_params", {})),
+        params=params,
     )
     answer, hit = await cache.resolve(
         key,
