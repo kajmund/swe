@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use indexmap::IndexMap;
 
 use crate::definition::Binding;
@@ -5,7 +7,7 @@ use crate::error::{Result, RuntimeError};
 use crate::expression::evaluate_expression;
 use crate::json::Json;
 use crate::machine::state::{Machine, Scope, ScopeKind};
-use crate::path::{resolve_path, PathValue};
+use crate::path::{parse_json_path, resolve_path, PathValue};
 
 impl Machine {
     pub fn build_context(&self, scope_id: &str) -> Result<Json> {
@@ -35,6 +37,67 @@ impl Machine {
                 }
                 if let Some(index) = scope.index {
                     object.insert("index".into(), Json::from_usize(index));
+                }
+            }
+        }
+        Ok(Json::Object(object))
+    }
+
+    /// Build the binding context from only the root values a task can read.
+    ///
+    /// `build_context` remains the full context for expressions and map item
+    /// paths. Task bindings are statically known, so cloning the complete run
+    /// input for every map child is unnecessary and quadratic for large maps.
+    pub fn build_binding_context(
+        &self,
+        scope_id: &str,
+        bindings: &IndexMap<String, Binding>,
+    ) -> Result<Json> {
+        let Some(roots) = binding_roots(bindings)? else {
+            return self.build_context(scope_id);
+        };
+        let mut object = IndexMap::new();
+        if let Some(map) = self.input.as_object() {
+            for (key, value) in map {
+                if roots.contains(key) {
+                    object.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        if roots.contains("input") {
+            object.insert("input".into(), self.input.clone());
+        }
+        if roots.contains("run") {
+            object.insert("run".into(), self.run_object(scope_id)?);
+        }
+        for id in self.scope_chain(scope_id)? {
+            let scope = self.scope_or_err(&id)?;
+            for (key, value) in &scope.locals {
+                if roots.contains(key) {
+                    object.insert(key.clone(), value.clone());
+                }
+            }
+            if scope.kind == ScopeKind::Fork && roots.contains("branches") {
+                object.insert("branches".into(), fork_branches(scope));
+            }
+            if scope.kind == ScopeKind::Map {
+                if roots.contains("children") {
+                    object.insert("children".into(), map_children(scope));
+                }
+                if roots.contains("branches") {
+                    object.insert("branches".into(), map_branches(scope));
+                }
+            }
+            if scope.kind == ScopeKind::MapChild {
+                if roots.contains("item") {
+                    if let Some(item) = &scope.item {
+                        object.insert("item".into(), item.clone());
+                    }
+                }
+                if roots.contains("index") {
+                    if let Some(index) = scope.index {
+                        object.insert("index".into(), Json::from_usize(index));
+                    }
                 }
             }
         }
@@ -82,6 +145,21 @@ impl Machine {
             .get(id)
             .ok_or_else(|| RuntimeError::internal(format!("unknown scope {id}")))
     }
+}
+
+fn binding_roots(bindings: &IndexMap<String, Binding>) -> Result<Option<HashSet<String>>> {
+    let mut roots = HashSet::new();
+    for binding in bindings.values() {
+        let Binding::Path(path) = binding else {
+            continue;
+        };
+        let parsed = parse_json_path(path)?;
+        let Some(root) = parsed.0.first() else {
+            return Ok(None);
+        };
+        roots.insert(root.clone());
+    }
+    Ok(Some(roots))
 }
 
 fn eval_binding(binding: &Binding, context: &Json) -> Result<Json> {
