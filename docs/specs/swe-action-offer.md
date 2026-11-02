@@ -29,7 +29,7 @@ context/pattern → offer → explicit approve/reject → SWE execution.
 
 - `schema_version` (`action_offer.v0`)
 - `action_ref` and `handler`
-- bound `input` and `input_fingerprint`
+- bound `input`, `input_bound`, and `input_fingerprint`
 - `policy_version`, `context_version`, `auth_scope`
 
 Summary, risk, expiry, revalidation, and provenance are metadata. Key order and
@@ -38,14 +38,20 @@ action does.
 
 ## Host operations
 
-`propose_action` is a pure function. `ActionOfferHost.approve` then:
+`propose_action` is a pure function. Empty `input={}` is bound and executable;
+fingerprint-only offers stay unbound until input is supplied. Nested input is
+deep-thawed by `to_dict()` so the payload is JSON. `ActionOfferHost.approve`
+then:
 
 1. rejects stale, expired, revoked, rejected, or unauthorized offers before any
    reservation or handler call;
-2. reuses a stored acceptance or a terminal `RunStore` record;
-3. reserves an optional budget key;
-4. runs or resumes the existing SWE machine;
-5. settles on `completed`, otherwise releases.
+2. claims the offer (in-process single-flight) so concurrent approves dispatch
+   once and other callers reuse the same result;
+3. reuses a stored acceptance or a completed `RunStore` record after
+   reconciling reserve+settle;
+4. reserves an optional budget key;
+5. runs or resumes the existing SWE machine;
+6. settles on `completed` (idempotent), otherwise releases.
 
 Reject records a decision and never dispatches. Revoke is valid only before a
 successful approve. Double approve is idempotent: a completed run is replayed

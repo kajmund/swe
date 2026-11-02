@@ -10,6 +10,7 @@ import pytest
 
 from swe.cache import (
     InMemoryDecisionCache,
+    _percentile_ms,
     decision_cache_key,
     scoped_cache_params,
 )
@@ -243,6 +244,30 @@ async def test_cancelled_waiter_does_not_corrupt_or_pin_a_flight() -> None:
     await asyncio.sleep(0)
     assert cache.metrics().entries == 1
     assert cache.active_flight_count == 0
+
+
+async def test_latency_samples_stay_bounded_and_percentiles_match_window() -> None:
+    cache = InMemoryDecisionCache(max_entries=8, max_latency_samples=32)
+
+    async def compute() -> Mapping[str, Any]:
+        await asyncio.sleep(0)
+        return {"choice": "yes"}
+
+    for index in range(200):
+        await cache.resolve(
+            f"key-{index % 5}",
+            compute,
+            provider="p",
+            prompt_key="k",
+        )
+    samples = cache.latency_samples_ns
+    assert len(samples) == 32
+    assert len(samples) <= cache.max_latency_samples
+    metrics = cache.metrics()
+    assert metrics.latency_sample_count == 32
+    assert metrics.p50_latency_ms == _percentile_ms(samples, 0.50)
+    assert metrics.p95_latency_ms == _percentile_ms(samples, 0.95)
+    assert metrics.p95_latency_ms >= metrics.p50_latency_ms >= 0.0
 
 
 async def test_cache_policy_off_does_not_read_or_write() -> None:

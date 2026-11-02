@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pytest
 
 from swe.offers import (
+    ActionOffer,
     ActionOfferError,
     ActionOfferHost,
     MemoryOfferBudget,
@@ -58,6 +60,7 @@ def test_offer_id_is_stable_across_key_order_and_process() -> None:
         handler=first.handler,
         input={"rev": 1, "doc": "a"},
         input_fingerprint=first.input_fingerprint,
+        input_bound=True,
         policy_version=first.policy_version,
         context_version=first.context_version,
         auth_scope=first.auth_scope,
@@ -266,6 +269,158 @@ async def test_resume_replays_persisted_offer_handler() -> None:
     assert executions == ["a"]
 
 
+async def test_concurrent_approves_dispatch_once_and_reuse_the_result() -> None:
+    pytest.importorskip("swe_native")
+    started = asyncio.Event()
+    release = asyncio.Event()
+    executions = 0
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        started.set()
+        await release.wait()
+        return {"published": payload["doc"]}
+
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        store=MemoryOfferStore(),
+        run_store=MemoryRunStore(),
+        budget=MemoryOfferBudget(),
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer()
+    tasks = [
+        asyncio.create_task(host.approve(offer, auth_scope="tenant-a"))
+        for _ in range(32)
+    ]
+    await started.wait()
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.gather(*tasks)
+    owners = [item for item in results if not item.reused]
+    waiters = [item for item in results if item.reused]
+    assert executions == 1
+    assert len(owners) == 1
+    assert len(waiters) == 31
+    run_ids = {item.run.run_id for item in results if item.run is not None}
+    outputs = {json.dumps(item.run.output, sort_keys=True) for item in results if item.run is not None}
+    assert run_ids == {owners[0].run.run_id if owners[0].run is not None else ""}
+    assert outputs == {json.dumps(owners[0].run.output, sort_keys=True)}
+    assert len(host.budget.settled) == 1
+
+
+async def test_recovery_settles_budget_after_settle_crash() -> None:
+    pytest.importorskip("swe_native")
+    executions: list[str] = []
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        executions.append(str(payload["doc"]))
+        return {"published": payload["doc"]}
+
+    budget = _FailFirstSettle()
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        store=MemoryOfferStore(),
+        run_store=MemoryRunStore(),
+        budget=budget,
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer()
+    with pytest.raises(RuntimeError, match="settle crashed"):
+        await host.approve(offer, auth_scope="tenant-a")
+    assert executions == ["a"]
+    assert budget.settled == {}
+    recovered = await host.approve(offer, auth_scope="tenant-a")
+    assert recovered.reused is True
+    assert recovered.run is not None
+    assert recovered.run.status == "completed"
+    assert executions == ["a"]
+    key = offer_delivery_key(offer.offer_id, "demo.publish")
+    assert budget.settled[key] == 1
+
+
+async def test_empty_bound_input_dispatches() -> None:
+    pytest.importorskip("swe_native")
+    seen: list[Mapping[str, Any]] = []
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        seen.append(dict(payload))
+        return {"ok": True}
+
+    offer = propose_action(
+        action_ref="demo.publish",
+        handler="demo.publish",
+        input={},
+        policy_version="pol-1",
+        context_version="ctx-1",
+        auth_scope="tenant-a",
+        summary="empty bound input",
+        provenance=OfferProvenance("host", "tester", 1),
+    )
+    assert offer.input_bound is True
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    result = await host.approve(offer, auth_scope="tenant-a")
+    assert result.run is not None
+    assert result.run.status == "completed"
+    assert seen == [{}]
+
+
+def test_empty_bound_input_is_not_fingerprint_only() -> None:
+    bound = propose_action(
+        action_ref="demo.publish",
+        handler="demo.publish",
+        input={},
+        policy_version="pol-1",
+        context_version="ctx-1",
+        auth_scope="tenant-a",
+        summary="bound empty",
+        provenance=OfferProvenance("host", "tester", 1),
+    )
+    unbound = propose_action(
+        action_ref="demo.publish",
+        handler="demo.publish",
+        input_fingerprint=bound.input_fingerprint,
+        policy_version="pol-1",
+        context_version="ctx-1",
+        auth_scope="tenant-a",
+        summary="fingerprint only",
+        provenance=OfferProvenance("host", "tester", 1),
+    )
+    assert bound.input_bound is True
+    assert unbound.input_bound is False
+    assert bound.offer_id != unbound.offer_id
+
+
+def test_nested_offer_and_record_are_json_serializable() -> None:
+    offer = _offer(
+        input={
+            "document": {"id": 1, "tags": ["a", {"k": "v"}]},
+            "items": [{"n": 1}, {"n": 2}],
+        }
+    )
+    payload = json.loads(json.dumps(offer.to_dict()))
+    restored = ActionOffer.from_value(payload)
+    assert restored.offer_id == offer.offer_id
+    assert restored.input_bound is True
+    assert payload["input"]["document"]["tags"][1]["k"] == "v"
+    assert payload["input"]["items"][1]["n"] == 2
+    record = OfferRecord(
+        offer=offer,
+        status=OfferStatus.APPROVED,
+        result={"out": {"nested": [{"ok": True}]}},
+    )
+    record_payload = json.loads(json.dumps(record.to_dict()))
+    assert record_payload["result"]["out"]["nested"][0]["ok"] is True
+    assert record_payload["offer"]["input"]["document"]["id"] == 1
+
+
 async def test_unbound_fingerprint_offer_cannot_execute() -> None:
     offer = propose_action(
         action_ref="demo.publish",
@@ -284,10 +439,23 @@ async def test_unbound_fingerprint_offer_cannot_execute() -> None:
     )
     with pytest.raises(ActionOfferError, match="unbound"):
         await host.approve(offer, auth_scope="tenant-a")
+    assert offer.input_bound is False
 
 
 async def _ok(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
     return {"ok": True}
+
+
+class _FailFirstSettle(MemoryOfferBudget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.failed = False
+
+    async def settle(self, *, key: str, amount_milli: int) -> None:
+        if not self.failed:
+            self.failed = True
+            raise RuntimeError("settle crashed")
+        await super().settle(key=key, amount_milli=amount_milli)
 
 
 class _CrashOnceStore:

@@ -26,6 +26,7 @@ import os
 import platform
 import sys
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -41,6 +42,7 @@ from swe.runtime_validate import is_json_value
 
 DEFAULT_MAX_ENTRIES = 256
 DEFAULT_MAX_BYTES = 8_388_608
+DEFAULT_MAX_LATENCY_SAMPLES = 4096
 DEFAULT_BENCHMARK_OPERATIONS = 10_000
 DEFAULT_BENCHMARK_CONCURRENCY = 64
 
@@ -125,6 +127,7 @@ class CacheMetrics:
     bytes_used: int
     peak_in_flight: int
     peak_entries: int
+    latency_sample_count: int
     p50_latency_ms: float
     p95_latency_ms: float
 
@@ -141,6 +144,7 @@ class CacheMetrics:
             "bytes_used": self.bytes_used,
             "peak_in_flight": self.peak_in_flight,
             "peak_entries": self.peak_entries,
+            "latency_sample_count": self.latency_sample_count,
             "p50_latency_ms": self.p50_latency_ms,
             "p95_latency_ms": self.p95_latency_ms,
         }
@@ -170,6 +174,7 @@ class InMemoryDecisionCache:
         max_entries: int = DEFAULT_MAX_ENTRIES,
         max_bytes: int = DEFAULT_MAX_BYTES,
         ttl_ms: int | None = None,
+        max_latency_samples: int = DEFAULT_MAX_LATENCY_SAMPLES,
         clock: WorkflowClock | FrozenClock | None = None,
         namespace: str = "",
     ) -> None:
@@ -179,9 +184,12 @@ class InMemoryDecisionCache:
             raise SweHandlerError("max_bytes must be a positive integer")
         if ttl_ms is not None and (isinstance(ttl_ms, bool) or ttl_ms < 1):
             raise SweHandlerError("ttl_ms must be a positive integer when set")
+        if isinstance(max_latency_samples, bool) or max_latency_samples < 1:
+            raise SweHandlerError("max_latency_samples must be a positive integer")
         self.max_entries = max_entries
         self.max_bytes = max_bytes
         self.ttl_ms = ttl_ms
+        self.max_latency_samples = max_latency_samples
         self.namespace = namespace
         self._clock: WorkflowClock | FrozenClock = clock or WorkflowClock()
         self._entries: dict[str, _CacheEntry] = {}
@@ -198,13 +206,18 @@ class InMemoryDecisionCache:
         self._in_flight = 0
         self._peak_in_flight = 0
         self._peak_entries = 0
-        self._latencies_ns: list[int] = []
+        self._latencies_ns: deque[int] = deque(maxlen=max_latency_samples)
 
     @property
     def active_flight_count(self) -> int:
         return len(self._flights)
 
+    @property
+    def latency_samples_ns(self) -> tuple[int, ...]:
+        return tuple(self._latencies_ns)
+
     def metrics(self) -> CacheMetrics:
+        samples = self.latency_samples_ns
         return CacheMetrics(
             hits=self._hits,
             misses=self._misses,
@@ -217,8 +230,9 @@ class InMemoryDecisionCache:
             bytes_used=self._bytes_used,
             peak_in_flight=self._peak_in_flight,
             peak_entries=self._peak_entries,
-            p50_latency_ms=_percentile_ms(self._latencies_ns, 0.50),
-            p95_latency_ms=_percentile_ms(self._latencies_ns, 0.95),
+            latency_sample_count=len(samples),
+            p50_latency_ms=_percentile_ms(samples, 0.50),
+            p95_latency_ms=_percentile_ms(samples, 0.95),
         )
 
     async def resolve(
@@ -273,8 +287,6 @@ class InMemoryDecisionCache:
         try:
             answer = await asyncio.shield(flight.task)
             return answer, coalesced
-        except asyncio.CancelledError:
-            raise
         finally:
             async with self._lock:
                 self._in_flight = max(0, self._in_flight - 1)
@@ -298,8 +310,6 @@ class InMemoryDecisionCache:
                 self._purge_expired(now)
                 self._store(key, answer, now)
             return answer
-        except asyncio.CancelledError:
-            raise
         finally:
             async with self._lock:
                 flight = self._flights.get(key)
@@ -570,6 +580,7 @@ def _canonical_report(report: Mapping[str, Any]) -> str:
 __all__ = [
     "DEFAULT_MAX_BYTES",
     "DEFAULT_MAX_ENTRIES",
+    "DEFAULT_MAX_LATENCY_SAMPLES",
     "CacheBenchmark",
     "CacheMetrics",
     "DecisionCache",

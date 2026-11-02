@@ -32,12 +32,13 @@ from swe.cache import benchmark_exact_cache
 from swe.canonicalize import sha256_hex
 from swe.definition import CompiledDefinition, compile_definition
 from swe.freeze import freeze_json
+from swe.run_store import MemoryRunStore, RunStore, WorkflowResources
 from swe.runtime import RunResult, WorkflowRunner
 from swe.runtime_clock import FrozenClock, WorkflowClock
 from swe.runtime_dispatch import Handler
 from swe.runtime_errors import SweRuntimeError
+from swe.runtime_thaw import thaw_json
 from swe.runtime_validate import is_json_value
-from swe.run_store import MemoryRunStore, RunStore, WorkflowResources
 from swe.schema import HANDLER_NAME_PATTERN, SWD_VERSION
 
 ACTION_OFFER_SCHEMA_VERSION = "action_offer.v0"
@@ -104,6 +105,7 @@ class ActionOffer:
     action_ref: str
     handler: str
     input: Mapping[str, Any]
+    input_bound: bool
     input_fingerprint: str
     policy_version: str
     context_version: str
@@ -121,7 +123,8 @@ class ActionOffer:
             "offer_id": self.offer_id,
             "action_ref": self.action_ref,
             "handler": self.handler,
-            "input": dict(self.input),
+            "input": thaw_json(self.input) if self.input_bound else None,
+            "input_bound": self.input_bound,
             "input_fingerprint": self.input_fingerprint,
             "policy_version": self.policy_version,
             "context_version": self.context_version,
@@ -144,7 +147,7 @@ class ActionOffer:
         offer = propose_action(
             action_ref=_require_text(value.get("action_ref"), "action_ref"),
             handler=_require_text(value.get("handler"), "handler"),
-            input=value.get("input") if isinstance(value.get("input"), Mapping) else None,
+            input=_input_from_value(value),
             input_fingerprint=(
                 value.get("input_fingerprint")
                 if isinstance(value.get("input_fingerprint"), str)
@@ -191,7 +194,7 @@ class OfferRecord:
             "status": str(self.status),
             "run_id": self.run_id,
             "delivery_key": self.delivery_key,
-            "result": None if self.result is None else dict(self.result),
+            "result": None if self.result is None else thaw_json(self.result),
             "decided_at_ms": self.decided_at_ms,
         }
 
@@ -313,7 +316,7 @@ def propose_action(
         )
     action = _require_text(action_ref, "action_ref")
     handler_name = _require_handler(handler)
-    bound, fingerprint = _bound_input(input, input_fingerprint)
+    bound, fingerprint, input_bound = _bound_input(input, input_fingerprint)
     policy = _require_text(policy_version, "policy_version")
     context = _require_text(context_version, "context_version")
     scope = _require_text(auth_scope, "auth_scope")
@@ -328,6 +331,7 @@ def propose_action(
         handler=handler_name,
         input=bound,
         input_fingerprint=fingerprint,
+        input_bound=input_bound,
         policy_version=policy,
         context_version=context,
         auth_scope=scope,
@@ -338,6 +342,7 @@ def propose_action(
         action_ref=action,
         handler=handler_name,
         input=freeze_json(bound),
+        input_bound=input_bound,
         input_fingerprint=fingerprint,
         policy_version=policy,
         context_version=context,
@@ -357,6 +362,7 @@ def offer_identity(
     handler: str,
     input: Mapping[str, Any],
     input_fingerprint: str,
+    input_bound: bool = True,
     policy_version: str,
     context_version: str,
     auth_scope: str,
@@ -369,6 +375,7 @@ def offer_identity(
         "handler": handler,
         "input": dict(input),
         "input_fingerprint": input_fingerprint,
+        "input_bound": input_bound,
         "policy_version": policy_version,
         "context_version": context_version,
         "auth_scope": auth_scope,
@@ -417,6 +424,8 @@ class ActionOfferHost:
         self.timeout_seconds = timeout_seconds
         self.concurrency = concurrency
         self._definitions: dict[tuple[str, tuple[str, ...]], CompiledDefinition] = {}
+        self._claim_lock = asyncio.Lock()
+        self._inflight: dict[str, asyncio.Future[OfferAcceptance]] = {}
 
     async def approve(
         self,
@@ -431,57 +440,27 @@ class ActionOfferHost:
         delivery = offer_delivery_key(resolved.offer_id, resolved.action_ref)
         if existing is not None and existing.status is OfferStatus.APPROVED:
             return self._reuse(resolved, existing, delivery)
-        persisted = await self._load_persisted_run(resolved)
-        if persisted is not None and persisted.status == "completed":
-            acceptance = OfferAcceptance(
+        owner, flight = await self._claim(resolved.offer_id)
+        if not owner:
+            accepted = await asyncio.shield(flight)
+            return OfferAcceptance(
                 offer=resolved,
-                status=OfferStatus.APPROVED,
-                run=persisted,
-                delivery_key=delivery,
+                status=accepted.status,
+                run=accepted.run,
+                delivery_key=accepted.delivery_key,
                 reused=True,
             )
-            await self._remember(resolved, OfferStatus.APPROVED, acceptance, now)
-            return acceptance
-        if persisted is not None and persisted.status != "running":
-            raise ActionOfferError(
-                f"offer {resolved.offer_id} already ended with {persisted.status!r}",
-                kind=persisted.status,
-            )
-        if not resolved.input and resolved.input_fingerprint:
-            raise ActionOfferError(
-                "unbound offer cannot be approved without matching input",
-                kind="unbound",
-            )
-        if self.budget is not None:
-            await self.budget.reserve(
-                account=self.budget_account,
-                amount_milli=self.tariff_milli,
-                key=delivery,
-            )
         try:
-            run = await self._dispatch(resolved, persisted)
-        except BaseException:
-            if self.budget is not None:
-                await self.budget.release(key=delivery)
+            accepted = await self._approve_claimed(resolved, delivery, now)
+            if not flight.done():
+                flight.set_result(accepted)
+            return accepted
+        except BaseException as error:
+            if not flight.done():
+                flight.set_exception(error)
             raise
-        if run.status == "completed":
-            if self.budget is not None:
-                await self.budget.settle(key=delivery, amount_milli=self.tariff_milli)
-            acceptance = OfferAcceptance(
-                offer=resolved,
-                status=OfferStatus.APPROVED,
-                run=run,
-                delivery_key=delivery,
-                reused=False,
-            )
-            await self._remember(resolved, OfferStatus.APPROVED, acceptance, now)
-            return acceptance
-        if self.budget is not None:
-            await self.budget.release(key=delivery)
-        raise ActionOfferError(
-            f"approved offer {resolved.offer_id} ended with {run.status!r}",
-            kind=run.status,
-        )
+        finally:
+            await self._release_claim(resolved.offer_id, flight)
 
     async def reject(
         self,
@@ -532,6 +511,114 @@ class ActionOfferHost:
                 return record
             case _ as unreachable:
                 assert_never(unreachable)
+
+    async def _claim(
+        self, offer_id: str
+    ) -> tuple[bool, asyncio.Future[OfferAcceptance]]:
+        async with self._claim_lock:
+            existing = await self.store.load(offer_id)
+            if existing is not None and existing.status is OfferStatus.APPROVED:
+                flight = self._completed_claim(existing)
+                return False, flight
+            flight = self._inflight.get(offer_id)
+            if flight is None:
+                flight = asyncio.get_running_loop().create_future()
+                self._inflight[offer_id] = flight
+                return True, flight
+            return False, flight
+
+    def _completed_claim(self, existing: OfferRecord) -> asyncio.Future[OfferAcceptance]:
+        flight: asyncio.Future[OfferAcceptance] = asyncio.get_running_loop().create_future()
+        flight.set_result(
+            self._reuse(
+                existing.offer,
+                existing,
+                existing.delivery_key or offer_delivery_key(
+                    existing.offer.offer_id, existing.offer.action_ref
+                ),
+            )
+        )
+        return flight
+
+    async def _release_claim(
+        self,
+        offer_id: str,
+        flight: asyncio.Future[OfferAcceptance],
+    ) -> None:
+        async with self._claim_lock:
+            if self._inflight.get(offer_id) is flight:
+                self._inflight.pop(offer_id, None)
+
+    async def _approve_claimed(
+        self,
+        resolved: ActionOffer,
+        delivery: str,
+        now: int,
+    ) -> OfferAcceptance:
+        existing = await self.store.load(resolved.offer_id)
+        if existing is not None and existing.status is OfferStatus.APPROVED:
+            return self._reuse(resolved, existing, delivery)
+        persisted = await self._load_persisted_run(resolved)
+        if persisted is not None and persisted.status == "completed":
+            await self._reconcile_budget(delivery)
+            acceptance = OfferAcceptance(
+                offer=resolved,
+                status=OfferStatus.APPROVED,
+                run=persisted,
+                delivery_key=delivery,
+                reused=True,
+            )
+            await self._remember(resolved, OfferStatus.APPROVED, acceptance, now)
+            return acceptance
+        if persisted is not None and persisted.status != "running":
+            raise ActionOfferError(
+                f"offer {resolved.offer_id} already ended with {persisted.status!r}",
+                kind=persisted.status,
+            )
+        if not resolved.input_bound:
+            raise ActionOfferError(
+                "unbound offer cannot be approved without matching input",
+                kind="unbound",
+            )
+        if self.budget is not None:
+            await self.budget.reserve(
+                account=self.budget_account,
+                amount_milli=self.tariff_milli,
+                key=delivery,
+            )
+        try:
+            run = await self._dispatch(resolved, persisted)
+        except BaseException:
+            if self.budget is not None:
+                await self.budget.release(key=delivery)
+            raise
+        if run.status == "completed":
+            await self._reconcile_budget(delivery)
+            acceptance = OfferAcceptance(
+                offer=resolved,
+                status=OfferStatus.APPROVED,
+                run=run,
+                delivery_key=delivery,
+                reused=False,
+            )
+            await self._remember(resolved, OfferStatus.APPROVED, acceptance, now)
+            return acceptance
+        if self.budget is not None:
+            await self.budget.release(key=delivery)
+        raise ActionOfferError(
+            f"approved offer {resolved.offer_id} ended with {run.status!r}",
+            kind=run.status,
+        )
+
+    async def _reconcile_budget(self, delivery: str) -> None:
+        if self.budget is None:
+            return
+        await self.budget.reserve(
+            account=self.budget_account,
+            amount_milli=self.tariff_milli,
+            key=delivery,
+        )
+        await self.budget.settle(key=delivery, amount_milli=self.tariff_milli)
 
     def _assert_approvable(
         self,
@@ -631,7 +718,7 @@ class ActionOfferHost:
         run_id = offer_run_id(offer.offer_id)
         if persisted is not None and persisted.status == "running":
             return await runner.resume(run_id)
-        return await runner.run(dict(offer.input), run_id=run_id)
+        return await runner.run(thaw_json(offer.input), run_id=run_id)
 
     def _definition(self, offer: ActionOffer) -> CompiledDefinition:
         key = (offer.handler, tuple(sorted(offer.input)))
@@ -705,16 +792,30 @@ def _task_bindings(input_data: Mapping[str, Any]) -> dict[str, Any]:
 def _bound_input(
     input_data: Mapping[str, Any] | None,
     input_fingerprint: str | None,
-) -> tuple[dict[str, Any], str]:
+) -> tuple[dict[str, Any], str, bool]:
     if input_data is None and not input_fingerprint:
         raise ActionOfferError("offer requires bound input or an input fingerprint", kind="invalid")
-    bound = {} if input_data is None else dict(input_data)
+    if input_data is None:
+        return {}, str(input_fingerprint), False
+    bound = dict(input_data)
     if not is_json_value(bound):
         raise ActionOfferError("offer input must be a finite JSON object", kind="invalid")
-    fingerprint = sha256_hex(bound) if input_data is not None else str(input_fingerprint)
+    fingerprint = sha256_hex(bound)
     if input_fingerprint is not None and fingerprint != input_fingerprint:
         raise ActionOfferError("input fingerprint does not match bound input", kind="invalid")
-    return bound, fingerprint
+    return bound, fingerprint, True
+
+
+def _input_from_value(value: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    flag = value.get("input_bound")
+    raw = value.get("input")
+    if flag is False:
+        return None
+    if isinstance(raw, Mapping):
+        return raw
+    if flag is True:
+        return {}
+    return None
 
 
 def _require_provenance(value: object) -> OfferProvenance:

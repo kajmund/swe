@@ -34,7 +34,9 @@ reads and writes.
 - waiter cancellation that does not corrupt an entry or leave a stuck flight
   (the last waiter cancels the compute task);
 - metrics: hit, miss, coalesced/wait, compute, error, eviction, expiry,
-  latency, peak in-flight, bytes.
+  latency, peak in-flight, bytes;
+- a bounded latency sample window (default 4096) for p50/p95, so memory does
+  not grow with total resolve count.
 
 The `DecisionCache` protocol is unchanged. Hosts may still wrap this L1 with a
 durable store.
