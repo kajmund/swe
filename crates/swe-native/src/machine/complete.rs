@@ -237,10 +237,16 @@ impl Machine {
                 _ => None,
             });
         if let Some(map) = self.scopes.get_mut(&map_id) {
-            if let Some(state) = map.children.iter_mut().find(|item| item.index == index) {
-                state.status = WorkStatus::Completed;
-                state.result = Some(result);
+            let state = map.children.get_mut(index).ok_or_else(|| {
+                RuntimeError::internal(format!("map {map_id} missing child state {index}"))
+            })?;
+            if state.index != index {
+                return Err(RuntimeError::internal(format!(
+                    "map {map_id} child vector is out of order at {index}"
+                )));
             }
+            state.status = WorkStatus::Completed;
+            state.result = Some(result);
             map.remaining = map.remaining.saturating_sub(1);
         }
         if let Some(child_node) = child_node {

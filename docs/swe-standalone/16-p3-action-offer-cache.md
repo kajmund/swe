@@ -1,9 +1,10 @@
 # 16 — P3 ActionOffer 0.x and exact cache
 
-**Status:** GO for a separate PR off `main`.
-**Does not stack on P2.** ActionOffer and the L1 cache reuse `WorkflowRunner`,
-`DecisionCache`, `RunStore`, and cancellation. They do not use the P2
-microtask compiler.
+**Status:** GO for a separate PR. Branched from pre-P2 `main`; later merged
+`main` after P2 (#3) landed. ActionOffer and the L1 cache still reuse
+`WorkflowRunner`, `DecisionCache`, `RunStore`, and cancellation. They do not
+use the P2 microtask compiler. Both layers share the existing runner, store,
+budget, and dispatch; neither duplicates them.
 
 ## Inventory
 

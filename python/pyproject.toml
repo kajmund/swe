@@ -24,6 +24,7 @@ Repository = "https://github.com/kajmund/swe"
 Issues = "https://github.com/kajmund/swe/issues"
 
 [project.scripts]
+swe-microtasks-benchmark = "swe.microtasks:benchmark_main"
 swe-offer-cache-benchmark = "swe.offers:benchmark_main"
 
 [dependency-groups]

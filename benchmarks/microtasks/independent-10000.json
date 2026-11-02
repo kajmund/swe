@@ -1,0 +1,18 @@
+{
+  "concurrency": 64,
+  "environment": {
+    "cpu_count": 10,
+    "platform": "macOS-15.7.4-arm64-arm-64bit-Mach-O",
+    "python": "3.13.6"
+  },
+  "generated_at": "2026-11-02T00:40:09.524852+00:00",
+  "p50_latency_ms": 0.034166,
+  "p95_latency_ms": 0.049083,
+  "peak_concurrency": 64,
+  "result_count": 10000,
+  "schema_version": 1,
+  "tasks": 10000,
+  "throughput_tasks_per_second": 4055.103,
+  "unique_result_count": 10000,
+  "wall_ms": 2466.028
+}
