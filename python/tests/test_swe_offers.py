@@ -421,6 +421,257 @@ def test_nested_offer_and_record_are_json_serializable() -> None:
     assert record_payload["offer"]["input"]["document"]["id"] == 1
 
 
+async def test_concurrent_approve_reject_revoke_have_a_single_decision() -> None:
+    pytest.importorskip("swe_native")
+    executions = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        started.set()
+        await release.wait()
+        return {"published": payload["doc"]}
+
+    store = MemoryOfferStore()
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=MemoryRunStore(),
+        budget=MemoryOfferBudget(),
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer()
+    await store.save(OfferRecord(offer=offer, status=OfferStatus.PROPOSED))
+
+    async def release_if_started() -> None:
+        try:
+            await asyncio.wait_for(started.wait(), timeout=1)
+        except TimeoutError:
+            return
+        finally:
+            release.set()
+
+    approve, rejected, revoked, _ = await asyncio.gather(
+        host.approve(offer, auth_scope="tenant-a"),
+        host.reject(offer, auth_scope="tenant-a"),
+        host.revoke(offer.offer_id),
+        release_if_started(),
+        return_exceptions=True,
+    )
+    record = await store.load(offer.offer_id)
+    assert record is not None
+    match record.status:
+        case OfferStatus.APPROVED:
+            assert not isinstance(approve, BaseException)
+            assert executions == 1
+            assert isinstance(rejected, ActionOfferError)
+            assert isinstance(revoked, ActionOfferError)
+        case OfferStatus.REJECTED:
+            assert executions == 0
+            assert isinstance(approve, ActionOfferError)
+            assert approve.kind == "rejected"
+            assert not isinstance(rejected, BaseException)
+        case OfferStatus.REVOKED:
+            assert executions == 0
+            assert isinstance(approve, ActionOfferError)
+            assert approve.kind in {"revoked", "rejected"}
+        case _ as other:
+            raise AssertionError(f"non-terminal offer status {other}")
+
+
+async def test_in_flight_approve_blocks_reject_and_still_finishes_once() -> None:
+    pytest.importorskip("swe_native")
+    executions = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        started.set()
+        await release.wait()
+        return {"published": payload["doc"]}
+
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        store=MemoryOfferStore(),
+        run_store=MemoryRunStore(),
+        budget=MemoryOfferBudget(),
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer()
+    approve_task = asyncio.create_task(host.approve(offer, auth_scope="tenant-a"))
+    await started.wait()
+    with pytest.raises(ActionOfferError, match="already being approved") as info:
+        await host.reject(offer, auth_scope="tenant-a")
+    assert info.value.kind == "conflict"
+    with pytest.raises(ActionOfferError, match="already being approved"):
+        await host.revoke(offer.offer_id)
+    release.set()
+    accepted = await approve_task
+    assert accepted.run is not None
+    assert accepted.run.status == "completed"
+    assert executions == 1
+
+
+async def test_two_hosts_serialize_approve_and_do_not_rerun_after_crash() -> None:
+    pytest.importorskip("swe_native")
+    executions = 0
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        return {"published": payload["doc"]}
+
+    store = MemoryOfferStore()
+    run_store = _CrashOnceStore(crash_after=1)
+    budget = MemoryOfferBudget()
+    first = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=run_store,
+        budget=budget,
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    second = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=run_store,
+        budget=budget,
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer()
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        await first.approve(offer, auth_scope="tenant-a")
+    assert executions == 1
+    recovered = await second.approve(offer, auth_scope="tenant-a")
+    assert recovered.run is not None
+    assert recovered.run.status == "completed"
+    assert executions == 1
+    assert len(budget.settled) == 1
+
+
+async def test_two_hosts_reject_then_approve_never_starts() -> None:
+    pytest.importorskip("swe_native")
+    executions = 0
+
+    async def work(_payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        return {"ok": True}
+
+    store = MemoryOfferStore()
+    first = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=MemoryRunStore(),
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    second = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=MemoryRunStore(),
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer()
+    rejected = await first.reject(offer, auth_scope="tenant-a")
+    assert rejected.status is OfferStatus.REJECTED
+    with pytest.raises(ActionOfferError, match="rejected"):
+        await second.approve(offer, auth_scope="tenant-a")
+    with pytest.raises(ActionOfferError, match="rejected"):
+        await first.approve(offer, auth_scope="tenant-a")
+    assert executions == 0
+
+
+async def test_two_hosts_concurrent_approve_dispatch_once() -> None:
+    pytest.importorskip("swe_native")
+    executions = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        started.set()
+        await release.wait()
+        return {"published": payload["doc"]}
+
+    store = MemoryOfferStore()
+    run_store = MemoryRunStore()
+    budget = MemoryOfferBudget()
+    hosts = [
+        ActionOfferHost(
+            {"demo.publish": work},
+            store=store,
+            run_store=run_store,
+            budget=budget,
+            policy_version="pol-1",
+            context_version="ctx-1",
+        )
+        for _ in range(2)
+    ]
+    offer = _offer()
+    tasks = [
+        asyncio.create_task(hosts[index].approve(offer, auth_scope="tenant-a"))
+        for index in range(2)
+    ]
+    await started.wait()
+    release.set()
+    results = await asyncio.gather(*tasks)
+    assert executions == 1
+    assert {item.run.run_id for item in results if item.run is not None} == {
+        results[0].run.run_id if results[0].run is not None else ""
+    }
+    assert len(budget.settled) == 1
+
+
+async def test_two_hosts_retry_after_reserve_crash_starts_once() -> None:
+    pytest.importorskip("swe_native")
+    executions = 0
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        nonlocal executions
+        executions += 1
+        return {"published": payload["doc"]}
+
+    store = MemoryOfferStore()
+    budget = _FailFirstReserve()
+    first = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=MemoryRunStore(),
+        budget=budget,
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    second = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=MemoryRunStore(),
+        budget=budget,
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer()
+    with pytest.raises(RuntimeError, match="reserve crashed"):
+        await first.approve(offer, auth_scope="tenant-a")
+    assert executions == 0
+    record = await store.load(offer.offer_id)
+    assert record is None or record.status is OfferStatus.PROPOSED
+    accepted = await second.approve(offer, auth_scope="tenant-a")
+    assert accepted.run is not None
+    assert accepted.run.status == "completed"
+    assert executions == 1
+
+
 async def test_unbound_fingerprint_offer_cannot_execute() -> None:
     offer = propose_action(
         action_ref="demo.publish",
@@ -444,6 +695,18 @@ async def test_unbound_fingerprint_offer_cannot_execute() -> None:
 
 async def _ok(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
     return {"ok": True}
+
+
+class _FailFirstReserve(MemoryOfferBudget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.failed = False
+
+    async def reserve(self, *, account: str, amount_milli: int, key: str) -> None:
+        if not self.failed:
+            self.failed = True
+            raise RuntimeError("reserve crashed")
+        await super().reserve(account=account, amount_milli=amount_milli, key=key)
 
 
 class _FailFirstSettle(MemoryOfferBudget):

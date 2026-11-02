@@ -6,10 +6,10 @@ key here means every caller and backend agrees on what "the same decision"
 means.
 
 `decision_cache_key` is the frozen v1 identity. It does not grow first-class
-auth, policy, model, or provider-version fields. Hosts that need those
-dimensions to separate entries must put them in `cache_params` (see
-`scoped_cache_params`) or use a dedicated `InMemoryDecisionCache` instance.
-A v2 key is an explicit later version decision, not a silent change here.
+auth, policy, model, or provider-version fields. Isolation is still mandatory
+for exact resolves: `scoped_cache_params` and the dispatch path fail closed
+when `auth_scope`, `policy_version`, or `model` are missing. The hash bytes
+stay v1; a first-class v2 key is an explicit later version decision.
 
 `InMemoryDecisionCache` is the reference L1: bounded, TTL-aware, exact,
 single-flight, and storage-neutral. Durable L2 remains a host adapter.
@@ -45,6 +45,7 @@ DEFAULT_MAX_BYTES = 8_388_608
 DEFAULT_MAX_LATENCY_SAMPLES = 4096
 DEFAULT_BENCHMARK_OPERATIONS = 10_000
 DEFAULT_BENCHMARK_CONCURRENCY = 64
+CACHE_ISOLATION_FIELDS = ("auth_scope", "policy_version", "model")
 
 
 class DecisionCache(Protocol):
@@ -83,6 +84,25 @@ def decision_cache_key(
     return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
 
 
+def assert_cache_isolation(
+    params: Mapping[str, Any],
+    *,
+    path: str = "params",
+) -> None:
+    """Fail closed when a v1 key is missing a required isolation dimension."""
+    missing = [
+        field
+        for field in CACHE_ISOLATION_FIELDS
+        if not _isolation_text(params.get(field))
+    ]
+    if missing:
+        names = ", ".join(missing)
+        raise SweHandlerError(
+            f"exact cache isolation is missing {names} in {path}; "
+            "refuse to resolve rather than share entries across tenants or versions"
+        )
+
+
 def scoped_cache_params(
     params: Mapping[str, Any] | None = None,
     *,
@@ -91,11 +111,10 @@ def scoped_cache_params(
     model: str | None = None,
     provider_version: str | None = None,
 ) -> dict[str, Any]:
-    """Put behavior-determining scope into the frozen v1 ``params`` bag.
+    """Put required isolation dimensions into the frozen v1 ``params`` bag.
 
-    This does not change `decision_cache_key`. It is the supported v1 way to
-    keep authorization, policy, model, and provider version out of each
-    other's entries.
+    This does not change `decision_cache_key`. Missing `auth_scope`,
+    `policy_version`, or `model` fail closed. `provider_version` stays optional.
     """
     out = dict(params or {})
     if auth_scope is not None:
@@ -106,7 +125,42 @@ def scoped_cache_params(
         out["model"] = model
     if provider_version is not None:
         out["provider_version"] = provider_version
+    assert_cache_isolation(out)
     return out
+
+
+def isolated_decision_cache_key(
+    *,
+    provider: str,
+    prompt_key: str,
+    prompt: str,
+    input_data: Mapping[str, Any],
+    choices: Sequence[str],
+    auth_scope: str,
+    policy_version: str,
+    model: str,
+    provider_version: str | None = None,
+    params: Mapping[str, Any] | None = None,
+) -> str:
+    """Frozen v1 key with centrally required isolation in ``params``."""
+    return decision_cache_key(
+        provider=provider,
+        prompt_key=prompt_key,
+        prompt=prompt,
+        input_data=input_data,
+        choices=choices,
+        params=scoped_cache_params(
+            params,
+            auth_scope=auth_scope,
+            policy_version=policy_version,
+            model=model,
+            provider_version=provider_version,
+        ),
+    )
+
+
+def _isolation_text(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and "\x00" not in value
 
 
 class _DropReason(StrEnum):
@@ -473,7 +527,11 @@ async def benchmark_exact_cache(
             prompt="choose {ordinal}",
             input_data={"ordinal": index if unique else 0},
             choices=("yes", "no"),
-            params=scoped_cache_params(model="bench-v1", policy_version="p1"),
+            params=scoped_cache_params(
+                auth_scope="bench-scope",
+                model="bench-v1",
+                policy_version="p1",
+            ),
         )
         answer, _hit = await cache.resolve(
             key,
@@ -578,6 +636,7 @@ def _canonical_report(report: Mapping[str, Any]) -> str:
 
 
 __all__ = [
+    "CACHE_ISOLATION_FIELDS",
     "DEFAULT_MAX_BYTES",
     "DEFAULT_MAX_ENTRIES",
     "DEFAULT_MAX_LATENCY_SAMPLES",
@@ -585,9 +644,11 @@ __all__ = [
     "CacheMetrics",
     "DecisionCache",
     "InMemoryDecisionCache",
+    "assert_cache_isolation",
     "benchmark_exact_cache",
     "benchmark_main",
     "decision_cache_key",
+    "isolated_decision_cache_key",
     "scoped_cache_params",
 ]
 

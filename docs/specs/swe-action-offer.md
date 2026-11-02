@@ -43,25 +43,37 @@ fingerprint-only offers stay unbound until input is supplied. Nested input is
 deep-thawed by `to_dict()` so the payload is JSON. `ActionOfferHost.approve`
 then:
 
-1. rejects stale, expired, revoked, rejected, or unauthorized offers before any
-   reservation or handler call;
-2. claims the offer (in-process single-flight) so concurrent approves dispatch
-   once and other callers reuse the same result;
-3. reuses a stored acceptance or a completed `RunStore` record after
-   reconciling reserve+settle;
+1. rejects stale, expired, or unauthorized offers before any reservation or
+   handler call;
+2. takes a persistent `APPROVING` claim in `OfferStore.transition` so approve,
+   reject, and revoke share one atomic decision; same-process waiters still
+   join an in-host single-flight;
+3. reuses a stored acceptance, a completed `RunStore` record, or a persisted
+   handler effect after reconciling reserve+settle;
 4. reserves an optional budget key;
-5. runs or resumes the existing SWE machine;
+5. runs or resumes the existing SWE machine with handlers wrapped by
+   `OfferStore.run_effect(delivery_key, ...)` so a second host or a crash
+   after the side effect does not invoke the external effect again;
 6. settles on `completed` (idempotent), otherwise releases.
 
-Reject records a decision and never dispatches. Revoke is valid only before a
-successful approve. Double approve is idempotent: a completed run is replayed
+Reject and revoke use the same compare-and-set. A rejected or revoked offer
+cannot enter `APPROVING`, so its handler never starts. An in-flight approve
+holds `APPROVING` and makes reject/revoke fail closed with `conflict`.
+Unstarted claims revert to `proposed` so another host can retry; a completed
+effect or run is not reverted. Claim leases (`claim_lease_ms`) let a second
+host finish a crashed approve without starting a second effect.
+
+Double approve is idempotent: a completed run or stored effect is replayed
 and the handler is not called again. A cancelled or failed run is not treated
 as success; a later approve of that offer fails closed without a second
-dispatch. Hosts that need that guarantee inject a `RunStore`.
+dispatch. Hosts that need that guarantee inject a shared `OfferStore` and
+`RunStore`. A deterministic `run_id` is not enough by itself.
 
 ## Non-goals
 
 ActionOffer is not a workflow format, broker, durable database, legal engine,
 or AINA product surface. Research and Socialism stay out of this package.
-Semantic cache, cross-process offer replication, and a first-class v2 decision
-cache key are left to later stages.
+Semantic cache and a first-class v2 decision cache key are left to later
+stages. Cross-process exactly-once requires a store adapter whose
+`transition` / `run_effect` exclusivity holds across hosts; the reference
+`MemoryOfferStore` provides that for any hosts that share the instance.

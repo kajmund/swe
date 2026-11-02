@@ -9,9 +9,12 @@ from typing import Any
 import pytest
 
 from swe.cache import (
+    CACHE_ISOLATION_FIELDS,
     InMemoryDecisionCache,
     _percentile_ms,
+    assert_cache_isolation,
     decision_cache_key,
+    isolated_decision_cache_key,
     scoped_cache_params,
 )
 from swe.definition import compile_definition
@@ -24,6 +27,39 @@ def test_v1_decision_cache_key_is_stable() -> None:
     assert _key() == "9a90454ba4d09100657a703f0266066c217761dd1cc6156b3c9f7775dd6ea268"
     shuffled = _key(input_data={"topic": "alpha"})
     assert shuffled == _key()
+    isolated = isolated_decision_cache_key(
+        provider="mock.decision",
+        prompt_key="demo.assessment",
+        prompt="choose {topic}",
+        input_data={"topic": "alpha"},
+        choices=("yes", "no"),
+        auth_scope="tenant-a",
+        policy_version="pol-1",
+        model="m1",
+        provider_version="1",
+    )
+    assert isolated == _key()
+
+
+def test_scoped_cache_params_fail_closed_when_isolation_missing() -> None:
+    with pytest.raises(SweHandlerError, match="auth_scope"):
+        scoped_cache_params(model="m1", policy_version="pol-1")
+    with pytest.raises(SweHandlerError, match="policy_version"):
+        scoped_cache_params(auth_scope="tenant-a", model="m1")
+    with pytest.raises(SweHandlerError, match="model"):
+        scoped_cache_params(auth_scope="tenant-a", policy_version="pol-1")
+    with pytest.raises(SweHandlerError, match="auth_scope, policy_version, model"):
+        assert_cache_isolation({})
+    assert CACHE_ISOLATION_FIELDS == ("auth_scope", "policy_version", "model")
+    raw_v1 = decision_cache_key(
+        provider="mock.decision",
+        prompt_key="demo.assessment",
+        prompt="choose {topic}",
+        input_data={"topic": "alpha"},
+        choices=("yes", "no"),
+        params={},
+    )
+    assert len(raw_v1) == 64
 
 
 def _key(**overrides: Any) -> str:
@@ -268,6 +304,73 @@ async def test_latency_samples_stay_bounded_and_percentiles_match_window() -> No
     assert metrics.p50_latency_ms == _percentile_ms(samples, 0.50)
     assert metrics.p95_latency_ms == _percentile_ms(samples, 0.95)
     assert metrics.p95_latency_ms >= metrics.p50_latency_ms >= 0.0
+
+
+async def test_cross_tenant_policy_and_model_are_isolated() -> None:
+    cache = InMemoryDecisionCache()
+    computes: list[str] = []
+
+    async def compute(label: str) -> Mapping[str, Any]:
+        computes.append(label)
+        return {"choice": "yes", "label": label}
+
+    async def resolve(label: str, **scope: str) -> Mapping[str, Any]:
+        key = isolated_decision_cache_key(
+            provider="mock.decision",
+            prompt_key="demo.assessment",
+            prompt="choose {topic}",
+            input_data={"topic": "alpha"},
+            choices=("yes", "no"),
+            auth_scope=scope.get("auth_scope", "tenant-a"),
+            policy_version=scope.get("policy_version", "pol-1"),
+            model=scope.get("model", "m1"),
+        )
+        answer, _hit = await cache.resolve(
+            key,
+            lambda: compute(label),
+            provider="mock.decision",
+            prompt_key="demo.assessment",
+        )
+        return answer
+
+    first = await resolve("base")
+    tenant = await resolve("tenant", auth_scope="tenant-b")
+    policy = await resolve("policy", policy_version="pol-2")
+    model = await resolve("model", model="m2")
+    again = await resolve("again")
+    assert first["label"] == "base"
+    assert tenant["label"] == "tenant"
+    assert policy["label"] == "policy"
+    assert model["label"] == "model"
+    assert again["label"] == "base"
+    assert computes == ["base", "tenant", "policy", "model"]
+
+
+async def test_exact_dispatch_fails_closed_without_isolation() -> None:
+    pytest.importorskip("swe_native")
+    cache = InMemoryDecisionCache()
+    compiled = _provider_definition("exact")
+
+    async def provider(_request: Mapping[str, Any]) -> str:
+        return "yes"
+
+    result = await run_workflow(
+        compiled,
+        {},
+        {"topic": "alpha"},
+        resources=WorkflowResources(
+            providers={"mock.decision": provider},
+            prompts={"demo.assessment": "choose {topic}"},
+            prompt_keys=frozenset({"demo.assessment"}),
+            cache=cache,
+        ),
+    )
+    assert result.status == "failed"
+    assert result.error is not None
+    assert result.error["kind"] == "handler"
+    assert "isolation" in result.error["message"]
+    assert "auth_scope" in result.error["message"]
+    assert cache.metrics().entries == 0
 
 
 async def test_cache_policy_off_does_not_read_or_write() -> None:

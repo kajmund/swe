@@ -14,10 +14,13 @@ OverGraph, or SQL.
 `params`.
 
 It does **not** grow first-class `auth_scope`, `policy_version`, `model`, or
-`provider_version` fields. Those dimensions affect results, so a host that
-needs isolation must place them in `cache_params` via `scoped_cache_params`
-or use a dedicated cache instance (`namespace`). Changing the frozen function
-would be a v2 version decision; P3 does not do that silently.
+`provider_version` fields. Those dimensions still isolate entries: they must
+live in `cache_params`. `scoped_cache_params`, `isolated_decision_cache_key`,
+and `cache_policy: exact` dispatch fail closed unless `auth_scope`,
+`policy_version`, and `model` are present. `provider_version` stays optional.
+The frozen v1 hash is unchanged; a first-class v2 key remains an explicit
+later decision. A dedicated cache instance (`namespace`) can still separate
+tenants, but it does not replace the required params.
 
 `cache_policy: off` never calls `resolve`, so a present cache records zero
 reads and writes.

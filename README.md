@@ -52,7 +52,8 @@ URI is an identifier, not a network location or a runtime dependency.
 approve/reject/revoke are explicit, and a accepted offer runs through the
 existing SWE runner. `swe.cache.InMemoryDecisionCache` is the reference exact
 L1. Durable storage stays a host adapter. The frozen v1 cache key is unchanged;
-scope fields belong in `cache_params`.
+`auth_scope`, `policy_version`, and `model` belong in `cache_params` and are
+required for exact resolves.
 
 ```python
 from swe.offers import ActionOfferHost, OfferProvenance, propose_action

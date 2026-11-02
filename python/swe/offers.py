@@ -21,7 +21,7 @@ import platform
 import re
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -51,9 +51,17 @@ DEFAULT_TARIFF_MILLI = 1
 
 class OfferStatus(StrEnum):
     PROPOSED = "proposed"
+    APPROVING = "approving"
     APPROVED = "approved"
     REJECTED = "rejected"
     REVOKED = "revoked"
+
+
+CLAIMABLE_OFFER_STATUSES = frozenset({None, OfferStatus.PROPOSED})
+REJECTABLE_OFFER_STATUSES = frozenset({None, OfferStatus.PROPOSED})
+REVOKABLE_OFFER_STATUSES = frozenset(
+    {None, OfferStatus.PROPOSED, OfferStatus.REJECTED}
+)
 
 
 class RiskLevel(StrEnum):
@@ -187,6 +195,7 @@ class OfferRecord:
     delivery_key: str | None = None
     result: Mapping[str, Any] | None = None
     decided_at_ms: int | None = None
+    claimed_until_ms: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -196,6 +205,7 @@ class OfferRecord:
             "delivery_key": self.delivery_key,
             "result": None if self.result is None else thaw_json(self.result),
             "decided_at_ms": self.decided_at_ms,
+            "claimed_until_ms": self.claimed_until_ms,
         }
 
 
@@ -220,11 +230,40 @@ class OfferAcceptance:
 
 
 class OfferStore(Protocol):
-    """Host-owned ledger of offer decisions. Create/surface does not use it."""
+    """Host-owned ledger of offer decisions. Create/surface does not use it.
+
+    Decision writes must go through `transition` so approve, reject, and revoke
+    share one atomic compare-and-set. `run_effect` is the persistent
+    exactly-once boundary for handler side effects.
+    """
 
     async def load(self, offer_id: str) -> OfferRecord | None: ...
 
     async def save(self, record: OfferRecord) -> None: ...
+
+    async def transition(
+        self,
+        offer_id: str,
+        *,
+        expected: Collection[OfferStatus | None],
+        record: OfferRecord,
+    ) -> OfferRecord | None: ...
+
+    async def wait(
+        self,
+        offer_id: str,
+        *,
+        not_in: Collection[OfferStatus],
+        timeout_s: float,
+    ) -> OfferRecord | None: ...
+
+    async def load_effect(self, key: str) -> Mapping[str, Any] | None: ...
+
+    async def run_effect(
+        self,
+        key: str,
+        compute: Callable[[], Awaitable[Mapping[str, Any]]],
+    ) -> tuple[Mapping[str, Any], bool]: ...
 
 
 class OfferBudget(Protocol):
@@ -238,16 +277,117 @@ class OfferBudget(Protocol):
 
 
 class MemoryOfferStore:
-    """In-process offer ledger used by tests and the reference host."""
+    """In-process offer ledger used by tests and the reference host.
+
+    One condition lock serializes load/save/transition/effect claims, so two
+    `ActionOfferHost` instances that share this store see the same atomic
+    decision order. Durable adapters must provide the same exclusivity.
+    """
 
     def __init__(self) -> None:
         self.records: dict[str, OfferRecord] = {}
+        self.effects: dict[str, Mapping[str, Any]] = {}
+        self._condition = asyncio.Condition()
+        self._effect_flights: dict[str, asyncio.Future[Mapping[str, Any]]] = {}
 
     async def load(self, offer_id: str) -> OfferRecord | None:
-        return self.records.get(offer_id)
+        async with self._condition:
+            return self.records.get(offer_id)
 
     async def save(self, record: OfferRecord) -> None:
-        self.records[record.offer.offer_id] = record
+        async with self._condition:
+            self.records[record.offer.offer_id] = record
+            self._condition.notify_all()
+
+    async def transition(
+        self,
+        offer_id: str,
+        *,
+        expected: Collection[OfferStatus | None],
+        record: OfferRecord,
+    ) -> OfferRecord | None:
+        allowed = frozenset(expected)
+        async with self._condition:
+            current = self.records.get(offer_id)
+            status = None if current is None else current.status
+            if status not in allowed:
+                return None
+            self.records[offer_id] = record
+            self._condition.notify_all()
+            return record
+
+    async def wait(
+        self,
+        offer_id: str,
+        *,
+        not_in: Collection[OfferStatus],
+        timeout_s: float,
+    ) -> OfferRecord | None:
+        blocked = frozenset(not_in)
+        timeout = max(0.0, timeout_s)
+
+        def _ready() -> bool:
+            current = self.records.get(offer_id)
+            return current is None or current.status not in blocked
+
+        async with self._condition:
+            if _ready():
+                return self.records.get(offer_id)
+            try:
+                await asyncio.wait_for(self._condition.wait_for(_ready), timeout=timeout)
+            except TimeoutError:
+                pass
+            return self.records.get(offer_id)
+
+    async def load_effect(self, key: str) -> Mapping[str, Any] | None:
+        async with self._condition:
+            stored = self.effects.get(key)
+            return None if stored is None else dict(stored)
+
+    async def run_effect(
+        self,
+        key: str,
+        compute: Callable[[], Awaitable[Mapping[str, Any]]],
+    ) -> tuple[Mapping[str, Any], bool]:
+        async with self._condition:
+            stored = self.effects.get(key)
+            if stored is not None:
+                return dict(stored), True
+            flight = self._effect_flights.get(key)
+            if flight is None:
+                flight = asyncio.get_running_loop().create_future()
+                flight.add_done_callback(_consume_future_exception)
+                self._effect_flights[key] = flight
+                owner = True
+            else:
+                owner = False
+        if not owner:
+            return dict(await asyncio.shield(flight)), True
+        try:
+            raw = await compute()
+            if not isinstance(raw, Mapping) or not is_json_value(raw):
+                raise ActionOfferError(
+                    "offer handler must return a finite JSON object",
+                    kind="invalid",
+                )
+            result = dict(raw)
+            async with self._condition:
+                existing = self.effects.get(key)
+                if existing is None:
+                    self.effects[key] = result
+                    existing = result
+                if not flight.done():
+                    flight.set_result(dict(existing))
+                return dict(existing), existing is not result
+        except BaseException as error:
+            async with self._condition:
+                if not flight.done():
+                    flight.set_exception(error)
+            raise
+        finally:
+            async with self._condition:
+                if self._effect_flights.get(key) is flight:
+                    self._effect_flights.pop(key, None)
 
 
 class MemoryOfferBudget:
@@ -410,6 +550,7 @@ class ActionOfferHost:
         budget_account: str = "offers",
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         concurrency: int = 1,
+        claim_lease_ms: int | None = None,
     ) -> None:
         self.handlers = dict(handlers)
         self.store = store or MemoryOfferStore()
@@ -423,9 +564,20 @@ class ActionOfferHost:
         self.budget_account = budget_account
         self.timeout_seconds = timeout_seconds
         self.concurrency = concurrency
+        if claim_lease_ms is None:
+            self.claim_lease_ms = timeout_seconds * 1000
+        elif isinstance(claim_lease_ms, bool) or claim_lease_ms < 1:
+            raise ActionOfferError("claim_lease_ms must be a positive integer", kind="invalid")
+        else:
+            self.claim_lease_ms = claim_lease_ms
         self._definitions: dict[tuple[str, tuple[str, ...]], CompiledDefinition] = {}
         self._claim_lock = asyncio.Lock()
         self._inflight: dict[str, asyncio.Future[OfferAcceptance]] = {}
+
+    def _new_flight(self) -> asyncio.Future[OfferAcceptance]:
+        flight: asyncio.Future[OfferAcceptance] = asyncio.get_running_loop().create_future()
+        flight.add_done_callback(_consume_future_exception)
+        return flight
 
     async def approve(
         self,
@@ -435,11 +587,8 @@ class ActionOfferHost:
     ) -> OfferAcceptance:
         resolved = ActionOffer.from_value(offer)
         now = self.clock.now_ms()
-        existing = await self.store.load(resolved.offer_id)
-        self._assert_approvable(resolved, auth_scope=auth_scope, now_ms=now, existing=existing)
+        self._assert_fresh(resolved, auth_scope=auth_scope, now_ms=now)
         delivery = offer_delivery_key(resolved.offer_id, resolved.action_ref)
-        if existing is not None and existing.status is OfferStatus.APPROVED:
-            return self._reuse(resolved, existing, delivery)
         owner, flight = await self._claim(resolved.offer_id)
         if not owner:
             accepted = await asyncio.shield(flight)
@@ -451,7 +600,7 @@ class ActionOfferHost:
                 reused=True,
             )
         try:
-            accepted = await self._approve_claimed(resolved, delivery, now)
+            accepted = await self._approve_or_follow(resolved, delivery, now)
             if not flight.done():
                 flight.set_result(accepted)
             return accepted
@@ -470,45 +619,56 @@ class ActionOfferHost:
     ) -> OfferRecord:
         resolved = ActionOffer.from_value(offer)
         now = self.clock.now_ms()
-        existing = await self.store.load(resolved.offer_id)
         self._assert_actor(resolved, auth_scope)
-        if existing is not None:
-            match existing.status:
-                case OfferStatus.REJECTED:
-                    return existing
-                case OfferStatus.APPROVED:
-                    raise ActionOfferError("approved offer cannot be rejected", kind="conflict")
-                case OfferStatus.REVOKED:
-                    raise ActionOfferError("revoked offer cannot be rejected", kind="revoked")
-                case OfferStatus.PROPOSED:
-                    pass
-                case _ as unreachable:
-                    assert_never(unreachable)
         record = OfferRecord(
             offer=resolved,
             status=OfferStatus.REJECTED,
             decided_at_ms=now,
         )
-        await self.store.save(record)
-        return record
+        written = await self.store.transition(
+            resolved.offer_id,
+            expected=REJECTABLE_OFFER_STATUSES,
+            record=record,
+        )
+        if written is not None:
+            return written
+        existing = await self.store.load(resolved.offer_id)
+        if existing is None:
+            raise ActionOfferError("offer decision changed during reject", kind="conflict")
+        return self._rejected_conflict(existing)
 
     async def revoke(self, offer_id: str) -> OfferRecord:
         existing = await self.store.load(offer_id)
         if existing is None:
             raise ActionOfferError(f"unknown offer {offer_id!r}", kind="invalid")
-        match existing.status:
-            case OfferStatus.REVOKED:
-                return existing
+        if existing.status is OfferStatus.REVOKED:
+            return existing
+        record = OfferRecord(
+            offer=existing.offer,
+            status=OfferStatus.REVOKED,
+            decided_at_ms=self.clock.now_ms(),
+        )
+        written = await self.store.transition(
+            offer_id,
+            expected=REVOKABLE_OFFER_STATUSES,
+            record=record,
+        )
+        if written is not None:
+            return written
+        current = await self.store.load(offer_id)
+        if current is None:
+            raise ActionOfferError(f"unknown offer {offer_id!r}", kind="invalid")
+        if current.status is OfferStatus.REVOKED:
+            return current
+        match current.status:
             case OfferStatus.APPROVED:
                 raise ActionOfferError("approved offer cannot be revoked", kind="conflict")
-            case OfferStatus.REJECTED | OfferStatus.PROPOSED:
-                record = OfferRecord(
-                    offer=existing.offer,
-                    status=OfferStatus.REVOKED,
-                    decided_at_ms=self.clock.now_ms(),
-                )
-                await self.store.save(record)
-                return record
+            case OfferStatus.APPROVING:
+                raise ActionOfferError("offer is already being approved", kind="conflict")
+            case OfferStatus.PROPOSED | OfferStatus.REJECTED:
+                raise ActionOfferError("offer decision changed during revoke", kind="conflict")
+            case OfferStatus.REVOKED:
+                return current
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -522,13 +682,13 @@ class ActionOfferHost:
                 return False, flight
             flight = self._inflight.get(offer_id)
             if flight is None:
-                flight = asyncio.get_running_loop().create_future()
+                flight = self._new_flight()
                 self._inflight[offer_id] = flight
                 return True, flight
             return False, flight
 
     def _completed_claim(self, existing: OfferRecord) -> asyncio.Future[OfferAcceptance]:
-        flight: asyncio.Future[OfferAcceptance] = asyncio.get_running_loop().create_future()
+        flight = self._new_flight()
         flight.set_result(
             self._reuse(
                 existing.offer,
@@ -549,6 +709,128 @@ class ActionOfferHost:
             if self._inflight.get(offer_id) is flight:
                 self._inflight.pop(offer_id, None)
 
+    async def _approve_or_follow(
+        self,
+        resolved: ActionOffer,
+        delivery: str,
+        now: int,
+    ) -> OfferAcceptance:
+        claim = OfferRecord(
+            offer=resolved,
+            status=OfferStatus.APPROVING,
+            delivery_key=delivery,
+            decided_at_ms=now,
+            claimed_until_ms=now + self.claim_lease_ms,
+        )
+        written = await self.store.transition(
+            resolved.offer_id,
+            expected=CLAIMABLE_OFFER_STATUSES,
+            record=claim,
+        )
+        if written is None:
+            current = await self.store.load(resolved.offer_id)
+            return await self._follow_existing(resolved, delivery, now, current)
+        try:
+            return await self._approve_claimed(resolved, delivery, now)
+        except BaseException:
+            await self._release_unstarted_claim(resolved, delivery)
+            raise
+
+    async def _follow_existing(
+        self,
+        resolved: ActionOffer,
+        delivery: str,
+        now: int,
+        current: OfferRecord | None,
+    ) -> OfferAcceptance:
+        if current is None:
+            return await self._approve_or_follow(resolved, delivery, now)
+        match current.status:
+            case OfferStatus.APPROVED:
+                return self._reuse(resolved, current, delivery)
+            case OfferStatus.REJECTED:
+                raise ActionOfferError("offer was rejected", kind="rejected")
+            case OfferStatus.REVOKED:
+                raise ActionOfferError("offer was revoked", kind="revoked")
+            case OfferStatus.PROPOSED:
+                return await self._approve_or_follow(resolved, delivery, now)
+            case OfferStatus.APPROVING:
+                finished = await self._try_finish_existing(resolved, delivery, now)
+                if finished is not None:
+                    return finished
+                remaining_ms = 0
+                if current.claimed_until_ms is not None:
+                    remaining_ms = max(0, current.claimed_until_ms - now)
+                timeout_s = min(self.timeout_seconds, remaining_ms / 1000) if remaining_ms else 0.0
+                await self.store.wait(
+                    resolved.offer_id,
+                    not_in={OfferStatus.APPROVING},
+                    timeout_s=timeout_s,
+                )
+                latest = await self.store.load(resolved.offer_id)
+                finished = await self._try_finish_existing(resolved, delivery, now)
+                if finished is not None:
+                    return finished
+                if latest is not None and latest.status is OfferStatus.APPROVING:
+                    lease_expired = (
+                        latest.claimed_until_ms is not None
+                        and self.clock.now_ms() >= latest.claimed_until_ms
+                    )
+                    if lease_expired:
+                        return await self._approve_claimed(resolved, delivery, now)
+                    raise ActionOfferError("offer is already being approved", kind="conflict")
+                return await self._follow_existing(resolved, delivery, now, latest)
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    async def _try_finish_existing(
+        self,
+        resolved: ActionOffer,
+        delivery: str,
+        now: int,
+    ) -> OfferAcceptance | None:
+        existing = await self.store.load(resolved.offer_id)
+        if existing is not None and existing.status is OfferStatus.APPROVED:
+            return self._reuse(resolved, existing, delivery)
+        persisted = await self._load_persisted_run(resolved)
+        if persisted is not None and persisted.status == "completed":
+            return await self._finish_completed(resolved, delivery, persisted, now, reused=True)
+        if persisted is not None and persisted.status != "running":
+            raise ActionOfferError(
+                f"offer {resolved.offer_id} already ended with {persisted.status!r}",
+                kind=persisted.status,
+            )
+        effect = await self.store.load_effect(delivery)
+        if effect is None:
+            return None
+        return await self._approve_claimed(resolved, delivery, now)
+
+    async def _release_unstarted_claim(self, resolved: ActionOffer, delivery: str) -> None:
+        persisted = await self._load_persisted_run(resolved)
+        effect = await self.store.load_effect(delivery)
+        if persisted is not None or effect is not None:
+            return
+        await self.store.transition(
+            resolved.offer_id,
+            expected={OfferStatus.APPROVING},
+            record=OfferRecord(offer=resolved, status=OfferStatus.PROPOSED),
+        )
+
+    def _rejected_conflict(self, existing: OfferRecord) -> OfferRecord:
+        match existing.status:
+            case OfferStatus.REJECTED:
+                return existing
+            case OfferStatus.APPROVED:
+                raise ActionOfferError("approved offer cannot be rejected", kind="conflict")
+            case OfferStatus.REVOKED:
+                raise ActionOfferError("revoked offer cannot be rejected", kind="revoked")
+            case OfferStatus.APPROVING:
+                raise ActionOfferError("offer is already being approved", kind="conflict")
+            case OfferStatus.PROPOSED:
+                raise ActionOfferError("offer decision changed during reject", kind="conflict")
+            case _ as unreachable:
+                assert_never(unreachable)
+
     async def _approve_claimed(
         self,
         resolved: ActionOffer,
@@ -560,16 +842,9 @@ class ActionOfferHost:
             return self._reuse(resolved, existing, delivery)
         persisted = await self._load_persisted_run(resolved)
         if persisted is not None and persisted.status == "completed":
-            await self._reconcile_budget(delivery)
-            acceptance = OfferAcceptance(
-                offer=resolved,
-                status=OfferStatus.APPROVED,
-                run=persisted,
-                delivery_key=delivery,
-                reused=True,
+            return await self._finish_completed(
+                resolved, delivery, persisted, now, reused=True
             )
-            await self._remember(resolved, OfferStatus.APPROVED, acceptance, now)
-            return acceptance
         if persisted is not None and persisted.status != "running":
             raise ActionOfferError(
                 f"offer {resolved.offer_id} already ended with {persisted.status!r}",
@@ -587,28 +862,39 @@ class ActionOfferHost:
                 key=delivery,
             )
         try:
-            run = await self._dispatch(resolved, persisted)
+            run = await self._dispatch(resolved, persisted, delivery)
         except BaseException:
             if self.budget is not None:
                 await self.budget.release(key=delivery)
             raise
         if run.status == "completed":
-            await self._reconcile_budget(delivery)
-            acceptance = OfferAcceptance(
-                offer=resolved,
-                status=OfferStatus.APPROVED,
-                run=run,
-                delivery_key=delivery,
-                reused=False,
-            )
-            await self._remember(resolved, OfferStatus.APPROVED, acceptance, now)
-            return acceptance
+            return await self._finish_completed(resolved, delivery, run, now, reused=False)
         if self.budget is not None:
             await self.budget.release(key=delivery)
         raise ActionOfferError(
             f"approved offer {resolved.offer_id} ended with {run.status!r}",
             kind=run.status,
         )
+
+    async def _finish_completed(
+        self,
+        resolved: ActionOffer,
+        delivery: str,
+        run: RunResult,
+        now: int,
+        *,
+        reused: bool,
+    ) -> OfferAcceptance:
+        await self._reconcile_budget(delivery)
+        acceptance = OfferAcceptance(
+            offer=resolved,
+            status=OfferStatus.APPROVED,
+            run=run,
+            delivery_key=delivery,
+            reused=reused,
+        )
+        await self._remember(resolved, OfferStatus.APPROVED, acceptance, now)
+        return acceptance
 
     async def _reconcile_budget(self, delivery: str) -> None:
         if self.budget is None:
@@ -620,13 +906,12 @@ class ActionOfferHost:
         )
         await self.budget.settle(key=delivery, amount_milli=self.tariff_milli)
 
-    def _assert_approvable(
+    def _assert_fresh(
         self,
         offer: ActionOffer,
         *,
         auth_scope: str,
         now_ms: int,
-        existing: OfferRecord | None,
     ) -> None:
         self._assert_actor(offer, auth_scope)
         if offer.policy_version != self.policy_version:
@@ -637,17 +922,6 @@ class ActionOfferHost:
             raise ActionOfferError("offer has expired", kind="expired")
         if offer.revalidate_after_ms is not None and now_ms >= offer.revalidate_after_ms:
             raise ActionOfferError("offer must be revalidated", kind="stale")
-        if existing is None:
-            return
-        match existing.status:
-            case OfferStatus.APPROVED | OfferStatus.PROPOSED:
-                return
-            case OfferStatus.REJECTED:
-                raise ActionOfferError("offer was rejected", kind="rejected")
-            case OfferStatus.REVOKED:
-                raise ActionOfferError("offer was revoked", kind="revoked")
-            case _ as unreachable:
-                assert_never(unreachable)
 
     def _assert_actor(self, offer: ActionOffer, auth_scope: str) -> None:
         if auth_scope != offer.auth_scope:
@@ -705,11 +979,12 @@ class ActionOfferHost:
         self,
         offer: ActionOffer,
         persisted: RunResult | None,
+        delivery: str,
     ) -> RunResult:
         compiled = self._definition(offer)
         runner = WorkflowRunner(
             compiled,
-            self.handlers,
+            self._effect_handlers(delivery),
             resources=self.resources,
             run_store=self.run_store,
             clock=self.clock,
@@ -719,6 +994,19 @@ class ActionOfferHost:
         if persisted is not None and persisted.status == "running":
             return await runner.resume(run_id)
         return await runner.run(thaw_json(offer.input), run_id=run_id)
+
+    def _effect_handlers(self, delivery: str) -> dict[str, Handler]:
+        return {
+            name: self._wrap_effect(delivery, handler)
+            for name, handler in self.handlers.items()
+        }
+
+    def _wrap_effect(self, delivery: str, handler: Handler) -> Handler:
+        async def wrapped(payload: Mapping[str, Any]) -> Any:
+            result, _reused = await self.store.run_effect(delivery, lambda: handler(payload))
+            return result
+
+        return wrapped
 
     def _definition(self, offer: ActionOffer) -> CompiledDefinition:
         key = (offer.handler, tuple(sorted(offer.input)))
@@ -767,16 +1055,32 @@ class ActionOfferHost:
                 "events": list(acceptance.run.events),
                 "error": acceptance.run.error,
             }
-        await self.store.save(
-            OfferRecord(
-                offer=offer,
-                status=status,
-                run_id=None if acceptance.run is None else acceptance.run.run_id,
-                delivery_key=acceptance.delivery_key,
-                result=result,
-                decided_at_ms=now_ms,
-            )
+        record = OfferRecord(
+            offer=offer,
+            status=status,
+            run_id=None if acceptance.run is None else acceptance.run.run_id,
+            delivery_key=acceptance.delivery_key,
+            result=result,
+            decided_at_ms=now_ms,
         )
+        written = await self.store.transition(
+            offer.offer_id,
+            expected={OfferStatus.APPROVING, OfferStatus.APPROVED, None, OfferStatus.PROPOSED},
+            record=record,
+        )
+        if written is None:
+            current = await self.store.load(offer.offer_id)
+            if current is None or current.status is not OfferStatus.APPROVED:
+                raise ActionOfferError(
+                    "offer decision changed while recording approval",
+                    kind="conflict",
+                )
+
+
+def _consume_future_exception(flight: asyncio.Future[Any]) -> None:
+    if flight.cancelled():
+        return
+    flight.exception()
 
 
 def _task_bindings(input_data: Mapping[str, Any]) -> dict[str, Any]:
@@ -1083,6 +1387,9 @@ def benchmark_main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "ACTION_OFFER_SCHEMA_VERSION",
+    "CLAIMABLE_OFFER_STATUSES",
+    "REJECTABLE_OFFER_STATUSES",
+    "REVOKABLE_OFFER_STATUSES",
     "ActionOffer",
     "ActionOfferError",
     "ActionOfferHost",

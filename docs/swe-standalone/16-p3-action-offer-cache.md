@@ -22,7 +22,7 @@ microtask compiler.
 | Surface | Decision |
 | --- | --- |
 | SWD 1.0 / journal v1 / events / Rust wire | No change |
-| `decision_cache_key` v1 | **KEEP.** Not a silent v2. Hosts put auth/policy/model/provider version in `cache_params`. |
+| `decision_cache_key` v1 | **KEEP.** Not a silent v2. Isolation fields stay in `cache_params` and are now fail-closed. |
 | `DecisionCache.resolve` | Unchanged signature |
 | ActionOffer | New host contract `action_offer.v0`, outside frozen wire |
 
@@ -32,9 +32,9 @@ microtask compiler.
 | --- | --- |
 | Stale / expired / policy-changed offer | Revalidate on approve; fail closed before reserve or dispatch |
 | Unauthorized caller | `auth_scope` must match exactly |
-| Cross-scope cache reuse | v1 key includes `params`; `scoped_cache_params` is the supported escape hatch. Instance `namespace` isolates process-level tenants. A first-class v2 key is P4. |
-| Concurrent double accept | In-process single-flight claim per `offer_id` before dispatch |
-| Double accept / double external effect | Offer ledger + deterministic `run_id` + `RunStore` replay + budget idempotency key |
+| Cross-scope cache reuse | v1 key includes `params`; `scoped_cache_params` and exact dispatch require `auth_scope`, `policy_version`, and `model`. Missing fields fail closed. Instance `namespace` is extra isolation, not a substitute. |
+| Concurrent approve/reject/revoke | Persistent `OfferStore.transition` CAS. Reject/revoke cannot start a claimed offer; a rejected/revoked offer cannot become `APPROVING`. |
+| Double accept / double external effect | Persistent `APPROVING` claim + `run_effect(delivery_key)` + `RunStore` replay + budget key. In-process single-flight is only a same-host fast path. |
 | Lost settle after completed run | Recovery path re-reserves and settles before remembering approval |
 | Cancelled waiter corrupts L1 | Shared flight is shielded; last waiter cancels compute; failures are not stored |
 
