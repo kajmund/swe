@@ -15,3 +15,6 @@ All notable changes to this project are documented here.
 - Serialize ActionOffer approve/reject/revoke through a persistent store
   claim, persist handler effects for cross-host retry, and fail closed when
   exact-cache isolation (`auth_scope`, `policy_version`, `model`) is missing.
+- Make ActionOffer claim takeover a lease-token CAS, refuse const-alias
+  collisions, skip freshness only when completed or replayable work exists,
+  and keep both the definition cache and L1 decision cache on true LRU eviction.

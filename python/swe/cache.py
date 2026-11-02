@@ -209,6 +209,7 @@ class _CacheEntry:
     key: str
     value: Mapping[str, Any]
     inserted_at_ms: int
+    last_access_ms: int
     expires_at_ms: int | None
     size_bytes: int
 
@@ -382,6 +383,7 @@ class InMemoryDecisionCache:
         if entry.expires_at_ms is not None and now >= entry.expires_at_ms:
             self._drop(key, _DropReason.EXPIRY)
             return None
+        entry.last_access_ms = now
         return entry
 
     def _store(self, key: str, answer: Mapping[str, Any], now: int) -> None:
@@ -399,13 +401,14 @@ class InMemoryDecisionCache:
         ):
             victim = min(
                 self._entries.values(),
-                key=lambda entry: (entry.inserted_at_ms, entry.key),
+                key=lambda entry: (entry.last_access_ms, entry.inserted_at_ms, entry.key),
             )
             self._drop(victim.key, _DropReason.EVICTION)
         self._entries[key] = _CacheEntry(
             key=key,
             value=frozen,
             inserted_at_ms=now,
+            last_access_ms=now,
             expires_at_ms=expires_at_ms,
             size_bytes=size,
         )
