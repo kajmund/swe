@@ -33,7 +33,9 @@ microtask compiler.
 | Stale / expired / policy-changed offer | Revalidate on approve; fail closed before reserve or dispatch |
 | Unauthorized caller | `auth_scope` must match exactly |
 | Cross-scope cache reuse | v1 key includes `params`; `scoped_cache_params` is the supported escape hatch. Instance `namespace` isolates process-level tenants. A first-class v2 key is P4. |
+| Concurrent double accept | In-process single-flight claim per `offer_id` before dispatch |
 | Double accept / double external effect | Offer ledger + deterministic `run_id` + `RunStore` replay + budget idempotency key |
+| Lost settle after completed run | Recovery path re-reserves and settles before remembering approval |
 | Cancelled waiter corrupts L1 | Shared flight is shielded; last waiter cancels compute; failures are not stored |
 
 ## Left to P4
