@@ -38,6 +38,25 @@ microtask compiler.
 | Lost settle after completed run | Recovery path re-reserves and settles before remembering approval |
 | Cancelled waiter corrupts L1 | Shared flight is shielded; last waiter cancels compute; failures are not stored |
 
+## Review response (P1/P2)
+
+Approve, reject, and revoke now share `OfferStore.transition`. The winner of
+`None|proposed → approving|rejected|revoked` is the only caller that may start
+a handler. Two hosts that share the store see the same order. Handler
+invocation goes through `run_effect(delivery_key)`, so a crash after the side
+effect and a retry on another host replay the stored result. A deterministic
+`run_id` is no longer the only idempotency story.
+
+Exact cache isolation is enforced in `scoped_cache_params` and
+`cache_policy: exact` dispatch. Missing `auth_scope`, `policy_version`, or
+`model` fail closed. `decision_cache_key` v1 bytes are unchanged.
+
+Regression tests cover concurrent approve/reject/revoke, two-host approve,
+reject-then-approve, crash/retry across hosts, cross-tenant/policy/model
+cache keys, and exact dispatch without isolation. Do not use this for
+production side effects until a durable store adapter implements the same
+exclusivity.
+
 ## Left to P4
 
 - First-class v2 `decision_cache_key` fields (auth/policy/model/version)
