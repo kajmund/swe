@@ -56,8 +56,9 @@ Exact cache isolation is enforced in `scoped_cache_params` and
 `model` fail closed. `decision_cache_key` v1 bytes are unchanged.
 
 Compiled offer definitions are cached by handler plus the SHA-256 of the
-thawed task bindings. SWD-valid identifier keys stay path bindings (`$.name`)
-and can still share a compiled document. Other keys such as `document-id` are
+thawed task bindings. SWD-valid identifier keys stay path bindings (`$.input.name`)
+so names like `input` and `run` are not overwritten by the machine context.
+They can still share a compiled document. Other keys such as `document-id` are
 embedded as thawed `const` values under a deterministic SWD-safe alias and
 restored to the original name before the handler runs, so two offers with the
 same keys and different values compile separately.

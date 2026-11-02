@@ -435,6 +435,68 @@ def test_empty_bound_input_is_not_fingerprint_only() -> None:
     assert bound.offer_id != unbound.offer_id
 
 
+async def test_input_and_run_keys_keep_their_bound_values() -> None:
+    pytest.importorskip("swe_native")
+    seen: list[Mapping[str, Any]] = []
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        seen.append({"input": payload["input"], "run": payload["run"]})
+        return {"ok": True}
+
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    result = await host.approve(
+        _offer(input={"input": "document text", "run": "manual"}),
+        auth_scope="tenant-a",
+    )
+    assert result.run is not None
+    assert result.run.status == "completed"
+    assert seen == [{"input": "document text", "run": "manual"}]
+
+
+async def test_claim_wait_rechecks_freshness_before_new_dispatch() -> None:
+    pytest.importorskip("swe_native")
+    clock = FrozenClock(now=0)
+    executions: list[str] = []
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        executions.append(str(payload["doc"]))
+        return {"published": payload["doc"]}
+
+    store = MemoryOfferStore()
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=MemoryRunStore(),
+        clock=clock,
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer(expires_at_ms=50)
+    await store.save(
+        OfferRecord(
+            offer=offer,
+            status=OfferStatus.APPROVING,
+            delivery_key=offer_delivery_key(offer.offer_id, offer.action_ref),
+            claimed_until_ms=100,
+        )
+    )
+    original_wait = store.wait
+
+    async def wait_and_expire(*args: Any, **kwargs: Any):
+        clock.advance(100)
+        return await original_wait(*args, **kwargs)
+
+    store.wait = wait_and_expire  # type: ignore[method-assign]
+    with pytest.raises(ActionOfferError, match="expired") as info:
+        await host.approve(offer, auth_scope="tenant-a")
+    assert info.value.kind == "expired"
+    assert executions == []
+
+
 async def test_constant_bound_values_are_not_shared_across_offers() -> None:
     pytest.importorskip("swe_native")
     seen: list[Any] = []

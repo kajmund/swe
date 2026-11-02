@@ -54,9 +54,11 @@ then:
 5. runs or resumes the existing SWE machine with handlers wrapped by
    `OfferStore.run_effect(delivery_key, ...)` so a second host or a crash
    after the side effect does not invoke the external effect again.
-   Task bindings thaw nested JSON first. Identifier keys stay path
-   bindings; other keys become `const` values under a SWD-safe alias and
-   are restored before the handler. The in-host definition cache keys on
+   Task bindings thaw nested JSON first. Identifier keys stay
+   `$.input.<key>` path bindings so `input` and `run` keep their values;
+   other keys become `const` values under a SWD-safe alias and are
+   restored before the handler. Freshness is rechecked before a new
+   dispatch after a claim wait. The in-host definition cache keys on
    handler plus the canonical bindings, including those const values;
 6. settles on `completed` (idempotent), otherwise releases.
 

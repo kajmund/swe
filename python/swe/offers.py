@@ -860,6 +860,12 @@ class ActionOfferHost:
                 f"offer {resolved.offer_id} already ended with {persisted.status!r}",
                 kind=persisted.status,
             )
+        if persisted is None and await self.store.load_effect(delivery) is None:
+            self._assert_fresh(
+                resolved,
+                auth_scope=resolved.auth_scope,
+                now_ms=self.clock.now_ms(),
+            )
         if not resolved.input_bound:
             raise ActionOfferError(
                 "unbound offer cannot be approved without matching input",
@@ -1131,7 +1137,7 @@ def _task_bindings(input_data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[
     names: dict[str, str] = {}
     for key, value in thawed.items():
         if BINDING_KEY_RE.fullmatch(key):
-            bindings[key] = f"$.{key}"
+            bindings[key] = f"$.input.{key}"
             names[key] = key
             continue
         alias = _const_binding_name(key)
