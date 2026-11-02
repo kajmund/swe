@@ -38,6 +38,8 @@ budget, and dispatch; neither duplicates them.
 | Double accept / double external effect | Persistent `APPROVING` claim + `run_effect(delivery_key)` + `RunStore` replay + budget key. In-process single-flight is only a same-host fast path. |
 | Lost settle after completed run | Recovery path re-reserves and settles before remembering approval |
 | Cancelled waiter corrupts L1 | Shared flight is shielded; last waiter cancels compute; failures are not stored |
+| Wrong const reused via definition cache | Cache identity is handler plus canonical thawed bindings, including const values |
+| Nested frozen const cannot compile | `_task_bindings` deep-thaws input before embedding SWD constants |
 
 ## Review response (P1/P2)
 
@@ -52,11 +54,18 @@ Exact cache isolation is enforced in `scoped_cache_params` and
 `cache_policy: exact` dispatch. Missing `auth_scope`, `policy_version`, or
 `model` fail closed. `decision_cache_key` v1 bytes are unchanged.
 
+Compiled offer definitions are cached by handler plus the SHA-256 of the
+thawed task bindings. SWD-valid identifier keys stay path bindings (`$.name`)
+and can still share a compiled document. Other keys such as `document-id` are
+embedded as thawed `const` values under a deterministic SWD-safe alias and
+restored to the original name before the handler runs, so two offers with the
+same keys and different values compile separately.
+
 Regression tests cover concurrent approve/reject/revoke, two-host approve,
 reject-then-approve, crash/retry across hosts, cross-tenant/policy/model
-cache keys, and exact dispatch without isolation. Do not use this for
-production side effects until a durable store adapter implements the same
-exclusivity.
+cache keys, exact dispatch without isolation, distinct const values on a
+shared host, and nested object/list consts. Do not use this for production
+side effects until a durable store adapter implements the same exclusivity.
 
 ## Left to P4
 

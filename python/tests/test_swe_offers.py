@@ -398,6 +398,53 @@ def test_empty_bound_input_is_not_fingerprint_only() -> None:
     assert bound.offer_id != unbound.offer_id
 
 
+async def test_constant_bound_values_are_not_shared_across_offers() -> None:
+    pytest.importorskip("swe_native")
+    seen: list[Any] = []
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        seen.append(payload["document-id"])
+        return {"id": payload["document-id"]}
+
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    first = await host.approve(_offer(input={"document-id": 1}), auth_scope="tenant-a")
+    second = await host.approve(_offer(input={"document-id": 2}), auth_scope="tenant-a")
+    assert first.run is not None and first.run.status == "completed"
+    assert second.run is not None and second.run.status == "completed"
+    assert seen == [1, 2]
+    assert first.run.output != second.run.output
+
+
+async def test_nested_constant_bindings_compile_and_dispatch() -> None:
+    pytest.importorskip("swe_native")
+    seen: list[Any] = []
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        seen.append(json.loads(json.dumps(payload["document-id"])))
+        return {"ok": True}
+
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    object_result = await host.approve(
+        _offer(input={"document-id": {"id": 1}}),
+        auth_scope="tenant-a",
+    )
+    list_result = await host.approve(
+        _offer(input={"document-id": [1]}),
+        auth_scope="tenant-a",
+    )
+    assert object_result.run is not None and object_result.run.status == "completed"
+    assert list_result.run is not None and list_result.run.status == "completed"
+    assert seen == [{"id": 1}, [1]]
+
+
 def test_nested_offer_and_record_are_json_serializable() -> None:
     offer = _offer(
         input={

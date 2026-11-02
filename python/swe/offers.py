@@ -44,7 +44,7 @@ from swe.schema import HANDLER_NAME_PATTERN, SWD_VERSION
 ACTION_OFFER_SCHEMA_VERSION = "action_offer.v0"
 OFFER_WORKFLOW_NAME = "action_offer"
 HANDLER_NAME_RE = re.compile(HANDLER_NAME_PATTERN)
-BINDING_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+BINDING_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 DEFAULT_TIMEOUT_SECONDS = 300
 DEFAULT_TARIFF_MILLI = 1
 
@@ -570,7 +570,7 @@ class ActionOfferHost:
             raise ActionOfferError("claim_lease_ms must be a positive integer", kind="invalid")
         else:
             self.claim_lease_ms = claim_lease_ms
-        self._definitions: dict[tuple[str, tuple[str, ...]], CompiledDefinition] = {}
+        self._definitions: dict[tuple[str, str], CompiledDefinition] = {}
         self._claim_lock = asyncio.Lock()
         self._inflight: dict[str, asyncio.Future[OfferAcceptance]] = {}
 
@@ -984,7 +984,7 @@ class ActionOfferHost:
         compiled = self._definition(offer)
         runner = WorkflowRunner(
             compiled,
-            self._effect_handlers(delivery),
+            self._effect_handlers(delivery, offer),
             resources=self.resources,
             run_store=self.run_store,
             clock=self.clock,
@@ -995,25 +995,32 @@ class ActionOfferHost:
             return await runner.resume(run_id)
         return await runner.run(thaw_json(offer.input), run_id=run_id)
 
-    def _effect_handlers(self, delivery: str) -> dict[str, Handler]:
+    def _effect_handlers(self, delivery: str, offer: ActionOffer) -> dict[str, Handler]:
+        _bindings, names = _task_bindings(offer.input)
         return {
-            name: self._wrap_effect(delivery, handler)
+            name: self._wrap_effect(delivery, handler, names)
             for name, handler in self.handlers.items()
         }
 
-    def _wrap_effect(self, delivery: str, handler: Handler) -> Handler:
+    def _wrap_effect(
+        self,
+        delivery: str,
+        handler: Handler,
+        names: Mapping[str, str],
+    ) -> Handler:
         async def wrapped(payload: Mapping[str, Any]) -> Any:
-            result, _reused = await self.store.run_effect(delivery, lambda: handler(payload))
+            restored = {names.get(key, key): value for key, value in payload.items()}
+            result, _reused = await self.store.run_effect(delivery, lambda: handler(restored))
             return result
 
         return wrapped
 
     def _definition(self, offer: ActionOffer) -> CompiledDefinition:
-        key = (offer.handler, tuple(sorted(offer.input)))
+        bindings, _names = _task_bindings(offer.input)
+        key = (offer.handler, sha256_hex(bindings))
         compiled = self._definitions.get(key)
         if compiled is not None:
             return compiled
-        bindings = _task_bindings(offer.input)
         compiled = compile_definition(
             {
                 "version": SWD_VERSION,
@@ -1083,14 +1090,23 @@ def _consume_future_exception(flight: asyncio.Future[Any]) -> None:
     flight.exception()
 
 
-def _task_bindings(input_data: Mapping[str, Any]) -> dict[str, Any]:
+def _const_binding_name(key: str) -> str:
+    return f"c_{sha256_hex({'offer_const_key': key})}"
+
+
+def _task_bindings(input_data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+    thawed = thaw_json(input_data)
     bindings: dict[str, Any] = {}
-    for key in input_data:
+    names: dict[str, str] = {}
+    for key, value in thawed.items():
         if BINDING_KEY_RE.fullmatch(key):
             bindings[key] = f"$.{key}"
-        else:
-            bindings[key] = {"const": input_data[key]}
-    return bindings
+            names[key] = key
+            continue
+        alias = _const_binding_name(key)
+        bindings[alias] = {"const": value}
+        names[alias] = key
+    return bindings, names
 
 
 def _bound_input(
