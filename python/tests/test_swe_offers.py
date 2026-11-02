@@ -568,10 +568,12 @@ async def test_const_definitions_are_not_retained_and_identifier_cache_is_bounde
     first = await host.approve(_offer(input={"doc": "a"}), auth_scope="tenant-a")
     first_key = next(iter(host._definitions))
     second = await host.approve(_offer(input={"rev": 1}), auth_scope="tenant-a")
-    third = await host.approve(_offer(input={"doc": "c", "rev": 2}), auth_scope="tenant-a")
+    await host.approve(_offer(input={"doc": "b"}), auth_scope="tenant-a")
+    third = await host.approve(_offer(input={"ok": True}), auth_scope="tenant-a")
     assert first.run is not None and second.run is not None and third.run is not None
     assert len(host._definitions) == 2
-    assert first_key not in host._definitions
+    assert first_key in host._definitions
+    assert any(key[1] != first_key[1] for key in host._definitions)
 
 
 def test_nested_offer_and_record_are_json_serializable() -> None:
