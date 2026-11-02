@@ -36,7 +36,8 @@ budget, and dispatch; neither duplicates them.
 | Cross-scope cache reuse | v1 key includes `params`; `scoped_cache_params` and exact dispatch require `auth_scope`, `policy_version`, and `model`. Missing fields fail closed. Instance `namespace` is extra isolation, not a substitute. |
 | Concurrent approve/reject/revoke | Persistent `OfferStore.transition` CAS. Reject/revoke cannot start a claimed offer; a rejected/revoked offer cannot become `APPROVING`. |
 | Double accept / double external effect | Persistent `APPROVING` claim + `run_effect(delivery_key)` + `RunStore` replay + budget key. In-process single-flight is only a same-host fast path. |
-| Lost settle after completed run | Recovery path re-reserves and settles before remembering approval |
+| Lost settle after completed run | Recovery path re-reserves and settles before remembering approval. Auth is still required after expiry; freshness is skipped only when a completed run already exists, so no new dispatch starts. |
+| Unbounded compiled-definition cache | Const-bearing definitions are not retained. Identifier-only documents use a bounded LRU. |
 | Cancelled waiter corrupts L1 | Shared flight is shielded; last waiter cancels compute; failures are not stored |
 | Wrong const reused via definition cache | Cache identity is handler plus canonical thawed bindings, including const values |
 | Nested frozen const cannot compile | `_task_bindings` deep-thaws input before embedding SWD constants |

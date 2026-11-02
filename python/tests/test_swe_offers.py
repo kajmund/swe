@@ -342,6 +342,43 @@ async def test_recovery_settles_budget_after_settle_crash() -> None:
     assert budget.settled[key] == 1
 
 
+async def test_expired_offer_still_settles_a_completed_run() -> None:
+    pytest.importorskip("swe_native")
+    clock = FrozenClock(now=10)
+    executions: list[str] = []
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        executions.append(str(payload["doc"]))
+        return {"published": payload["doc"]}
+
+    budget = _FailFirstSettle()
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        store=MemoryOfferStore(),
+        run_store=MemoryRunStore(),
+        budget=budget,
+        clock=clock,
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer(expires_at_ms=20)
+    with pytest.raises(RuntimeError, match="settle crashed"):
+        await host.approve(offer, auth_scope="tenant-a")
+    assert executions == ["a"]
+    assert budget.settled == {}
+    clock.advance(20)
+    recovered = await host.approve(offer, auth_scope="tenant-a")
+    assert recovered.reused is True
+    assert recovered.run is not None
+    assert recovered.run.status == "completed"
+    assert executions == ["a"]
+    key = offer_delivery_key(offer.offer_id, "demo.publish")
+    assert budget.settled[key] == 1
+    with pytest.raises(ActionOfferError, match="not authorized") as auth_info:
+        await host.approve(offer, auth_scope="tenant-b")
+    assert auth_info.value.kind == "unauthorized"
+
+
 async def test_empty_bound_input_dispatches() -> None:
     pytest.importorskip("swe_native")
     seen: list[Mapping[str, Any]] = []
@@ -443,6 +480,36 @@ async def test_nested_constant_bindings_compile_and_dispatch() -> None:
     assert object_result.run is not None and object_result.run.status == "completed"
     assert list_result.run is not None and list_result.run.status == "completed"
     assert seen == [{"id": 1}, [1]]
+
+
+async def test_const_definitions_are_not_retained_and_identifier_cache_is_bounded() -> None:
+    pytest.importorskip("swe_native")
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        return {"ok": payload.get("document-id", payload.get("doc"))}
+
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        policy_version="pol-1",
+        context_version="ctx-1",
+        definition_cache_max=2,
+    )
+    for index in range(8):
+        result = await host.approve(
+            _offer(input={"document-id": index}),
+            auth_scope="tenant-a",
+        )
+        assert result.run is not None
+        assert result.run.status == "completed"
+    assert host._definitions == {}
+
+    first = await host.approve(_offer(input={"doc": "a"}), auth_scope="tenant-a")
+    first_key = next(iter(host._definitions))
+    second = await host.approve(_offer(input={"rev": 1}), auth_scope="tenant-a")
+    third = await host.approve(_offer(input={"doc": "c", "rev": 2}), auth_scope="tenant-a")
+    assert first.run is not None and second.run is not None and third.run is not None
+    assert len(host._definitions) == 2
+    assert first_key not in host._definitions
 
 
 def test_nested_offer_and_record_are_json_serializable() -> None:

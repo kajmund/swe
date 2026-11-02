@@ -21,6 +21,7 @@ import platform
 import re
 import sys
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -47,6 +48,7 @@ HANDLER_NAME_RE = re.compile(HANDLER_NAME_PATTERN)
 BINDING_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 DEFAULT_TIMEOUT_SECONDS = 300
 DEFAULT_TARIFF_MILLI = 1
+DEFAULT_DEFINITION_CACHE = 256
 
 
 class OfferStatus(StrEnum):
@@ -551,6 +553,7 @@ class ActionOfferHost:
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         concurrency: int = 1,
         claim_lease_ms: int | None = None,
+        definition_cache_max: int = DEFAULT_DEFINITION_CACHE,
     ) -> None:
         self.handlers = dict(handlers)
         self.store = store or MemoryOfferStore()
@@ -570,7 +573,12 @@ class ActionOfferHost:
             raise ActionOfferError("claim_lease_ms must be a positive integer", kind="invalid")
         else:
             self.claim_lease_ms = claim_lease_ms
-        self._definitions: dict[tuple[str, str], CompiledDefinition] = {}
+        if isinstance(definition_cache_max, bool) or definition_cache_max < 1:
+            raise ActionOfferError(
+                "definition_cache_max must be a positive integer", kind="invalid"
+            )
+        self._definition_cache_max = definition_cache_max
+        self._definitions: OrderedDict[tuple[str, str], CompiledDefinition] = OrderedDict()
         self._claim_lock = asyncio.Lock()
         self._inflight: dict[str, asyncio.Future[OfferAcceptance]] = {}
 
@@ -587,7 +595,9 @@ class ActionOfferHost:
     ) -> OfferAcceptance:
         resolved = ActionOffer.from_value(offer)
         now = self.clock.now_ms()
-        self._assert_fresh(resolved, auth_scope=auth_scope, now_ms=now)
+        self._assert_actor(resolved, auth_scope)
+        if not await self._completed_without_new_dispatch(resolved):
+            self._assert_fresh(resolved, auth_scope=auth_scope, now_ms=now)
         delivery = offer_delivery_key(resolved.offer_id, resolved.action_ref)
         owner, flight = await self._claim(resolved.offer_id)
         if not owner:
@@ -927,6 +937,13 @@ class ActionOfferHost:
         if auth_scope != offer.auth_scope:
             raise ActionOfferError("caller is not authorized for this offer", kind="unauthorized")
 
+    async def _completed_without_new_dispatch(self, offer: ActionOffer) -> bool:
+        existing = await self.store.load(offer.offer_id)
+        if existing is not None and existing.status is OfferStatus.APPROVED:
+            return True
+        persisted = await self._load_persisted_run(offer)
+        return persisted is not None and persisted.status == "completed"
+
     def _reuse(
         self,
         offer: ActionOffer,
@@ -1043,8 +1060,22 @@ class ActionOfferHost:
             },
             handlers=frozenset({offer.handler}),
         )
-        self._definitions[key] = compiled
+        self._store_definition(key, compiled, cacheable=not _has_const_binding(bindings))
         return compiled
+
+    def _store_definition(
+        self,
+        key: tuple[str, str],
+        compiled: CompiledDefinition,
+        *,
+        cacheable: bool,
+    ) -> None:
+        if not cacheable:
+            return
+        self._definitions[key] = compiled
+        self._definitions.move_to_end(key)
+        while len(self._definitions) > self._definition_cache_max:
+            self._definitions.popitem(last=False)
 
     async def _remember(
         self,
@@ -1107,6 +1138,10 @@ def _task_bindings(input_data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[
         bindings[alias] = {"const": value}
         names[alias] = key
     return bindings, names
+
+
+def _has_const_binding(bindings: Mapping[str, Any]) -> bool:
+    return any(isinstance(value, Mapping) and "const" in value for value in bindings.values())
 
 
 def _bound_input(
