@@ -379,6 +379,44 @@ async def test_expired_offer_still_settles_a_completed_run() -> None:
     assert auth_info.value.kind == "unauthorized"
 
 
+async def test_expired_offer_still_settles_a_persisted_effect() -> None:
+    pytest.importorskip("swe_native")
+    clock = FrozenClock(now=10)
+    executions: list[str] = []
+
+    async def work(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        executions.append(str(payload["doc"]))
+        return {"published": payload["doc"]}
+
+    store = MemoryOfferStore()
+    run_store = _CrashOnceStore(crash_after=1)
+    budget = MemoryOfferBudget()
+    host = ActionOfferHost(
+        {"demo.publish": work},
+        store=store,
+        run_store=run_store,
+        budget=budget,
+        clock=clock,
+        policy_version="pol-1",
+        context_version="ctx-1",
+    )
+    offer = _offer(expires_at_ms=20)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        await host.approve(offer, auth_scope="tenant-a")
+    assert executions == ["a"]
+    delivery = offer_delivery_key(offer.offer_id, "demo.publish")
+    assert await store.load_effect(delivery) is not None
+    clock.advance(20)
+    recovered = await host.approve(offer, auth_scope="tenant-a")
+    assert recovered.run is not None
+    assert recovered.run.status == "completed"
+    assert executions == ["a"]
+    assert budget.settled[delivery] == 1
+    with pytest.raises(ActionOfferError, match="not authorized") as auth_info:
+        await host.approve(offer, auth_scope="tenant-b")
+    assert auth_info.value.kind == "unauthorized"
+
+
 async def test_empty_bound_input_dispatches() -> None:
     pytest.importorskip("swe_native")
     seen: list[Mapping[str, Any]] = []

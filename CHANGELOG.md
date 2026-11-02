@@ -15,3 +15,5 @@ All notable changes to this project are documented here.
 - Serialize ActionOffer approve/reject/revoke through a persistent store
   claim, persist handler effects for cross-host retry, and fail closed when
   exact-cache isolation (`auth_scope`, `policy_version`, `model`) is missing.
+- Reconcile expired ActionOffers when a handler effect is already persisted,
+  so crash recovery can settle without a second side effect.

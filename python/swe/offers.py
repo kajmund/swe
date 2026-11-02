@@ -948,7 +948,10 @@ class ActionOfferHost:
         if existing is not None and existing.status is OfferStatus.APPROVED:
             return True
         persisted = await self._load_persisted_run(offer)
-        return persisted is not None and persisted.status == "completed"
+        if persisted is not None and persisted.status == "completed":
+            return True
+        delivery = offer_delivery_key(offer.offer_id, offer.action_ref)
+        return await self.store.load_effect(delivery) is not None
 
     def _reuse(
         self,
