@@ -38,13 +38,18 @@ class RunRecord:
 
 @dataclass(frozen=True)
 class InvocationRecord:
-    """Persisted handler outcome; replayed instead of running the handler again."""
+    """Persisted handler outcome; replayed instead of running the handler again.
+
+    ``error`` is ``None`` on success. Legacy records may store a string.
+    New failures store ``{kind, message, path?}`` with optional opaque
+    ``payload``. Domain kinds are host data; SWE does not interpret them.
+    """
 
     invocation_id: str
     node_id: str
     ok: bool
     value: Any
-    error: str | None
+    error: str | Mapping[str, Any] | None
 
 
 class RunStore(Protocol):

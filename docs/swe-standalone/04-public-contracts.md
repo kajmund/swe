@@ -422,7 +422,10 @@ allowed-action set is sufficient.
 - `RunStore` (Rust trait + Python protocol) is public; the OverGraph
   implementation remains a Socialism adapter.
 - `RunRecord` / `InvocationRecord` fields are public; storage keys/layout are
-  not.
+  not. `InvocationRecord.error` is `null` on success, a legacy string, or a
+  mapping `{kind, message, path?, payload?}`. `Machine.fail` accepts the same
+  string or mapping. Unknown `kind` values stay on the host record and map to
+  kernel `handler`. `payload` is opaque host JSON and is not interpreted by SWE.
 - The Python host's `RunResult {run_id, status, output, events, error}` is the
   stable host-facing result shape.
 

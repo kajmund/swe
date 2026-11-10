@@ -107,18 +107,19 @@ impl PyMachine {
         outcome_to_py(py, &outcome)
     }
 
-    #[pyo3(signature = (invocation_id, message, now_ms))]
+    #[pyo3(signature = (invocation_id, error, now_ms))]
     fn fail(
         &self,
         py: Python<'_>,
         invocation_id: &str,
-        message: &str,
+        error: Bound<'_, PyAny>,
         now_ms: u64,
     ) -> PyResult<Py<PyAny>> {
         let invocation_id = invocation_id.to_string();
-        let error = RuntimeError::handler(message.to_string());
-        let outcome =
-            self.with_machine(py, |machine| machine.fail(&invocation_id, error, now_ms))?;
+        let runtime_error = runtime_error_from_completion(&error)?;
+        let outcome = self.with_machine(py, |machine| {
+            machine.fail(&invocation_id, runtime_error, now_ms)
+        })?;
         outcome_to_py(py, &outcome)
     }
 
@@ -407,6 +408,39 @@ fn error_to_py(py: Python<'_>, error: &RuntimeError) -> PyResult<Py<PyAny>> {
     dict.set_item("message", &error.message)?;
     dict.set_item("path", &error.path)?;
     Ok(dict.into_any().unbind())
+}
+
+fn runtime_error_from_completion(value: &Bound<'_, PyAny>) -> PyResult<RuntimeError> {
+    if let Ok(message) = value.extract::<String>() {
+        return Ok(RuntimeError::handler(message));
+    }
+    let dict = value.downcast::<PyDict>().map_err(|_| {
+        PyValueError::new_err(
+            "invocation error must be a string or a mapping with kind and message",
+        )
+    })?;
+    let message = match dict.get_item("message")? {
+        Some(item) => item.extract::<String>()?,
+        None => {
+            return Err(PyValueError::new_err(
+                "invocation error mapping requires a string message",
+            ))
+        }
+    };
+    if message.is_empty() {
+        return Err(PyValueError::new_err(
+            "invocation error mapping requires a string message",
+        ));
+    }
+    let kind = match dict.get_item("kind")? {
+        Some(item) => item.extract::<String>()?,
+        None => "handler".to_string(),
+    };
+    let path = match dict.get_item("path")? {
+        Some(item) if !item.is_none() => item.extract::<String>()?,
+        _ => String::new(),
+    };
+    Ok(RuntimeError::from_completion(&kind, message, path))
 }
 
 fn opt_str(value: Option<&str>) -> Option<&str> {

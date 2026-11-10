@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from swe.definition import CompiledDefinition
+from swe.invocation_error import invocation_error_from_exception, normalize_invocation_error
 from swe.runtime_clock import FrozenClock, WorkflowClock
 from swe.runtime_dispatch import (
     Handler,
@@ -397,7 +398,8 @@ def _apply_replay(driver: _Driver, record: InvocationRecord) -> dict[str, Any]:
     now = driver.clock.now_ms()
     if record.ok:
         return driver.machine.complete(record.invocation_id, record.value, now)
-    return driver.machine.fail(record.invocation_id, record.error or "replayed failure", now)
+    error = normalize_invocation_error(record.error)
+    return driver.machine.fail(record.invocation_id, error, now)
 
 
 def _cancelled(driver: _Driver) -> bool:
@@ -463,10 +465,10 @@ def _report_task(
 ) -> tuple[dict[str, Any], InvocationRecord | None]:
     error = task.exception()
     if error is not None:
-        message = f"{type(error).__name__}: {error}"
-        outcome = driver.machine.fail(invocation_id, message, driver.clock.now_ms())
+        payload = invocation_error_from_exception(error)
+        outcome = driver.machine.fail(invocation_id, payload, driver.clock.now_ms())
         node_id = driver.invocation_nodes.pop(invocation_id, "")
-        return outcome, InvocationRecord(invocation_id, node_id, False, None, message)
+        return outcome, InvocationRecord(invocation_id, node_id, False, None, payload)
     result = task.result()
     if result.cancelled:
         driver.invocation_nodes.pop(invocation_id, None)
@@ -476,9 +478,13 @@ def _report_task(
     if result.ok:
         outcome = driver.machine.complete(invocation_id, result.value, driver.clock.now_ms())
         return outcome, InvocationRecord(invocation_id, node_id, True, result.value, None)
-    message = str(result.value)
-    outcome = driver.machine.fail(invocation_id, message, driver.clock.now_ms())
-    return outcome, InvocationRecord(invocation_id, node_id, False, None, message)
+    payload = (
+        normalize_invocation_error(result.value)
+        if isinstance(result.value, (str, Mapping)) or result.value is None
+        else invocation_error_from_exception(TypeError(str(result.value)))
+    )
+    outcome = driver.machine.fail(invocation_id, payload, driver.clock.now_ms())
+    return outcome, InvocationRecord(invocation_id, node_id, False, None, payload)
 
 
 def _run_result(driver: _Driver) -> RunResult:
