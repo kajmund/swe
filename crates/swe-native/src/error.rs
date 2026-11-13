@@ -102,12 +102,16 @@ impl RuntimeError {
         Self::new(ErrorKind::Path, message)
     }
 
+    /// Build the kernel error for a host-reported invocation failure.
+    ///
+    /// Surrounding whitespace on ``kind`` is ignored, and an empty kind is
+    /// ``Handler``, matching the Python host's normalization.
     pub fn from_completion(
         kind: &str,
         message: impl Into<String>,
         path: impl Into<String>,
     ) -> Self {
-        Self::new(ErrorKind::from_wire(kind), message).with_path(path)
+        Self::new(ErrorKind::from_wire(kind.trim()), message).with_path(path)
     }
 }
 
@@ -151,5 +155,20 @@ mod tests {
         assert_eq!(error.kind, ErrorKind::Timeout);
         assert_eq!(error.message, "deadline");
         assert_eq!(error.path, "nodes.work");
+    }
+
+    #[test]
+    fn from_completion_trims_kind_and_reads_blank_as_handler() {
+        for (kind, expected) in [
+            (" timeout", ErrorKind::Timeout),
+            ("timeout\n", ErrorKind::Timeout),
+            ("\tlimit ", ErrorKind::Limit),
+            ("", ErrorKind::Handler),
+            ("   ", ErrorKind::Handler),
+            (" host_kind ", ErrorKind::Handler),
+        ] {
+            let error = RuntimeError::from_completion(kind, "m", "");
+            assert_eq!(error.kind, expected, "kind {kind:?}");
+        }
     }
 }

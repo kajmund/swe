@@ -7,6 +7,8 @@ All notable changes to this project are documented here.
 - Accept structured invocation errors (`kind`, `message`, optional `path` and
   opaque `payload`) on `InvocationRecord.error` and `Machine.fail`, while still
   replaying legacy string errors as `handler`. No journal schema change.
+  Live and replayed failures share one normalization; empty messages and
+  non-JSON payloads fail cleanly. `RunStore` must persist the error as JSON.
 - Extract the generic SWE kernel, Python host, budget ledger, reference app,
   frozen contracts, and verification gates into an independent repository.
 - Add a static microtask DAG compiler that lowers batches to existing SWD 1.0

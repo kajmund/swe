@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from swe.definition import CompiledDefinition
-from swe.invocation_error import invocation_error_from_exception, normalize_invocation_error
+from swe.invocation_error import live_invocation_error, normalize_invocation_error
 from swe.runtime_clock import FrozenClock, WorkflowClock
 from swe.runtime_dispatch import (
     Handler,
@@ -465,7 +465,7 @@ def _report_task(
 ) -> tuple[dict[str, Any], InvocationRecord | None]:
     error = task.exception()
     if error is not None:
-        payload = invocation_error_from_exception(error)
+        payload = live_invocation_error(error)
         outcome = driver.machine.fail(invocation_id, payload, driver.clock.now_ms())
         node_id = driver.invocation_nodes.pop(invocation_id, "")
         return outcome, InvocationRecord(invocation_id, node_id, False, None, payload)
@@ -478,11 +478,7 @@ def _report_task(
     if result.ok:
         outcome = driver.machine.complete(invocation_id, result.value, driver.clock.now_ms())
         return outcome, InvocationRecord(invocation_id, node_id, True, result.value, None)
-    payload = (
-        normalize_invocation_error(result.value)
-        if isinstance(result.value, (str, Mapping)) or result.value is None
-        else invocation_error_from_exception(TypeError(str(result.value)))
-    )
+    payload = live_invocation_error(result.value)
     outcome = driver.machine.fail(invocation_id, payload, driver.clock.now_ms())
     return outcome, InvocationRecord(invocation_id, node_id, False, None, payload)
 

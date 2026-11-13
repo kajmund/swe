@@ -1,6 +1,6 @@
 //! PyO3 surface. Convert, then drop the GIL before mutating run state.
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyList, PyMapping, PyNone, PyTuple};
 use serde_json::Number;
@@ -410,37 +410,50 @@ fn error_to_py(py: Python<'_>, error: &RuntimeError) -> PyResult<Py<PyAny>> {
     Ok(dict.into_any().unbind())
 }
 
+/// Mirror of ``swe.invocation_error.normalize_invocation_error`` for the
+/// kernel: any ``collections.abc.Mapping`` is accepted, a missing/None/blank
+/// ``kind`` is ``handler``, a missing/None/blank ``message`` is a ValueError,
+/// and a wrongly typed field is a TypeError. ``payload`` is ignored here.
 fn runtime_error_from_completion(value: &Bound<'_, PyAny>) -> PyResult<RuntimeError> {
     if let Ok(message) = value.extract::<String>() {
         return Ok(RuntimeError::handler(message));
     }
-    let dict = value.downcast::<PyDict>().map_err(|_| {
-        PyValueError::new_err(
-            "invocation error must be a string or a mapping with kind and message",
-        )
+    let mapping = value.downcast::<PyMapping>().map_err(|_| {
+        PyTypeError::new_err("invocation error must be a string or a mapping with a message")
     })?;
-    let message = match dict.get_item("message")? {
-        Some(item) => item.extract::<String>()?,
-        None => {
-            return Err(PyValueError::new_err(
-                "invocation error mapping requires a string message",
-            ))
-        }
+    let message = match mapping_value(mapping, "message")? {
+        Some(item) => item
+            .extract::<String>()
+            .map_err(|_| PyTypeError::new_err("invocation error message must be a string"))?,
+        None => String::new(),
     };
-    if message.is_empty() {
+    if message.trim().is_empty() {
         return Err(PyValueError::new_err(
-            "invocation error mapping requires a string message",
+            "invocation error mapping requires a non-empty message",
         ));
     }
-    let kind = match dict.get_item("kind")? {
-        Some(item) => item.extract::<String>()?,
-        None => "handler".to_string(),
+    let kind = match mapping_value(mapping, "kind")? {
+        Some(item) => item
+            .extract::<String>()
+            .map_err(|_| PyTypeError::new_err("invocation error kind must be a string"))?,
+        None => String::new(),
     };
-    let path = match dict.get_item("path")? {
-        Some(item) if !item.is_none() => item.extract::<String>()?,
-        _ => String::new(),
+    let path = match mapping_value(mapping, "path")? {
+        Some(item) => item
+            .extract::<String>()
+            .map_err(|_| PyTypeError::new_err("invocation error path must be a string"))?,
+        None => String::new(),
     };
     Ok(RuntimeError::from_completion(&kind, message, path))
+}
+
+/// ``mapping.get(key)``, with an explicit ``None`` read as absent.
+fn mapping_value<'py>(
+    mapping: &Bound<'py, PyMapping>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let item = mapping.call_method1("get", (key,))?;
+    Ok(if item.is_none() { None } else { Some(item) })
 }
 
 fn opt_str(value: Option<&str>) -> Option<&str> {

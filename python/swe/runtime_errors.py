@@ -30,7 +30,9 @@ class SweHandlerError(SweRuntimeError):
         payload: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message, kind=kind, path=path)
-        self.payload = None if payload is None else dict(payload)
+        # Validated as a JSON value when the runtime records the failure; a
+        # non-JSON payload degrades the failure to a plain ``handler`` error.
+        self.payload = dict(payload) if isinstance(payload, Mapping) else payload
 
 
 class SweUnsupportedError(SwePreflightError):
