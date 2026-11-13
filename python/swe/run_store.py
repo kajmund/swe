@@ -38,17 +38,30 @@ class RunRecord:
 
 @dataclass(frozen=True)
 class InvocationRecord:
-    """Persisted handler outcome; replayed instead of running the handler again."""
+    """Persisted handler outcome; replayed instead of running the handler again.
+
+    ``error`` is ``None`` on success. Legacy records may store a string.
+    New failures store the normalized ``{kind, message, path}`` mapping with an
+    optional opaque JSON ``payload``. Domain kinds are host data; SWE does not
+    interpret them. ``RunStore`` must persist it as a JSON value, not ``str()``.
+    """
 
     invocation_id: str
     node_id: str
     ok: bool
     value: Any
-    error: str | None
+    error: str | Mapping[str, Any] | None
 
 
 class RunStore(Protocol):
-    """Durable run sink implemented by the embedding application."""
+    """Durable run sink implemented by the embedding application.
+
+    Implementations must persist ``InvocationRecord.error`` as a JSON value
+    (``null``, a string, or a mapping) and return it the same way from
+    ``replay_results``. Never store ``str()`` of a mapping: replay would read
+    it back as a legacy ``handler`` message and lose ``kind``, ``path`` and
+    ``payload``.
+    """
 
     async def record(
         self,

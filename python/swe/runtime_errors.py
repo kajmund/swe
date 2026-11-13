@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 
 class SweRuntimeError(ValueError):
     """Base error for the in-memory SWE runtime adapter."""
@@ -18,8 +21,18 @@ class SwePreflightError(SweRuntimeError):
 
 
 class SweHandlerError(SweRuntimeError):
-    def __init__(self, message: str, *, path: str = "") -> None:
-        super().__init__(message, kind="handler", path=path)
+    def __init__(
+        self,
+        message: str,
+        *,
+        path: str = "",
+        kind: str = "handler",
+        payload: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, kind=kind, path=path)
+        # Validated as a JSON value when the runtime records the failure; a
+        # non-JSON payload degrades the failure to a plain ``handler`` error.
+        self.payload = dict(payload) if isinstance(payload, Mapping) else payload
 
 
 class SweUnsupportedError(SwePreflightError):

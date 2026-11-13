@@ -1,6 +1,6 @@
 //! PyO3 surface. Convert, then drop the GIL before mutating run state.
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyList, PyMapping, PyNone, PyTuple};
 use serde_json::Number;
@@ -107,18 +107,19 @@ impl PyMachine {
         outcome_to_py(py, &outcome)
     }
 
-    #[pyo3(signature = (invocation_id, message, now_ms))]
+    #[pyo3(signature = (invocation_id, error, now_ms))]
     fn fail(
         &self,
         py: Python<'_>,
         invocation_id: &str,
-        message: &str,
+        error: Bound<'_, PyAny>,
         now_ms: u64,
     ) -> PyResult<Py<PyAny>> {
         let invocation_id = invocation_id.to_string();
-        let error = RuntimeError::handler(message.to_string());
-        let outcome =
-            self.with_machine(py, |machine| machine.fail(&invocation_id, error, now_ms))?;
+        let runtime_error = runtime_error_from_completion(&error)?;
+        let outcome = self.with_machine(py, |machine| {
+            machine.fail(&invocation_id, runtime_error, now_ms)
+        })?;
         outcome_to_py(py, &outcome)
     }
 
@@ -407,6 +408,52 @@ fn error_to_py(py: Python<'_>, error: &RuntimeError) -> PyResult<Py<PyAny>> {
     dict.set_item("message", &error.message)?;
     dict.set_item("path", &error.path)?;
     Ok(dict.into_any().unbind())
+}
+
+/// Mirror of ``swe.invocation_error.normalize_invocation_error`` for the
+/// kernel: any ``collections.abc.Mapping`` is accepted, a missing/None/blank
+/// ``kind`` is ``handler``, a missing/None/blank ``message`` is a ValueError,
+/// and a wrongly typed field is a TypeError. ``payload`` is ignored here.
+fn runtime_error_from_completion(value: &Bound<'_, PyAny>) -> PyResult<RuntimeError> {
+    if let Ok(message) = value.extract::<String>() {
+        return Ok(RuntimeError::handler(message));
+    }
+    let mapping = value.downcast::<PyMapping>().map_err(|_| {
+        PyTypeError::new_err("invocation error must be a string or a mapping with a message")
+    })?;
+    let message = match mapping_value(mapping, "message")? {
+        Some(item) => item
+            .extract::<String>()
+            .map_err(|_| PyTypeError::new_err("invocation error message must be a string"))?,
+        None => String::new(),
+    };
+    if message.trim().is_empty() {
+        return Err(PyValueError::new_err(
+            "invocation error mapping requires a non-empty message",
+        ));
+    }
+    let kind = match mapping_value(mapping, "kind")? {
+        Some(item) => item
+            .extract::<String>()
+            .map_err(|_| PyTypeError::new_err("invocation error kind must be a string"))?,
+        None => String::new(),
+    };
+    let path = match mapping_value(mapping, "path")? {
+        Some(item) => item
+            .extract::<String>()
+            .map_err(|_| PyTypeError::new_err("invocation error path must be a string"))?,
+        None => String::new(),
+    };
+    Ok(RuntimeError::from_completion(&kind, message, path))
+}
+
+/// ``mapping.get(key)``, with an explicit ``None`` read as absent.
+fn mapping_value<'py>(
+    mapping: &Bound<'py, PyMapping>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let item = mapping.call_method1("get", (key,))?;
+    Ok(if item.is_none() { None } else { Some(item) })
 }
 
 fn opt_str(value: Option<&str>) -> Option<&str> {

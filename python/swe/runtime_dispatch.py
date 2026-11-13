@@ -16,6 +16,7 @@ from typing import Any
 
 from swe.prompt_render import render_prompt
 from swe.cache import DecisionCache, assert_cache_isolation, decision_cache_key
+from swe.invocation_error import invocation_error_from_exception
 from swe.runtime_errors import SweHandlerError
 from swe.runtime_validate import require_json_value, validate_output_schema
 
@@ -115,7 +116,9 @@ async def _run_handler(
     except asyncio.CancelledError:
         return HandlerOutcome(invocation_id, node_id, False, None, cancelled=True)
     except SweHandlerError as exc:
-        return HandlerOutcome(invocation_id, node_id, False, str(exc))
+        return HandlerOutcome(
+            invocation_id, node_id, False, invocation_error_from_exception(exc)
+        )
 
 
 async def _run_provider(
@@ -135,7 +138,9 @@ async def _run_provider(
     except asyncio.CancelledError:
         return HandlerOutcome(invocation_id, node_id, False, None, cancelled=True)
     except SweHandlerError as exc:
-        return HandlerOutcome(invocation_id, node_id, False, str(exc))
+        return HandlerOutcome(
+            invocation_id, node_id, False, invocation_error_from_exception(exc)
+        )
 
 
 def _provider_request(

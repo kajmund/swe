@@ -101,6 +101,74 @@ impl RuntimeError {
     pub fn path_error(message: impl Into<String>) -> Self {
         Self::new(ErrorKind::Path, message)
     }
+
+    /// Build the kernel error for a host-reported invocation failure.
+    ///
+    /// Surrounding whitespace on ``kind`` is ignored, and an empty kind is
+    /// ``Handler``, matching the Python host's normalization.
+    pub fn from_completion(
+        kind: &str,
+        message: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Self {
+        Self::new(ErrorKind::from_wire(kind.trim()), message).with_path(path)
+    }
+}
+
+impl ErrorKind {
+    /// Map a host-supplied kind string onto a kernel kind.
+    ///
+    /// Unknown values become ``Handler``. Hosts may still persist the original
+    /// string on ``InvocationRecord.error``; this conversion is kernel-only.
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "preflight" => Self::Preflight,
+            "expression" => Self::Expression,
+            "path" => Self::Path,
+            "type" => Self::Type,
+            "limit" => Self::Limit,
+            "timeout" => Self::Timeout,
+            "idempotency" => Self::Idempotency,
+            "unknown_invocation" => Self::UnknownInvocation,
+            "conflict" => Self::Conflict,
+            "cancelled" => Self::Cancelled,
+            "handler" => Self::Handler,
+            "unsupported" => Self::Unsupported,
+            "internal" => Self::Internal,
+            _ => Self::Handler,
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, RuntimeError>;
+
+#[cfg(test)]
+mod tests {
+    use super::{ErrorKind, RuntimeError};
+
+    #[test]
+    fn from_wire_maps_known_kinds_and_defaults_unknown_to_handler() {
+        assert_eq!(ErrorKind::from_wire("timeout"), ErrorKind::Timeout);
+        assert_eq!(ErrorKind::from_wire("handler"), ErrorKind::Handler);
+        assert_eq!(ErrorKind::from_wire("host_kind"), ErrorKind::Handler);
+        let error = RuntimeError::from_completion("timeout", "deadline", "nodes.work");
+        assert_eq!(error.kind, ErrorKind::Timeout);
+        assert_eq!(error.message, "deadline");
+        assert_eq!(error.path, "nodes.work");
+    }
+
+    #[test]
+    fn from_completion_trims_kind_and_reads_blank_as_handler() {
+        for (kind, expected) in [
+            (" timeout", ErrorKind::Timeout),
+            ("timeout\n", ErrorKind::Timeout),
+            ("\tlimit ", ErrorKind::Limit),
+            ("", ErrorKind::Handler),
+            ("   ", ErrorKind::Handler),
+            (" host_kind ", ErrorKind::Handler),
+        ] {
+            let error = RuntimeError::from_completion(kind, "m", "");
+            assert_eq!(error.kind, expected, "kind {kind:?}");
+        }
+    }
+}
