@@ -46,8 +46,13 @@ replays its ledger and deduplicates settlement by charge id.
 
 Unknown handlers/providers/choices, malformed completions, missing prompt data,
 invalid bindings, deadlines, and host exceptions become typed failures. Limits
-bound steps, graph depth, map concurrency, and wall-clock runtime. Cancellation
-emits cancellation effects for outstanding host work.
+bound steps, graph depth, map concurrency, and wall-clock runtime.
+Host-owned `WorkflowResources.action_timeouts` bound individual task and
+provider invocations by SWD node id without changing the SWD document.
+Action expiry cancels that asyncio task; it does not call `Machine.tick`
+(tick remains workflow-wide) and does not force-stop blocking I/O. Retry
+stays unsupported. Cancellation emits cancellation effects for outstanding
+host work.
 
 ## Non-goals
 
