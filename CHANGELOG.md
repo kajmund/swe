@@ -6,9 +6,13 @@ All notable changes to this project are documented here.
 
 - Add host-owned per-action timeouts on `WorkflowResources.action_timeouts`,
   keyed by SWD node id. SWD 1.0 is unchanged, retry stays unsupported, and
-  blocking I/O is not force-stopped. Action expiry cancels that asyncio task
-  and fails with `kind=timeout` unless the handler returns a value; it does
-  not call `Machine.tick`.
+  action expiry does not call `Machine.tick`. Once the per-action deadline
+  has passed, the invocation is terminal `kind=timeout` even if the handler
+  swallows `CancelledError` or later returns a value; the late result is
+  discarded. After cancel, SWE waits a short grace period and then abandons
+  a task that has not finished. Blocking I/O (`time.sleep`, blocking sockets,
+  threads that ignore cancel) is not force-stopped and may continue after
+  SWE has settled the timeout.
 - Accept structured invocation errors (`kind`, `message`, optional `path` and
   opaque `payload`) on `InvocationRecord.error` and `Machine.fail`, while still
   replaying legacy string errors as `handler`. No journal schema change.

@@ -49,8 +49,14 @@ invalid bindings, deadlines, and host exceptions become typed failures. Limits
 bound steps, graph depth, map concurrency, and wall-clock runtime.
 Host-owned `WorkflowResources.action_timeouts` bound individual task and
 provider invocations by SWD node id without changing the SWD document.
-Action expiry cancels that asyncio task; it does not call `Machine.tick`
-(tick remains workflow-wide) and does not force-stop blocking I/O. Retry
+Action expiry cancels that asyncio task and is terminal for the invocation
+(`kind=timeout`, `path=nodes.{node_id}`); it does not call `Machine.tick`
+(tick remains workflow-wide). A handler that swallows `CancelledError` or
+returns after the deadline does not complete or route; the late result is
+discarded. After cancel, SWE waits a short grace period and then abandons a
+task that has not finished so the run cannot stick. Blocking I/O
+(`time.sleep`, blocking sockets, threads that ignore cancel) is not
+force-stopped and may continue after SWE has settled the timeout. Retry
 stays unsupported. Cancellation emits cancellation effects for outstanding
 host work.
 

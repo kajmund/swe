@@ -13,10 +13,14 @@ late results do not route again.
 Per-action deadlines come from host-owned `WorkflowResources.action_timeouts`
 (SWD node id → seconds). The driver waits `min(workflow remaining, soonest
 action remaining)` and cancels that invocation's asyncio task on expiry.
-Tick stays workflow-wide: action expiry does not call `Machine.tick`. If
-the handler returns a value, the invocation completes; if `CancelledError`
-propagates or the task is cancelled, it fails with `kind=timeout`. Blocking
-I/O is not force-stopped. Retry stays unsupported.
+Tick stays workflow-wide: action expiry does not call `Machine.tick`. Once
+the per-action deadline has passed, the invocation is terminal `kind=timeout`
+even if the handler swallows `CancelledError` or later returns a value; the
+late result is discarded and does not `complete()` or route. After cancel,
+SWE waits `_ACTION_CANCEL_GRACE_SECONDS` and then abandons a task that has
+not finished so the run cannot stick. Blocking I/O (`time.sleep`, blocking
+sockets, threads that ignore cancel) is not force-stopped and may continue
+after SWE has settled the timeout. Retry stays unsupported.
 
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
@@ -65,6 +69,7 @@ from swe.schema import NODE_ID_PATTERN
 _NODE_ID_RE = re.compile(NODE_ID_PATTERN)
 _MIN_ACTION_TIMEOUT_SECONDS = 1
 _MAX_ACTION_TIMEOUT_SECONDS = 86_400
+_ACTION_CANCEL_GRACE_SECONDS = 0.1
 
 
 @dataclass
@@ -440,7 +445,8 @@ def _remaining_ms(driver: _Driver, now_ms: int) -> int:
 def _soonest_action_remaining_ms(driver: _Driver, now_ms: int) -> int | None:
     soonest: int | None = None
     for invocation_id, deadline in driver.invocation_deadlines.items():
-        if invocation_id not in driver.pending:
+        task = driver.pending.get(invocation_id)
+        if task is None or task.done():
             continue
         if invocation_id in driver.action_expired:
             continue
@@ -464,6 +470,8 @@ def _arm_action_deadline(driver: _Driver, effect: Mapping[str, Any]) -> None:
 
 def _cancel_actions_due_by(driver: _Driver, cutoff_ms: int) -> None:
     for invocation_id, deadline in list(driver.invocation_deadlines.items()):
+        if invocation_id in driver.action_expired:
+            continue
         task = driver.pending.get(invocation_id)
         if task is None or task.done():
             continue
@@ -471,6 +479,52 @@ def _cancel_actions_due_by(driver: _Driver, cutoff_ms: int) -> None:
             continue
         task.cancel()
         driver.action_expired.add(invocation_id)
+
+
+def _action_deadline_passed(driver: _Driver, invocation_id: str) -> bool:
+    deadline = driver.invocation_deadlines.get(invocation_id)
+    if deadline is None:
+        return False
+    return driver.clock.now_ms() >= int(deadline)
+
+
+def _first_done_invocation(driver: _Driver) -> str | None:
+    for invocation_id, task in driver.pending.items():
+        if task.done():
+            return invocation_id
+    return None
+
+
+def _expired_unfinished(driver: _Driver) -> list[str]:
+    return [
+        invocation_id
+        for invocation_id, task in driver.pending.items()
+        if invocation_id in driver.action_expired and not task.done()
+    ]
+
+
+def _discard_task_result(task: asyncio.Task[HandlerOutcome]) -> None:
+    def _consume(done: asyncio.Task[HandlerOutcome]) -> None:
+        if done.cancelled():
+            return
+        try:
+            done.exception()
+        except (asyncio.CancelledError, asyncio.InvalidStateError):
+            return
+
+    if task.done():
+        _consume(task)
+        return
+    task.add_done_callback(_consume)
+
+
+def _abandon_pending(driver: _Driver) -> None:
+    for invocation_id, task in list(driver.pending.items()):
+        driver.pending.pop(invocation_id, None)
+        driver.invocation_deadlines.pop(invocation_id, None)
+        driver.action_expired.discard(invocation_id)
+        driver.invocation_nodes.pop(invocation_id, None)
+        _discard_task_result(task)
 
 
 def _fail_action_timeout(
@@ -524,9 +578,16 @@ async def _apply_one(driver: _Driver) -> None:
     if workflow_ms <= 0:
         await _timeout_run(driver)
         return
+    done_id = _first_done_invocation(driver)
+    if done_id is not None:
+        await _settle_invocation(driver, done_id)
+        return
     action_ms = _soonest_action_remaining_ms(driver, now_ms)
     if action_ms is not None and action_ms <= 0:
         _cancel_actions_due_by(driver, now_ms)
+    unfinished = _expired_unfinished(driver)
+    if unfinished:
+        await _settle_expired_unfinished(driver, unfinished)
         return
     if action_ms is not None and action_ms < workflow_ms:
         timeout = action_ms / 1000.0
@@ -555,32 +616,80 @@ async def _apply_one(driver: _Driver) -> None:
     tasks = [task for task in finished if task.get_name() != "swe:cancel"]
     if not tasks:
         return
-    task = tasks[0]
-    invocation_id = task.get_name().removeprefix("swe:")
-    driver.pending.pop(invocation_id, None)
+    invocation_id = tasks[0].get_name().removeprefix("swe:")
+    await _settle_invocation(driver, invocation_id)
+
+
+async def _settle_expired_unfinished(
+    driver: _Driver, unfinished: Sequence[str],
+) -> None:
+    watch = [
+        driver.pending[invocation_id]
+        for invocation_id in unfinished
+        if invocation_id in driver.pending
+    ]
+    if watch:
+        await asyncio.wait(
+            watch,
+            return_when=asyncio.FIRST_COMPLETED,
+            timeout=_ACTION_CANCEL_GRACE_SECONDS,
+        )
+    if _cancelled(driver):
+        return
+    for invocation_id in unfinished:
+        task = driver.pending.get(invocation_id)
+        if task is not None and task.done():
+            await _settle_invocation(driver, invocation_id)
+            return
+    invocation_id = unfinished[0]
+    task = driver.pending.pop(invocation_id, None)
+    if task is not None:
+        _discard_task_result(task)
     driver.invocation_deadlines.pop(invocation_id, None)
-    expired = invocation_id in driver.action_expired
     driver.action_expired.discard(invocation_id)
-    if task.cancelled():
-        if not expired:
-            return
+    outcome, invocation = _fail_action_timeout(driver, invocation_id)
+    await _finish_invocation(driver, outcome, invocation)
+
+
+async def _settle_invocation(driver: _Driver, invocation_id: str) -> None:
+    task = driver.pending.pop(invocation_id, None)
+    if task is None:
+        return
+    expired = invocation_id in driver.action_expired or _action_deadline_passed(
+        driver, invocation_id,
+    )
+    driver.invocation_deadlines.pop(invocation_id, None)
+    driver.action_expired.discard(invocation_id)
+    if expired:
+        _discard_task_result(task)
         outcome, invocation = _fail_action_timeout(driver, invocation_id)
-    else:
-        outcome, invocation = _report_task(driver, invocation_id, task, expired=expired)
-        if invocation is None:
-            return
+        await _finish_invocation(driver, outcome, invocation)
+        return
+    if task.cancelled():
+        driver.invocation_nodes.pop(invocation_id, None)
+        return
+    outcome, invocation = _report_task(driver, invocation_id, task)
+    if invocation is None:
+        return
+    await _finish_invocation(driver, outcome, invocation)
+
+
+async def _finish_invocation(
+    driver: _Driver,
+    outcome: Mapping[str, Any],
+    invocation: InvocationRecord,
+) -> None:
     await _persist(driver, invocation)
     await _apply_effects(driver, outcome["effects"])
     if outcome["status"] != "running":
         cancel_all(driver.pending)
+        _abandon_pending(driver)
 
 
 def _report_task(
     driver: _Driver,
     invocation_id: str,
     task: asyncio.Task[HandlerOutcome],
-    *,
-    expired: bool,
 ) -> tuple[dict[str, Any], InvocationRecord | None]:
     error = task.exception()
     if error is not None:
@@ -590,8 +699,6 @@ def _report_task(
         return outcome, InvocationRecord(invocation_id, node_id, False, None, payload)
     result = task.result()
     if result.cancelled:
-        if expired:
-            return _fail_action_timeout(driver, invocation_id)
         driver.invocation_nodes.pop(invocation_id, None)
         return {"status": "running", "effects": []}, None
     mapped_node_id = driver.invocation_nodes.pop(invocation_id, "")

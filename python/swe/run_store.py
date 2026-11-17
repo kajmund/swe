@@ -117,8 +117,13 @@ class WorkflowResources:
     allowlist: execution never renders a prompt that is not declared.
 
     ``action_timeouts`` is host-owned and keyed by SWD node id. It does not
-    change the SWD document, does not force-stop blocking I/O, and does not
-    enable retry (retry stays unsupported in SWE v1).
+    change the SWD document, does not call ``Machine.tick``, and does not
+    enable retry (retry stays unsupported in SWE v1). When the per-action
+    deadline has passed, the invocation is terminal ``kind=timeout`` even if
+    the handler later returns a value. After cancel, SWE waits a short grace
+    period and then abandons a task that has not finished; blocking I/O
+    (``time.sleep``, blocking sockets, threads that ignore cancel) is not
+    force-stopped and may continue after SWE has settled the timeout.
     """
 
     providers: Mapping[str, Callable[..., Awaitable[Any]]] = field(
