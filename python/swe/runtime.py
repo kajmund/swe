@@ -21,9 +21,10 @@ at handler completion time, not at delayed settlement. After cancel, SWE
 waits `_ACTION_CANCEL_GRACE_SECONDS` and then detaches a task that has not
 finished into a runner-owned abandoned-work registry (cap = `concurrency`)
 so `reap_owned` cannot hang, including when `cancel_event` fires during
-grace. Blocking I/O (`time.sleep`, blocking sockets, threads that ignore
-cancel) is not force-stopped and may continue after SWE has settled the
-timeout. Retry stays unsupported.
+grace. A failed fork waits that grace before registering sibling handlers
+as abandoned. Blocking I/O (`time.sleep`, blocking sockets, threads that
+ignore cancel) is not force-stopped and may continue after SWE has settled
+the timeout. Retry stays unsupported.
 
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
@@ -374,10 +375,7 @@ async def _cancel_run(driver: _Driver) -> None:
     outcome = driver.machine.cancel(driver.clock.now_ms())
     await _persist(driver)
     await _apply_effects(driver, outcome["effects"])
-    still = [task for task in driver.pending.values() if not task.done()]
-    if still:
-        await asyncio.wait(still, timeout=_ACTION_CANCEL_GRACE_SECONDS)
-    _abandon_pending(driver)
+    await _detach_pending(driver)
 
 
 async def _persist(driver: _Driver, invocation: InvocationRecord | None = None) -> None:
@@ -533,6 +531,13 @@ def _expired_unfinished(driver: _Driver) -> list[str]:
         for invocation_id, task in driver.pending.items()
         if invocation_id in driver.action_expired and not task.done()
     ]
+
+
+async def _detach_pending(driver: _Driver) -> None:
+    still = [task for task in driver.pending.values() if not task.done()]
+    if still:
+        await asyncio.wait(still, timeout=_ACTION_CANCEL_GRACE_SECONDS)
+    _abandon_pending(driver)
 
 
 def _abandon_pending(driver: _Driver) -> None:
@@ -747,7 +752,7 @@ async def _finish_invocation(
     await _apply_effects(driver, outcome["effects"])
     if outcome["status"] != "running":
         cancel_all(driver.pending)
-        _abandon_pending(driver)
+        await _detach_pending(driver)
 
 
 def _report_task(

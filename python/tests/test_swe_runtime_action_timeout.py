@@ -271,6 +271,33 @@ async def test_abandoned_work_is_bounded_across_runs() -> None:
     await _cancel_swe_tasks()
 
 
+async def test_cooperative_fork_sibling_gets_grace_before_abandon() -> None:
+    async def boom(_payload: dict[str, object]) -> dict[str, str]:
+        raise RuntimeError("need failed")
+
+    async def hang(_payload: dict[str, object]) -> dict[str, str]:
+        await asyncio.Event().wait()
+        return {"ok": "no"}
+
+    runner = WorkflowRunner(
+        _fork_flow(),
+        {"demo.slow": boom, "demo.fast": hang},
+        concurrency=1,
+    )
+    first = await asyncio.wait_for(runner.run({}, run_id="coop-sib-1"), timeout=5)
+    assert first.status == "failed"
+    assert first.error is not None
+    assert first.error["kind"] != "limit"
+    assert runner.abandoned_count == 0
+    second = await asyncio.wait_for(runner.run({}, run_id="coop-sib-2"), timeout=5)
+    assert second.status == "failed"
+    assert second.error is not None
+    assert second.error["kind"] != "limit"
+    assert runner.abandoned_count == 0
+    await _cancel_swe_tasks()
+    assert swe_tasks() == []
+
+
 async def test_never_finishes_after_cancel_returns_within_timeout() -> None:
     async def never(_payload: dict[str, object]) -> dict[str, str]:
         try:
