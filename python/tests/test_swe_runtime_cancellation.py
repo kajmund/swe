@@ -15,6 +15,7 @@ from swe.cache import InMemoryDecisionCache, scoped_cache_params
 from swe.definition import compile_definition
 from swe.runtime import WorkflowResources, WorkflowRunner, run_workflow
 from swe.runtime_clock import FrozenClock
+from swe.runtime_errors import SweHandlerError
 from swe.run_store import MemoryRunStore, RunRecord
 from swe_runtime_helpers import compile_runtime, swe_tasks
 
@@ -666,6 +667,75 @@ async def test_exact_cache_compute_counts_toward_abandoned_cap() -> None:
             asyncio.gather(*leftover, return_exceptions=True),
             timeout=1,
         )
+    await _cancel_swe_tasks()
+
+
+async def test_exact_cache_waiter_cancel_does_not_abort_sibling_compute() -> None:
+    cache = InMemoryDecisionCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    compute_handle: InvocationHandle | None = None
+    cancel_first = asyncio.Event()
+
+    async def provider(_request: Mapping[str, object]) -> str:
+        nonlocal compute_handle
+        compute_handle = current_invocation()
+        started.set()
+        await release.wait()
+        handle = current_invocation()
+        if handle is not None and handle.cancel.is_set():
+            raise SweHandlerError("socket abort")
+        return "yes"
+
+    provider.cache_params = scoped_cache_params(  # type: ignore[attr-defined]
+        auth_scope="tenant-a",
+        model="m1",
+        policy_version="pol-1",
+    )
+    shared = WorkflowResources(
+        providers={"mock.decision": provider},
+        prompts={"demo.assessment": "choose {topic}"},
+        prompt_keys=frozenset({"demo.assessment"}),
+        cache=cache,
+    )
+    first_runner = WorkflowRunner(
+        _exact_provider_flow(),
+        {},
+        resources=WorkflowResources(
+            providers=shared.providers,
+            prompts=shared.prompts,
+            prompt_keys=shared.prompt_keys,
+            cache=cache,
+            cancel_event=cancel_first,
+        ),
+    )
+    second_runner = WorkflowRunner(
+        _exact_provider_flow(),
+        {},
+        resources=shared,
+    )
+    first_task = asyncio.create_task(
+        first_runner.run({"topic": "alpha"}, run_id="cache-sib-1")
+    )
+    second_task = asyncio.create_task(
+        second_runner.run({"topic": "alpha"}, run_id="cache-sib-2")
+    )
+    await asyncio.wait_for(started.wait(), timeout=5)
+    deadline = asyncio.get_running_loop().time() + 5
+    while cache.metrics().coalesced < 1:
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError("exact-cache waiters did not coalesce")
+        await asyncio.sleep(0)
+    cancel_first.set()
+    first = await asyncio.wait_for(first_task, timeout=5)
+    assert first.status == "cancelled"
+    assert compute_handle is not None
+    assert not compute_handle.cancel.is_set()
+    release.set()
+    second = await asyncio.wait_for(second_task, timeout=5)
+    assert second.status == "completed"
+    assert second.output["decide"]["choice"] == "yes"
+    assert not compute_handle.cancel.is_set()
     await _cancel_swe_tasks()
 
 
