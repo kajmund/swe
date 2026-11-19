@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import pytest
 
@@ -11,7 +13,7 @@ pytest.importorskip("swe_native")
 from swe.runtime import WorkflowResources, WorkflowRunner, run_workflow
 from swe.runtime_clock import FrozenClock
 from swe.runtime_errors import SwePreflightError
-from swe.run_store import MemoryRunStore
+from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord
 from swe_runtime_helpers import compile_runtime, swe_tasks
 
 pytestmark = pytest.mark.swe_runtime
@@ -149,6 +151,124 @@ async def test_late_result_after_abandon_does_not_route() -> None:
     assert not any(event["type"] == "RunCompleted" for event in result.events)
     await _cancel_swe_tasks()
     assert swe_tasks() == []
+
+
+async def test_cancel_during_action_grace_does_not_hang_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import swe.runtime as runtime_mod
+
+    monkeypatch.setattr(runtime_mod, "_ACTION_CANCEL_GRACE_SECONDS", 2.0)
+    cancel = asyncio.Event()
+    in_grace = asyncio.Event()
+    release = asyncio.Event()
+
+    async def never(_payload: dict[str, object]) -> dict[str, str]:
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                in_grace.set()
+        return {"ok": "late"}
+
+    runner = WorkflowRunner(
+        _task_flow(),
+        {"demo.work": never},
+        resources=WorkflowResources(
+            action_timeouts={"work": 1},
+            cancel_event=cancel,
+        ),
+        concurrency=1,
+    )
+
+    async def trip() -> None:
+        await in_grace.wait()
+        cancel.set()
+
+    trip_task = asyncio.create_task(trip())
+    try:
+        result = await asyncio.wait_for(runner.run({}), timeout=5)
+        assert result.status in {"cancelled", "failed"}
+        assert runner.abandoned_count == 1
+    finally:
+        release.set()
+        trip_task.cancel()
+        await asyncio.gather(trip_task, return_exceptions=True)
+        await _cancel_swe_tasks()
+
+
+async def test_delayed_persist_does_not_timeout_timely_success() -> None:
+    class _SlowStore(MemoryRunStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self._settled = 0
+
+        async def record(
+            self,
+            run: RunRecord,
+            *,
+            events: Sequence[Mapping[str, Any]] = (),
+            invocation: InvocationRecord | None = None,
+        ) -> None:
+            if invocation is not None:
+                self._settled += 1
+                if self._settled == 1:
+                    await asyncio.sleep(1.2)
+            await super().record(run, events=events, invocation=invocation)
+
+    async def left(_payload: dict[str, object]) -> dict[str, str]:
+        return {"who": "left"}
+
+    async def right(_payload: dict[str, object]) -> dict[str, str]:
+        await asyncio.sleep(0.05)
+        return {"who": "right"}
+
+    result = await asyncio.wait_for(
+        WorkflowRunner(
+            _fork_flow(),
+            {"demo.slow": left, "demo.fast": right},
+            resources=WorkflowResources(action_timeouts={"slow": 1, "fast": 1}),
+            run_store=_SlowStore(),
+        ).run({}),
+        timeout=5,
+    )
+    assert result.status == "completed"
+    assert result.output["together"]["left"] == {"who": "left"}
+    assert result.output["together"]["right"] == {"who": "right"}
+    await _cancel_swe_tasks()
+
+
+async def test_abandoned_work_is_bounded_across_runs() -> None:
+    async def never(_payload: dict[str, object]) -> dict[str, str]:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await asyncio.Event().wait()
+        return {"ok": "late"}
+
+    runner = WorkflowRunner(
+        _task_flow(),
+        {"demo.work": never},
+        resources=_resources(1),
+        concurrency=2,
+    )
+    first = await asyncio.wait_for(runner.run({}, run_id="abandon-1"), timeout=5)
+    _assert_action_timeout(first, node_id="work", timeout=1)
+    assert runner.abandoned_count == 1
+
+    second = await asyncio.wait_for(runner.run({}, run_id="abandon-2"), timeout=5)
+    _assert_action_timeout(second, node_id="work", timeout=1)
+    assert runner.abandoned_count == 2
+    assert runner.abandoned.at_capacity()
+
+    third = await asyncio.wait_for(runner.run({}, run_id="abandon-3"), timeout=5)
+    assert third.status == "failed"
+    assert third.error is not None
+    assert third.error["kind"] == "limit"
+    assert "abandoned work cap" in third.error["message"]
+    assert third.error["path"] == "abandoned"
+    assert runner.abandoned_count == 2
+    await _cancel_swe_tasks()
 
 
 async def test_never_finishes_after_cancel_returns_within_timeout() -> None:

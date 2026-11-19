@@ -53,12 +53,16 @@ Action expiry cancels that asyncio task and is terminal for the invocation
 (`kind=timeout`, `path=nodes.{node_id}`); it does not call `Machine.tick`
 (tick remains workflow-wide). A handler that swallows `CancelledError` or
 returns after the deadline does not complete or route; the late result is
-discarded. After cancel, SWE waits a short grace period and then abandons a
-task that has not finished so the run cannot stick. Blocking I/O
-(`time.sleep`, blocking sockets, threads that ignore cancel) is not
-force-stopped and may continue after SWE has settled the timeout. Retry
-stays unsupported. Cancellation emits cancellation effects for outstanding
-host work.
+discarded. Expiry uses the handler's completion time, so a delayed
+`RunStore.record` cannot convert a timely success into a timeout. After
+cancel, SWE waits a short grace period and then detaches a task that has
+not finished into a runner-owned abandoned-work registry (cap =
+`concurrency`) so `reap_owned` cannot hang, including when `cancel_event`
+fires during grace. New dispatch fails closed (`kind=limit`) while the
+registry is full. Blocking I/O (`time.sleep`, blocking sockets, threads
+that ignore cancel) is not force-stopped and may continue after SWE has
+settled the timeout. Retry stays unsupported. Cancellation emits
+cancellation effects for outstanding host work.
 
 ## Non-goals
 

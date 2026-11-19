@@ -16,11 +16,14 @@ action remaining)` and cancels that invocation's asyncio task on expiry.
 Tick stays workflow-wide: action expiry does not call `Machine.tick`. Once
 the per-action deadline has passed, the invocation is terminal `kind=timeout`
 even if the handler swallows `CancelledError` or later returns a value; the
-late result is discarded and does not `complete()` or route. After cancel,
-SWE waits `_ACTION_CANCEL_GRACE_SECONDS` and then abandons a task that has
-not finished so the run cannot stick. Blocking I/O (`time.sleep`, blocking
-sockets, threads that ignore cancel) is not force-stopped and may continue
-after SWE has settled the timeout. Retry stays unsupported.
+late result is discarded and does not `complete()` or route. Expiry is judged
+at handler completion time, not at delayed settlement. After cancel, SWE
+waits `_ACTION_CANCEL_GRACE_SECONDS` and then detaches a task that has not
+finished into a runner-owned abandoned-work registry (cap = `concurrency`)
+so `reap_owned` cannot hang, including when `cancel_event` fires during
+grace. Blocking I/O (`time.sleep`, blocking sockets, threads that ignore
+cancel) is not force-stopped and may continue after SWE has settled the
+timeout. Retry stays unsupported.
 
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
@@ -43,11 +46,13 @@ from swe.definition import CompiledDefinition
 from swe.invocation_error import live_invocation_error, normalize_invocation_error
 from swe.runtime_clock import FrozenClock, WorkflowClock
 from swe.runtime_dispatch import (
+    AbandonedWorkRegistry,
     Handler,
     HandlerOutcome,
     ProviderDispatch,
     cancel_all,
     cancel_invocations,
+    consume_task_result,
     reap_owned,
     spawn_invocations,
 )
@@ -91,6 +96,7 @@ class _Driver:
     persisted_events: int
     last_seq: int
     action_timeouts: Mapping[str, int]
+    abandoned: AbandonedWorkRegistry
     invocation_nodes: dict[str, str] = field(default_factory=dict)
     cancel_task: asyncio.Task[bool] | None = None
     invocation_deadlines: dict[str, int] = field(default_factory=dict)
@@ -157,6 +163,11 @@ class WorkflowRunner:
         self.run_store = run_store
         self.clock = clock
         self.concurrency = concurrency
+        self.abandoned = AbandonedWorkRegistry(cap=concurrency)
+
+    @property
+    def abandoned_count(self) -> int:
+        return self.abandoned.abandoned_count
 
     async def run(
         self,
@@ -197,7 +208,12 @@ class WorkflowRunner:
             await _persist(driver)
             return await self._execute(driver, outcome)
         finally:
-            await reap_owned(driver.pending, driver.cancel_task)
+            await reap_owned(
+                driver.pending,
+                driver.cancel_task,
+                driver.abandoned,
+                driver.invocation_nodes,
+            )
             driver.cancel_task = None
 
     async def resume(self, run_id: str) -> RunResult:
@@ -256,7 +272,12 @@ class WorkflowRunner:
         try:
             return await self._execute(driver, outcome)
         finally:
-            await reap_owned(driver.pending, driver.cancel_task)
+            await reap_owned(
+                driver.pending,
+                driver.cancel_task,
+                driver.abandoned,
+                driver.invocation_nodes,
+            )
             driver.cancel_task = None
 
     async def _execute(self, driver: _Driver, outcome: Mapping[str, Any]) -> RunResult:
@@ -287,6 +308,7 @@ def _build_driver(runner: WorkflowRunner, start: _RunStart) -> _Driver:
         persisted_events=start.persisted_events,
         last_seq=start.last_seq,
         action_timeouts=runner.action_timeouts,
+        abandoned=runner.abandoned,
     )
 
 
@@ -352,6 +374,10 @@ async def _cancel_run(driver: _Driver) -> None:
     outcome = driver.machine.cancel(driver.clock.now_ms())
     await _persist(driver)
     await _apply_effects(driver, outcome["effects"])
+    still = [task for task in driver.pending.values() if not task.done()]
+    if still:
+        await asyncio.wait(still, timeout=_ACTION_CANCEL_GRACE_SECONDS)
+    _abandon_pending(driver)
 
 
 async def _persist(driver: _Driver, invocation: InvocationRecord | None = None) -> None:
@@ -403,6 +429,11 @@ async def _apply_effect(
     invocation_id = effect["invocation_id"]
     replayed = driver.replay.pop(invocation_id, None)
     if replayed is None:
+        if (
+            effect["type"] in {"invoke_handler", "invoke_provider"}
+            and driver.abandoned.at_capacity()
+        ):
+            return await _fail_abandoned_cap(driver, effect)
         driver.invocation_nodes[invocation_id] = str(effect["node_id"])
         spawn_invocations(
             [effect],
@@ -411,6 +442,7 @@ async def _apply_effect(
             pending=driver.pending,
             semaphore=driver.semaphore,
             provider_dispatch=driver.provider_dispatch,
+            now_ms=driver.clock.now_ms,
         )
         _arm_action_deadline(driver, effect)
         return []
@@ -503,28 +535,15 @@ def _expired_unfinished(driver: _Driver) -> list[str]:
     ]
 
 
-def _discard_task_result(task: asyncio.Task[HandlerOutcome]) -> None:
-    def _consume(done: asyncio.Task[HandlerOutcome]) -> None:
-        if done.cancelled():
-            return
-        try:
-            done.exception()
-        except (asyncio.CancelledError, asyncio.InvalidStateError):
-            return
-
-    if task.done():
-        _consume(task)
-        return
-    task.add_done_callback(_consume)
-
-
 def _abandon_pending(driver: _Driver) -> None:
     for invocation_id, task in list(driver.pending.items()):
         driver.pending.pop(invocation_id, None)
         driver.invocation_deadlines.pop(invocation_id, None)
         driver.action_expired.discard(invocation_id)
-        driver.invocation_nodes.pop(invocation_id, None)
-        _discard_task_result(task)
+        node_id = driver.invocation_nodes.pop(invocation_id, "")
+        if not task.done():
+            task.cancel()
+        driver.abandoned.register(invocation_id, node_id, task)
 
 
 def _fail_action_timeout(
@@ -541,6 +560,25 @@ def _fail_action_timeout(
     )
     outcome = driver.machine.fail(invocation_id, payload, driver.clock.now_ms())
     return outcome, InvocationRecord(invocation_id, node_id, False, None, payload)
+
+
+async def _fail_abandoned_cap(
+    driver: _Driver, effect: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    invocation_id = str(effect["invocation_id"])
+    node_id = str(effect["node_id"])
+    payload = live_invocation_error(
+        SweHandlerError(
+            f"abandoned work cap {driver.abandoned.cap} exceeded",
+            kind="limit",
+            path="abandoned",
+        )
+    )
+    outcome = driver.machine.fail(invocation_id, payload, driver.clock.now_ms())
+    await _persist(
+        driver, InvocationRecord(invocation_id, node_id, False, None, payload)
+    )
+    return list(outcome["effects"])
 
 
 def _validate_action_timeouts(action_timeouts: Mapping[str, int]) -> dict[str, int]:
@@ -635,6 +673,7 @@ async def _settle_expired_unfinished(
             timeout=_ACTION_CANCEL_GRACE_SECONDS,
         )
     if _cancelled(driver):
+        _abandon_pending(driver)
         return
     for invocation_id in unfinished:
         task = driver.pending.get(invocation_id)
@@ -643,25 +682,50 @@ async def _settle_expired_unfinished(
             return
     invocation_id = unfinished[0]
     task = driver.pending.pop(invocation_id, None)
-    if task is not None:
-        _discard_task_result(task)
+    node_id = driver.invocation_nodes.get(invocation_id, "")
+    if task is not None and not task.done():
+        driver.abandoned.register(invocation_id, node_id, task)
+    elif task is not None:
+        consume_task_result(task)
     driver.invocation_deadlines.pop(invocation_id, None)
     driver.action_expired.discard(invocation_id)
     outcome, invocation = _fail_action_timeout(driver, invocation_id)
     await _finish_invocation(driver, outcome, invocation)
 
 
+def _task_completed_at_ms(task: asyncio.Task[HandlerOutcome]) -> int | None:
+    if not task.done() or task.cancelled():
+        return None
+    if task.exception() is not None:
+        return None
+    return task.result().completed_at_ms
+
+
+def _invocation_expired(
+    driver: _Driver,
+    invocation_id: str,
+    task: asyncio.Task[HandlerOutcome],
+) -> bool:
+    if invocation_id in driver.action_expired:
+        return True
+    deadline = driver.invocation_deadlines.get(invocation_id)
+    if deadline is None:
+        return False
+    completed_at_ms = _task_completed_at_ms(task)
+    if completed_at_ms is not None:
+        return completed_at_ms >= int(deadline)
+    return _action_deadline_passed(driver, invocation_id)
+
+
 async def _settle_invocation(driver: _Driver, invocation_id: str) -> None:
     task = driver.pending.pop(invocation_id, None)
     if task is None:
         return
-    expired = invocation_id in driver.action_expired or _action_deadline_passed(
-        driver, invocation_id,
-    )
+    expired = _invocation_expired(driver, invocation_id, task)
     driver.invocation_deadlines.pop(invocation_id, None)
     driver.action_expired.discard(invocation_id)
     if expired:
-        _discard_task_result(task)
+        consume_task_result(task)
         outcome, invocation = _fail_action_timeout(driver, invocation_id)
         await _finish_invocation(driver, outcome, invocation)
         return
