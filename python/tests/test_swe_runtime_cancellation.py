@@ -11,6 +11,8 @@ import pytest
 pytest.importorskip("swe_native")
 
 from swe import InvocationHandle, current_invocation
+from swe.cache import InMemoryDecisionCache, scoped_cache_params
+from swe.definition import compile_definition
 from swe.runtime import WorkflowResources, WorkflowRunner, run_workflow
 from swe.runtime_clock import FrozenClock
 from swe.run_store import MemoryRunStore, RunRecord
@@ -566,3 +568,162 @@ async def test_outer_task_cancel_signals_invocation_handle() -> None:
     assert seen["cancel"] is True
     assert seen["reason"] == "cancel"
     await _cancel_swe_tasks()
+
+
+def _exact_provider_flow() -> object:
+    return compile_definition(
+        {
+            "version": "1.0",
+            "name": "cached",
+            "entrypoint": "decide",
+            "limits": {"max_steps": 8, "max_depth": 1, "timeout_seconds": 30},
+            "nodes": {
+                "decide": {
+                    "type": "decision",
+                    "evaluator": "provider",
+                    "provider": "mock.decision",
+                    "prompt_key": "demo.assessment",
+                    "input": {"topic": "$.topic"},
+                    "choices": ["yes", "no"],
+                    "routes": {"yes": "done", "no": "done"},
+                    "cache_policy": "exact",
+                },
+                "done": {"type": "end", "status": "completed"},
+            },
+        },
+        providers=frozenset({"mock.decision"}),
+        prompt_keys=frozenset({"demo.assessment"}),
+    )
+
+
+def _cache_tasks() -> list[asyncio.Task[Any]]:
+    return [
+        task
+        for task in asyncio.all_tasks()
+        if task.get_name().startswith("swe-cache:") and not task.done()
+    ]
+
+
+async def test_exact_cache_compute_counts_toward_abandoned_cap() -> None:
+    cache = InMemoryDecisionCache()
+    released = asyncio.Event()
+
+    async def stubborn(_request: Mapping[str, object]) -> str:
+        while not released.is_set():
+            try:
+                await released.wait()
+            except asyncio.CancelledError:
+                if released.is_set():
+                    break
+        return "yes"
+
+    stubborn.cache_params = scoped_cache_params(  # type: ignore[attr-defined]
+        auth_scope="tenant-a",
+        model="m1",
+        policy_version="pol-1",
+    )
+    runner = WorkflowRunner(
+        _exact_provider_flow(),
+        {},
+        resources=WorkflowResources(
+            providers={"mock.decision": stubborn},
+            prompts={"demo.assessment": "choose {topic}"},
+            prompt_keys=frozenset({"demo.assessment"}),
+            cache=cache,
+            action_timeouts={"decide": 1},
+        ),
+        concurrency=1,
+    )
+    first = await asyncio.wait_for(
+        runner.run({"topic": "alpha"}, run_id="cache-cap-1"),
+        timeout=5,
+    )
+    _assert_action_timeout(first, node_id="decide", timeout=1)
+    assert runner.abandoned_count >= 1
+    assert len(_cache_tasks()) == 1
+
+    second = await asyncio.wait_for(
+        runner.run({"topic": "alpha"}, run_id="cache-cap-2"),
+        timeout=5,
+    )
+    assert second.status == "failed"
+    assert second.error is not None
+    assert second.error["kind"] == "limit"
+    assert "abandoned work cap" in second.error["message"]
+
+    third = await asyncio.wait_for(
+        runner.run({"topic": "alpha"}, run_id="cache-cap-3"),
+        timeout=5,
+    )
+    assert third.status == "failed"
+    assert third.error is not None
+    assert third.error["kind"] == "limit"
+    assert len(_cache_tasks()) == 1
+    released.set()
+    leftover = _cache_tasks()
+    if leftover:
+        await asyncio.wait_for(
+            asyncio.gather(*leftover, return_exceptions=True),
+            timeout=1,
+        )
+    await _cancel_swe_tasks()
+
+
+async def test_resume_attempts_do_not_overwrite_abandoned_slot() -> None:
+    store = MemoryRunStore()
+    started = asyncio.Event()
+    released = asyncio.Event()
+    calls = 0
+
+    async def stubborn(_payload: Mapping[str, object]) -> dict[str, str]:
+        nonlocal calls
+        calls += 1
+        started.set()
+        while not released.is_set():
+            try:
+                await released.wait()
+            except asyncio.CancelledError:
+                if released.is_set():
+                    break
+        return {"ok": "late"}
+
+    runner = WorkflowRunner(
+        _task_flow(),
+        {"demo.work": stubborn},
+        run_store=store,
+        concurrency=2,
+    )
+    run_task = asyncio.create_task(runner.run({}, run_id="same-id"))
+    await asyncio.wait_for(started.wait(), timeout=5)
+    run_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run_task
+    assert runner.abandoned_count == 1
+    stored = await store.load_run("same-id")
+    assert stored is not None
+    assert stored.status == "running"
+
+    started.clear()
+    resume_task = asyncio.create_task(runner.resume("same-id"))
+    await asyncio.wait_for(started.wait(), timeout=5)
+    resume_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await resume_task
+    assert calls == 2
+    assert runner.abandoned_count == 2
+    assert runner.abandoned.at_capacity()
+    assert runner.abandoned.invocation_ids()[0] == runner.abandoned.invocation_ids()[1]
+
+    third = await asyncio.wait_for(runner.resume("same-id"), timeout=5)
+    assert third.status == "failed"
+    assert third.error is not None
+    assert third.error["kind"] == "limit"
+    assert "abandoned work cap" in third.error["message"]
+    assert calls == 2
+    released.set()
+    leftover = swe_tasks()
+    if leftover:
+        await asyncio.wait_for(
+            asyncio.gather(*leftover, return_exceptions=True),
+            timeout=1,
+        )

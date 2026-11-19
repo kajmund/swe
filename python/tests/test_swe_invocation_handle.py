@@ -82,3 +82,27 @@ async def test_abandoned_registry_observability_and_cap() -> None:
     second.cancel()
     await asyncio.gather(first, second, return_exceptions=True)
     assert registry.abandoned_count == 0
+
+
+async def test_abandoned_registry_keeps_distinct_tasks_with_same_invocation_id() -> None:
+    registry = AbandonedWorkRegistry(cap=1)
+
+    async def never() -> None:
+        await asyncio.Event().wait()
+
+    first = asyncio.create_task(never(), name="swe:one")
+    second = asyncio.create_task(never(), name="swe:one-retry")
+    await asyncio.sleep(0)
+    registry.register("same", "a", first)
+    registry.register("same", "a", first)
+    assert registry.abandoned_count == 1
+    registry.register("same", "a", second)
+    assert registry.abandoned_count == 2
+    assert registry.invocation_ids() == ("same", "same")
+    first.cancel()
+    await asyncio.gather(first, return_exceptions=True)
+    assert registry.abandoned_count == 1
+    assert registry.invocation_ids() == ("same",)
+    second.cancel()
+    await asyncio.gather(second, return_exceptions=True)
+    assert registry.abandoned_count == 0

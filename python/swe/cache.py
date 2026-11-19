@@ -249,6 +249,7 @@ class InMemoryDecisionCache:
         self._clock: WorkflowClock | FrozenClock = clock or WorkflowClock()
         self._entries: dict[str, _CacheEntry] = {}
         self._flights: dict[str, _Flight] = {}
+        self._orphans: dict[str, asyncio.Task[Mapping[str, Any]]] = {}
         self._lock = asyncio.Lock()
         self._hits = 0
         self._misses = 0
@@ -266,6 +267,16 @@ class InMemoryDecisionCache:
     @property
     def active_flight_count(self) -> int:
         return len(self._flights)
+
+    def orphaned_computes(self) -> tuple[asyncio.Task[Mapping[str, Any]], ...]:
+        """Unfinished computes no waiter owns. Last waiter still drops the flight."""
+        live: list[asyncio.Task[Mapping[str, Any]]] = []
+        for key, task in list(self._orphans.items()):
+            if task.done():
+                self._orphans.pop(key, None)
+            else:
+                live.append(task)
+        return tuple(live)
 
     @property
     def latency_samples_ns(self) -> tuple[int, ...]:
@@ -324,11 +335,16 @@ class InMemoryDecisionCache:
                 return cached.value, True
             flight = self._flights.get(key)
             if flight is None:
+                flight = self._reattach_orphan(key)
+            if flight is None:
                 self._misses += 1
                 self._computes += 1
                 task = asyncio.create_task(
                     self._compute(key, compute),
                     name=f"swe-cache:{key[:12]}",
+                )
+                task.add_done_callback(
+                    lambda done, cache_key=key: self._drop_orphan(cache_key, done)
                 )
                 flight = _Flight(task=task, waiters=1)
                 self._flights[key] = flight
@@ -348,9 +364,11 @@ class InMemoryDecisionCache:
                 current = self._flights.get(key)
                 if current is flight:
                     current.waiters = max(0, current.waiters - 1)
-                    if current.waiters == 0 and not current.task.done():
-                        current.task.cancel()
+                    if current.waiters == 0:
                         self._flights.pop(key, None)
+                        if not current.task.done():
+                            self._orphans[key] = current.task
+                            current.task.cancel()
 
     async def _compute(
         self,
@@ -370,6 +388,27 @@ class InMemoryDecisionCache:
                 flight = self._flights.get(key)
                 if flight is not None and flight.task is asyncio.current_task():
                     self._flights.pop(key, None)
+                self._drop_orphan(key, asyncio.current_task())
+
+    def _reattach_orphan(self, key: str) -> _Flight | None:
+        orphan = self._orphans.get(key)
+        if orphan is None:
+            return None
+        if orphan.done():
+            self._orphans.pop(key, None)
+            return None
+        self._orphans.pop(key, None)
+        flight = _Flight(task=orphan, waiters=0)
+        self._flights[key] = flight
+        return flight
+
+    def _drop_orphan(
+        self,
+        key: str,
+        task: asyncio.Task[Mapping[str, Any]] | None,
+    ) -> None:
+        if task is not None and self._orphans.get(key) is task:
+            self._orphans.pop(key, None)
 
     def _storage_key(self, key: str) -> str:
         if not self.namespace:

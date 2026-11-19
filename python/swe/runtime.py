@@ -24,12 +24,14 @@ is terminal `cancelled`, not timeout. After cancel, SWE waits
 `CANCEL_GRACE_SECONDS` and then detaches a task that has not finished into
 a bounded abandoned-work registry so `reap_owned` cannot hang, including
 when `cancel_event` fires during grace. A failed fork waits that grace
-before registering sibling handlers as abandoned. Blocking I/O (`time.sleep`,
-blocking sockets, threads that ignore cancel) is not force-stopped and may
-continue after SWE has settled the timeout; the host must abort sockets
-from `InvocationHandle.cancel`. Retry stays unsupported. `swe-budget` is
-not on this path: timeout/cancel must not double-complete or double-fail
-the machine.
+before registering sibling handlers as abandoned. The registry is keyed by
+task identity; resume of the same invocation id cannot drop an earlier
+attempt. Orphaned exact-cache provider computes count toward the same cap.
+Blocking I/O (`time.sleep`, blocking sockets, threads that ignore cancel)
+is not force-stopped and may continue after SWE has settled the timeout;
+the host must abort sockets from `InvocationHandle.cancel`. Retry stays
+unsupported. `swe-budget` is not on this path: timeout/cancel must not
+double-complete or double-fail the machine.
 
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
@@ -232,6 +234,7 @@ class WorkflowRunner:
                 driver.handles,
                 driver.interrupt_reason or "cancel",
             )
+            _harvest_cache_orphans(driver)
             driver.cancel_task = None
 
     async def resume(self, run_id: str) -> RunResult:
@@ -298,6 +301,7 @@ class WorkflowRunner:
                 driver.handles,
                 driver.interrupt_reason or "cancel",
             )
+            _harvest_cache_orphans(driver)
             driver.cancel_task = None
 
     async def _execute(self, driver: _Driver, outcome: Mapping[str, Any]) -> RunResult:
@@ -457,6 +461,7 @@ async def _apply_effect(
     replayed = driver.replay.pop(invocation_id, None)
     if replayed is None:
         if effect["type"] in {"invoke_handler", "invoke_provider"}:
+            _harvest_cache_orphans(driver)
             if driver.abandoned.at_capacity():
                 return await _fail_abandoned_cap(driver, effect)
             _bind_handle(driver, effect)
@@ -602,6 +607,16 @@ def _abandon_pending(driver: _Driver) -> None:
         elif not task.done():
             task.cancel()
         driver.abandoned.register(invocation_id, node_id, task)
+    _harvest_cache_orphans(driver)
+
+
+def _harvest_cache_orphans(driver: _Driver) -> None:
+    cache = driver.provider_dispatch.cache
+    orphaned = getattr(cache, "orphaned_computes", None)
+    if not callable(orphaned):
+        return
+    for task in orphaned():
+        driver.abandoned.register("swe-cache", "cache", task)
 
 
 def _fail_action_timeout(
@@ -750,6 +765,7 @@ async def _settle_expired_unfinished(
         consume_task_result(task)
     driver.invocation_deadlines.pop(invocation_id, None)
     driver.action_expired.discard(invocation_id)
+    _harvest_cache_orphans(driver)
     outcome, invocation = _fail_action_timeout(driver, invocation_id)
     await _finish_invocation(driver, outcome, invocation)
 

@@ -136,15 +136,17 @@ class AbandonedWork:
 class AbandonedWorkRegistry:
     """Bounded, observable set of abandoned handler tasks.
 
-    Detaching a task never waits for its I/O. New dispatch fails closed when
-    ``abandoned_count >= cap``. A task that later finishes frees its slot.
+    Entries are keyed by ``id(task)`` so two attempts of the same invocation
+    id both occupy a slot. Detaching a task never waits for its I/O. New
+    dispatch fails closed when ``abandoned_count >= cap``. A task that later
+    finishes frees its slot.
     """
 
     def __init__(self, cap: int) -> None:
         if cap < 1:
             raise ValueError("abandoned work cap must be at least 1")
         self.cap = cap
-        self._items: dict[str, tuple[AbandonedWork, asyncio.Task[Any]]] = {}
+        self._items: dict[int, tuple[AbandonedWork, asyncio.Task[Any]]] = {}
 
     @property
     def abandoned_count(self) -> int:
@@ -153,7 +155,7 @@ class AbandonedWorkRegistry:
 
     def invocation_ids(self) -> tuple[str, ...]:
         self._drop_done()
-        return tuple(self._items)
+        return tuple(item[0].invocation_id for item in self._items.values())
 
     def snapshot(self) -> tuple[AbandonedWork, ...]:
         self._drop_done()
@@ -170,22 +172,26 @@ class AbandonedWorkRegistry:
     ) -> None:
         consume_task_result(task)
         if task.done():
-            self._items.pop(invocation_id, None)
+            return
+        key = id(task)
+        if key in self._items:
             return
         work = AbandonedWork(invocation_id, node_id, time.monotonic())
-        self._items[invocation_id] = (work, task)
+        self._items[key] = (work, task)
 
         def _release(done: asyncio.Task[Any]) -> None:
-            self._items.pop(invocation_id, None)
+            current = self._items.get(key)
+            if current is not None and current[1] is done:
+                self._items.pop(key, None)
             consume_task_result(done)
 
         task.add_done_callback(_release)
 
     def _drop_done(self) -> None:
-        for invocation_id, (_, task) in list(self._items.items()):
+        for key, (_, task) in list(self._items.items()):
             if task.done():
                 consume_task_result(task)
-                self._items.pop(invocation_id, None)
+                self._items.pop(key, None)
 
 
 def consume_task_result(task: asyncio.Task[Any]) -> None:

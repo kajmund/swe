@@ -12,8 +12,11 @@ All notable changes to this project are documented here.
   ContextVar. SWE sets `handle.cancel` and `reason` (`timeout` vs `cancel`)
   before `task.cancel()`. Unfinished work is detached into a bounded
   abandoned-work registry so `reap_owned` cannot hang; exceeding the cap
-  fails closed on new dispatch. SWE does not claim the provider received
-  cancel, stopped billing, or that the OS socket closed.
+  fails closed on new dispatch. The registry is keyed by task identity so
+  resume of the same invocation id cannot overwrite an earlier attempt.
+  Orphaned exact-cache provider computes count toward the same cap; the
+  last waiter still drops the L1 flight. SWE does not claim the provider
+  received cancel, stopped billing, or that the OS socket closed.
 - Add host-owned per-action timeouts on `WorkflowResources.action_timeouts`,
   keyed by SWD node id. SWD 1.0 is unchanged, retry stays unsupported, and
   action expiry does not call `Machine.tick`. Once the per-action deadline

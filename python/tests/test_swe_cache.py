@@ -317,6 +317,53 @@ async def test_cancelled_waiter_does_not_corrupt_or_pin_a_flight() -> None:
     await asyncio.sleep(0)
     assert cache.metrics().entries == 1
     assert cache.active_flight_count == 0
+    assert cache.orphaned_computes() == ()
+
+
+async def test_orphaned_compute_is_tracked_and_reattaches() -> None:
+    cache = InMemoryDecisionCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    computes = 0
+
+    async def stubborn() -> Mapping[str, Any]:
+        nonlocal computes
+        computes += 1
+        started.set()
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                if release.is_set():
+                    break
+        return {"choice": "yes"}
+
+    lone = asyncio.create_task(
+        cache.resolve("k", stubborn, provider="p", prompt_key="k")
+    )
+    await started.wait()
+    lone.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await lone
+    await asyncio.sleep(0)
+    assert cache.active_flight_count == 0
+    orphans = cache.orphaned_computes()
+    assert len(orphans) == 1
+    assert not orphans[0].done()
+
+    started.clear()
+    rejoined = asyncio.create_task(
+        cache.resolve("k", stubborn, provider="p", prompt_key="k")
+    )
+    await asyncio.sleep(0)
+    assert cache.active_flight_count == 1
+    assert cache.orphaned_computes() == ()
+    assert computes == 1
+    release.set()
+    answer, hit = await rejoined
+    assert answer["choice"] == "yes"
+    assert hit is True
+    assert computes == 1
 
 
 async def test_latency_samples_stay_bounded_and_percentiles_match_window() -> None:

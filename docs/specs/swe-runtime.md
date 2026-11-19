@@ -68,11 +68,14 @@ or host `cancel_event`, SWE sets `handle.cancel` and `reason` (`timeout` vs
 After cancel, SWE persists terminal status without waiting for physical I/O,
 waits a short grace period, and detaches unfinished work into a bounded
 abandoned-work registry (cap defaults to runner `concurrency`). The registry
-is observable (`abandoned_count`, invocation ids, age). Exceeding the cap
-fails closed on new dispatch (`kind=limit`); the success path never waits
-for abandoned I/O. `WorkflowRunner.run` / `resume` `finally` may cancel
-abandoned tasks but must not hang: a tiny timeout, then detach. A host
-`cancel_event` during that grace still uses the bounded detach path.
+is keyed by task identity, so two attempts of the same invocation id both
+occupy a slot. Exact-cache provider computes that outlive their waiters are
+harvested into the same cap. The registry is observable (`abandoned_count`,
+invocation ids, age). Exceeding the cap fails closed on new dispatch
+(`kind=limit`); the success path never waits for abandoned I/O.
+`WorkflowRunner.run` / `resume` `finally` may cancel abandoned tasks but
+must not hang: a tiny timeout, then detach. A host `cancel_event` during
+that grace still uses the bounded detach path.
 
 SWE cannot guarantee that a provider received cancel, that a provider
 stopped billing, or that an OS thread or socket actually closed if the host
