@@ -6,9 +6,11 @@ adapter never calls into Rust while awaiting a handler or a provider.
 
 Deadline: the driver waits with the remaining monotonic timeout and calls
 `Machine.tick(now_ms)` when it expires. Tick fails the run and emits
-`CancelInvocation` for open handlers. Handlers that swallow
-`CancelledError` are not force-stopped; terminal status stays protected and
-late results do not route again.
+`CancelInvocation` for open handlers. Each handler and provider call is bound
+to an `InvocationHandle` (`current_invocation()`). On action timeout,
+workflow tick, or host `cancel_event`, SWE sets `handle.cancel` and
+`reason` (`timeout` vs `cancel`) and only then `task.cancel()`, so the Event
+is visible before `CancelledError`.
 
 Per-action deadlines come from host-owned `WorkflowResources.action_timeouts`
 (SWD node id → seconds). The driver waits `min(workflow remaining, soonest
@@ -17,14 +19,19 @@ Tick stays workflow-wide: action expiry does not call `Machine.tick`. Once
 the per-action deadline has passed, the invocation is terminal `kind=timeout`
 even if the handler swallows `CancelledError` or later returns a value; the
 late result is discarded and does not `complete()` or route. Expiry is judged
-at handler completion time, not at delayed settlement. After cancel, SWE
-waits `_ACTION_CANCEL_GRACE_SECONDS` and then detaches a task that has not
-finished into a runner-owned abandoned-work registry (cap = `concurrency`)
-so `reap_owned` cannot hang, including when `cancel_event` fires during
-grace. A failed fork waits that grace before registering sibling handlers
-as abandoned. Blocking I/O (`time.sleep`, blocking sockets, threads that
-ignore cancel) is not force-stopped and may continue after SWE has settled
-the timeout. Retry stays unsupported.
+at handler completion time, not at delayed settlement. Host `cancel_event`
+is terminal `cancelled`, not timeout. After cancel, SWE waits
+`CANCEL_GRACE_SECONDS` and then detaches a task that has not finished into
+a bounded abandoned-work registry so `reap_owned` cannot hang, including
+when `cancel_event` fires during grace. A failed fork waits that grace
+before registering sibling handlers as abandoned. The registry is keyed by
+task identity; resume of the same invocation id cannot drop an earlier
+attempt. Orphaned exact-cache provider computes count toward the same cap.
+Blocking I/O (`time.sleep`, blocking sockets, threads that ignore cancel)
+is not force-stopped and may continue after SWE has settled the timeout;
+the host must abort sockets from `InvocationHandle.cancel`. Retry stays
+unsupported. `swe-budget` is not on this path: timeout/cancel must not
+double-complete or double-fail the machine.
 
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
@@ -45,15 +52,23 @@ from typing import Any
 
 from swe.definition import CompiledDefinition
 from swe.invocation_error import live_invocation_error, normalize_invocation_error
+from swe.invocation_handle import (
+    AbandonedWorkRegistry,
+    CancelReason,
+    InvocationHandle,
+    consume_task_result,
+    invocation_deadline_ms,
+    make_invocation_handle,
+    request_cancel,
+)
 from swe.runtime_clock import FrozenClock, WorkflowClock
 from swe.runtime_dispatch import (
-    AbandonedWorkRegistry,
+    CANCEL_GRACE_SECONDS,
     Handler,
     HandlerOutcome,
     ProviderDispatch,
     cancel_all,
     cancel_invocations,
-    consume_task_result,
     reap_owned,
     spawn_invocations,
 )
@@ -75,7 +90,7 @@ from swe.schema import NODE_ID_PATTERN
 _NODE_ID_RE = re.compile(NODE_ID_PATTERN)
 _MIN_ACTION_TIMEOUT_SECONDS = 1
 _MAX_ACTION_TIMEOUT_SECONDS = 86_400
-_ACTION_CANCEL_GRACE_SECONDS = 0.1
+_ACTION_CANCEL_GRACE_SECONDS = CANCEL_GRACE_SECONDS
 
 
 @dataclass
@@ -99,9 +114,11 @@ class _Driver:
     action_timeouts: Mapping[str, int]
     abandoned: AbandonedWorkRegistry
     invocation_nodes: dict[str, str] = field(default_factory=dict)
+    handles: dict[str, InvocationHandle] = field(default_factory=dict)
     cancel_task: asyncio.Task[bool] | None = None
     invocation_deadlines: dict[str, int] = field(default_factory=dict)
     action_expired: set[str] = field(default_factory=set)
+    interrupt_reason: CancelReason | None = None
 
 
 try:
@@ -214,7 +231,10 @@ class WorkflowRunner:
                 driver.cancel_task,
                 driver.abandoned,
                 driver.invocation_nodes,
+                driver.handles,
+                driver.interrupt_reason or "cancel",
             )
+            _harvest_cache_orphans(driver)
             driver.cancel_task = None
 
     async def resume(self, run_id: str) -> RunResult:
@@ -278,7 +298,10 @@ class WorkflowRunner:
                 driver.cancel_task,
                 driver.abandoned,
                 driver.invocation_nodes,
+                driver.handles,
+                driver.interrupt_reason or "cancel",
             )
+            _harvest_cache_orphans(driver)
             driver.cancel_task = None
 
     async def _execute(self, driver: _Driver, outcome: Mapping[str, Any]) -> RunResult:
@@ -357,6 +380,9 @@ async def resume_run(
 
 
 async def _drive(driver: _Driver, outcome: Mapping[str, Any]) -> None:
+    if _cancelled(driver):
+        await _cancel_run(driver)
+        return
     await _apply_effects(driver, outcome["effects"])
     while driver.machine.status() == "running":
         if _cancelled(driver):
@@ -372,6 +398,7 @@ async def _drive(driver: _Driver, outcome: Mapping[str, Any]) -> None:
 
 
 async def _cancel_run(driver: _Driver) -> None:
+    driver.interrupt_reason = "cancel"
     outcome = driver.machine.cancel(driver.clock.now_ms())
     await _persist(driver)
     await _apply_effects(driver, outcome["effects"])
@@ -420,19 +447,24 @@ async def _apply_effect(
     driver: _Driver, effect: Mapping[str, Any],
 ) -> list[Mapping[str, Any]]:
     if effect["type"] == "cancel_invocation":
-        cancel_invocations([effect], driver.pending)
+        reason = driver.interrupt_reason or "cancel"
+        cancel_invocations([effect], driver.pending, driver.handles, reason)
         return []
     if driver.machine.status() != "running":
         return []
-    invocation_id = effect["invocation_id"]
+    invocation_id = str(effect["invocation_id"])
+    if (
+        effect["type"] in {"invoke_handler", "invoke_provider"}
+        and _cancelled(driver)
+    ):
+        return []
     replayed = driver.replay.pop(invocation_id, None)
     if replayed is None:
-        if (
-            effect["type"] in {"invoke_handler", "invoke_provider"}
-            and driver.abandoned.at_capacity()
-        ):
-            return await _fail_abandoned_cap(driver, effect)
-        driver.invocation_nodes[invocation_id] = str(effect["node_id"])
+        if effect["type"] in {"invoke_handler", "invoke_provider"}:
+            _harvest_cache_orphans(driver)
+            if driver.abandoned.at_capacity():
+                return await _fail_abandoned_cap(driver, effect)
+            _bind_handle(driver, effect)
         spawn_invocations(
             [effect],
             handlers=driver.handlers,
@@ -441,6 +473,7 @@ async def _apply_effect(
             semaphore=driver.semaphore,
             provider_dispatch=driver.provider_dispatch,
             now_ms=driver.clock.now_ms,
+            handles=driver.handles,
         )
         _arm_action_deadline(driver, effect)
         return []
@@ -486,16 +519,34 @@ def _soonest_action_remaining_ms(driver: _Driver, now_ms: int) -> int | None:
     return soonest
 
 
+def _bind_handle(driver: _Driver, effect: Mapping[str, Any]) -> InvocationHandle:
+    invocation_id = str(effect["invocation_id"])
+    node_id = str(effect["node_id"])
+    driver.invocation_nodes[invocation_id] = node_id
+    handle = make_invocation_handle(
+        invocation_id=invocation_id,
+        node_id=node_id,
+        deadline_ms=invocation_deadline_ms(
+            now_ms=driver.clock.now_ms(),
+            workflow_deadline_ms=int(driver.machine.deadline_ms()),
+            action_timeout_seconds=driver.action_timeouts.get(node_id),
+        ),
+    )
+    driver.handles[invocation_id] = handle
+    return handle
+
+
 def _arm_action_deadline(driver: _Driver, effect: Mapping[str, Any]) -> None:
     if effect["type"] not in {"invoke_handler", "invoke_provider"}:
         return
     node_id = str(effect["node_id"])
-    timeout = driver.action_timeouts.get(node_id)
-    if timeout is None:
+    if node_id not in driver.action_timeouts:
         return
-    now_ms = driver.clock.now_ms()
-    deadline = min(now_ms + timeout * 1000, int(driver.machine.deadline_ms()))
-    driver.invocation_deadlines[str(effect["invocation_id"])] = deadline
+    invocation_id = str(effect["invocation_id"])
+    handle = driver.handles.get(invocation_id)
+    if handle is None:
+        return
+    driver.invocation_deadlines[invocation_id] = handle.deadline_ms
 
 
 def _cancel_actions_due_by(driver: _Driver, cutoff_ms: int) -> None:
@@ -507,7 +558,8 @@ def _cancel_actions_due_by(driver: _Driver, cutoff_ms: int) -> None:
             continue
         if int(deadline) > cutoff_ms:
             continue
-        task.cancel()
+        driver.interrupt_reason = "timeout"
+        request_cancel(driver.handles.get(invocation_id), task, "timeout")
         driver.action_expired.add(invocation_id)
 
 
@@ -546,9 +598,25 @@ def _abandon_pending(driver: _Driver) -> None:
         driver.invocation_deadlines.pop(invocation_id, None)
         driver.action_expired.discard(invocation_id)
         node_id = driver.invocation_nodes.pop(invocation_id, "")
-        if not task.done():
+        handle = driver.handles.pop(invocation_id, None)
+        if handle is not None:
+            if not handle.cancel.is_set():
+                request_cancel(
+                    handle, task, driver.interrupt_reason or "timeout"
+                )
+        elif not task.done():
             task.cancel()
         driver.abandoned.register(invocation_id, node_id, task)
+    _harvest_cache_orphans(driver)
+
+
+def _harvest_cache_orphans(driver: _Driver) -> None:
+    cache = driver.provider_dispatch.cache
+    orphaned = getattr(cache, "orphaned_computes", None)
+    if not callable(orphaned):
+        return
+    for task in orphaned():
+        driver.abandoned.register("swe-cache", "cache", task)
 
 
 def _fail_action_timeout(
@@ -609,10 +677,12 @@ def _validate_action_timeouts(action_timeouts: Mapping[str, int]) -> dict[str, i
 
 
 async def _timeout_run(driver: _Driver) -> None:
+    driver.interrupt_reason = "timeout"
     now = max(driver.clock.now_ms(), driver.machine.deadline_ms())
     outcome = driver.machine.tick(now)
     await _persist(driver)
     await _apply_effects(driver, outcome["effects"])
+    await _detach_pending(driver)
 
 
 async def _apply_one(driver: _Driver) -> None:
@@ -688,12 +758,14 @@ async def _settle_expired_unfinished(
     invocation_id = unfinished[0]
     task = driver.pending.pop(invocation_id, None)
     node_id = driver.invocation_nodes.get(invocation_id, "")
+    driver.handles.pop(invocation_id, None)
     if task is not None and not task.done():
         driver.abandoned.register(invocation_id, node_id, task)
     elif task is not None:
         consume_task_result(task)
     driver.invocation_deadlines.pop(invocation_id, None)
     driver.action_expired.discard(invocation_id)
+    _harvest_cache_orphans(driver)
     outcome, invocation = _fail_action_timeout(driver, invocation_id)
     await _finish_invocation(driver, outcome, invocation)
 
@@ -729,6 +801,7 @@ async def _settle_invocation(driver: _Driver, invocation_id: str) -> None:
     expired = _invocation_expired(driver, invocation_id, task)
     driver.invocation_deadlines.pop(invocation_id, None)
     driver.action_expired.discard(invocation_id)
+    driver.handles.pop(invocation_id, None)
     if expired:
         consume_task_result(task)
         outcome, invocation = _fail_action_timeout(driver, invocation_id)
@@ -751,7 +824,14 @@ async def _finish_invocation(
     await _persist(driver, invocation)
     await _apply_effects(driver, outcome["effects"])
     if outcome["status"] != "running":
-        cancel_all(driver.pending)
+        error = driver.machine.error()
+        if driver.interrupt_reason is not None:
+            reason: CancelReason = driver.interrupt_reason
+        elif isinstance(error, dict) and error.get("kind") == "timeout":
+            reason = "timeout"
+        else:
+            reason = "cancel"
+        cancel_all(driver.pending, driver.handles, reason)
         await _detach_pending(driver)
 
 

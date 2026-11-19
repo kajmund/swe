@@ -121,12 +121,13 @@ class WorkflowResources:
     enable retry (retry stays unsupported in SWE v1). When the per-action
     deadline has passed, the invocation is terminal ``kind=timeout`` even if
     the handler later returns a value. Expiry is judged at handler completion
-    time. After cancel, SWE waits a short grace period and then detaches a
-    task that has not finished into a runner-owned abandoned-work registry;
-    blocking I/O (``time.sleep``, blocking sockets, threads that ignore
-    cancel) is not force-stopped and may continue after SWE has settled the
-    timeout. A host ``cancel_event`` during that grace still uses the bounded
-    detach path so ``reap_owned`` cannot hang.
+    time. Host ``cancel_event`` is terminal ``cancelled``, not timeout. After
+    cancel, SWE waits a short grace period and then detaches a task that has
+    not finished into a bounded abandoned-work registry; blocking I/O
+    (``time.sleep``, blocking sockets, threads that ignore cancel) is not
+    force-stopped. A host ``cancel_event`` during that grace still uses the
+    bounded detach path so ``reap_owned`` cannot hang. Hosts abort sockets
+    from ``InvocationHandle.cancel``.
     """
 
     providers: Mapping[str, Callable[..., Awaitable[Any]]] = field(

@@ -5,12 +5,16 @@ decision prompt from the active prompt map, calls the registered provider, and
 validates the returned choice against the node's declared choices. With
 `cache_policy: exact` the answer goes through the shared L1/L2 decision cache
 and the cache state is part of the completion payload.
+
+Every handler and provider call is bound to an :class:`InvocationHandle` via
+``current_invocation()``. Hosts abort sockets from that handle; SWE does not
+force-close blocking I/O. After cancel, unfinished work is detached into a
+bounded abandoned-work registry instead of being awaited on the success path.
 """
 
 from __future__ import annotations
 
 import asyncio
-import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +22,16 @@ from typing import Any
 from swe.prompt_render import render_prompt
 from swe.cache import DecisionCache, assert_cache_isolation, decision_cache_key
 from swe.invocation_error import invocation_error_from_exception
+from swe.invocation_handle import (
+    AbandonedWorkRegistry,
+    CancelReason,
+    InvocationHandle,
+    bind_current_invocation,
+    consume_task_result,
+    current_invocation,
+    request_cancel,
+    reset_current_invocation,
+)
 from swe.runtime_errors import SweHandlerError
 from swe.runtime_validate import require_json_value, validate_output_schema
 
@@ -41,96 +55,6 @@ class HandlerOutcome:
 
 
 @dataclass(frozen=True)
-class AbandonedWork:
-    """One detached handler or provider task that ignored cancel."""
-
-    invocation_id: str
-    node_id: str
-    abandoned_at_mono: float
-
-    def age_seconds(self, now_mono: float | None = None) -> float:
-        now = time.monotonic() if now_mono is None else now_mono
-        return max(0.0, now - self.abandoned_at_mono)
-
-
-class AbandonedWorkRegistry:
-    """Bounded, observable set of abandoned handler tasks.
-
-    Detaching a task never waits for its I/O. New dispatch fails closed when
-    ``abandoned_count >= cap``. A task that later finishes frees its slot.
-    Entries are keyed by the asyncio task identity so two attempts that share
-    a deterministic invocation id cannot overwrite each other.
-    """
-
-    def __init__(self, cap: int) -> None:
-        if cap < 1:
-            raise ValueError("abandoned work cap must be at least 1")
-        self.cap = cap
-        self._items: dict[int, tuple[AbandonedWork, asyncio.Task[Any]]] = {}
-
-    @property
-    def abandoned_count(self) -> int:
-        self._drop_done()
-        return len(self._items)
-
-    def invocation_ids(self) -> tuple[str, ...]:
-        self._drop_done()
-        return tuple(item[0].invocation_id for item in self._items.values())
-
-    def snapshot(self) -> tuple[AbandonedWork, ...]:
-        self._drop_done()
-        return tuple(item[0] for item in self._items.values())
-
-    def at_capacity(self) -> bool:
-        return self.abandoned_count >= self.cap
-
-    def register(
-        self,
-        invocation_id: str,
-        node_id: str,
-        task: asyncio.Task[Any],
-    ) -> None:
-        consume_task_result(task)
-        key = id(task)
-        if task.done():
-            self._items.pop(key, None)
-            return
-        work = AbandonedWork(invocation_id, node_id, time.monotonic())
-        self._items[key] = (work, task)
-
-        def _release(done: asyncio.Task[Any]) -> None:
-            current = self._items.get(key)
-            if current is not None and current[1] is done:
-                self._items.pop(key, None)
-            consume_task_result(done)
-
-        task.add_done_callback(_release)
-
-    def _drop_done(self) -> None:
-        for key, (_, task) in list(self._items.items()):
-            if task.done():
-                consume_task_result(task)
-                self._items.pop(key, None)
-
-
-def consume_task_result(task: asyncio.Task[Any]) -> None:
-    """Observe a task result so abandoned work is not an unhandled warning."""
-
-    def _consume(done: asyncio.Task[Any]) -> None:
-        if done.cancelled():
-            return
-        try:
-            done.exception()
-        except (asyncio.CancelledError, asyncio.InvalidStateError):
-            return
-
-    if task.done():
-        _consume(task)
-        return
-    task.add_done_callback(_consume)
-
-
-@dataclass(frozen=True)
 class ProviderDispatch:
     """Provider registry plus the resources provider decisions need."""
 
@@ -148,13 +72,16 @@ def spawn_invocations(
     semaphore: asyncio.Semaphore,
     provider_dispatch: ProviderDispatch,
     now_ms: NowMs,
+    handles: Mapping[str, InvocationHandle] | None = None,
 ) -> None:
+    bound = handles or {}
     for effect in effects:
         kind = effect["type"]
+        handle = bound.get(str(effect["invocation_id"]))
         if kind == "invoke_handler":
-            task = _run_handler(effect, handlers, nodes, semaphore, now_ms)
+            task = _run_handler(effect, handlers, nodes, semaphore, now_ms, handle)
         elif kind == "invoke_provider":
-            task = _run_provider(effect, provider_dispatch, semaphore, now_ms)
+            task = _run_provider(effect, provider_dispatch, semaphore, now_ms, handle)
         else:
             continue
         invocation_id = effect["invocation_id"]
@@ -167,19 +94,25 @@ def spawn_invocations(
 def cancel_invocations(
     effects: list[Mapping[str, Any]],
     pending: dict[str, asyncio.Task[HandlerOutcome]],
+    handles: Mapping[str, InvocationHandle] | None = None,
+    reason: CancelReason = "cancel",
 ) -> None:
+    bound = handles or {}
     for effect in effects:
         if effect["type"] != "cancel_invocation":
             continue
-        task = pending.get(effect["invocation_id"])
-        if task is not None and not task.done():
-            task.cancel()
+        invocation_id = str(effect["invocation_id"])
+        request_cancel(bound.get(invocation_id), pending.get(invocation_id), reason)
 
 
-def cancel_all(pending: dict[str, asyncio.Task[HandlerOutcome]]) -> None:
-    for task in pending.values():
-        if not task.done():
-            task.cancel()
+def cancel_all(
+    pending: dict[str, asyncio.Task[HandlerOutcome]],
+    handles: Mapping[str, InvocationHandle] | None = None,
+    reason: CancelReason = "cancel",
+) -> None:
+    bound = handles or {}
+    for invocation_id, task in pending.items():
+        request_cancel(bound.get(invocation_id), task, reason)
 
 
 async def reap_owned(
@@ -187,14 +120,19 @@ async def reap_owned(
     cancel_task: asyncio.Task[bool] | None,
     abandoned: AbandonedWorkRegistry,
     invocation_nodes: Mapping[str, str] | None = None,
+    handles: Mapping[str, InvocationHandle] | None = None,
+    reason: CancelReason = "cancel",
 ) -> None:
     """Cancel leftover work, wait a short grace, then detach.
 
     Must not await abandoned tasks. The caller's ``finally`` uses this so a
-    handler that ignores cancel cannot hang ``run`` / ``resume``.
+    handler that ignores cancel cannot hang ``run`` / ``resume``. Signal the
+    invocation handle before ``task.cancel()`` so a cancelled ``run`` still
+    publishes ``handle.cancel`` for host socket abort.
     """
 
     nodes = dict(invocation_nodes or {})
+    bound = dict(handles or {})
     owned = list(pending.items())
     pending.clear()
     still: list[tuple[str, asyncio.Task[HandlerOutcome]]] = []
@@ -202,7 +140,7 @@ async def reap_owned(
         if task.done():
             consume_task_result(task)
             continue
-        task.cancel()
+        request_cancel(bound.get(invocation_id), task, reason)
         still.append((invocation_id, task))
     extra: list[asyncio.Task[Any]] = []
     if cancel_task is not None and not cancel_task.done():
@@ -245,9 +183,11 @@ async def _run_handler(
     nodes: Mapping[str, Any],
     semaphore: asyncio.Semaphore,
     now_ms: NowMs,
+    handle: InvocationHandle | None,
 ) -> HandlerOutcome:
     invocation_id = effect["invocation_id"]
     node_id = effect["node_id"]
+    token = bind_current_invocation(handle)
     try:
         async with semaphore:
             output = await handlers[effect["handler"]](effect["input"])
@@ -263,6 +203,8 @@ async def _run_handler(
             now_ms=now_ms,
             value=invocation_error_from_exception(exc),
         )
+    finally:
+        reset_current_invocation(token)
 
 
 async def _run_provider(
@@ -270,9 +212,11 @@ async def _run_provider(
     dispatch: ProviderDispatch,
     semaphore: asyncio.Semaphore,
     now_ms: NowMs,
+    handle: InvocationHandle | None,
 ) -> HandlerOutcome:
     invocation_id = effect["invocation_id"]
     node_id = effect["node_id"]
+    token = bind_current_invocation(handle)
     try:
         request = _provider_request(effect, dispatch.prompts)
         provider = dispatch.providers[effect["provider"]]
@@ -289,6 +233,8 @@ async def _run_provider(
             now_ms=now_ms,
             value=invocation_error_from_exception(exc),
         )
+    finally:
+        reset_current_invocation(token)
 
 
 def _provider_request(
@@ -393,3 +339,21 @@ def sync_handler(func: Callable[[Mapping[str, Any]], Any]) -> Handler:
         return func(payload)
 
     return wrapped
+
+
+__all__ = [
+    "CANCEL_GRACE_SECONDS",
+    "AbandonedWorkRegistry",
+    "Handler",
+    "HandlerOutcome",
+    "InvocationHandle",
+    "Provider",
+    "ProviderDispatch",
+    "cancel_all",
+    "cancel_invocations",
+    "current_invocation",
+    "identity_handler",
+    "reap_owned",
+    "spawn_invocations",
+    "sync_handler",
+]

@@ -18,6 +18,14 @@ from swe.cache import (
     scoped_cache_params,
 )
 from swe.definition import compile_definition
+from swe.invocation_handle import (
+    InvocationHandle,
+    bind_current_invocation,
+    current_invocation,
+    make_invocation_handle,
+    request_cancel,
+    reset_current_invocation,
+)
 from swe.runtime import WorkflowResources, run_workflow
 from swe.runtime_clock import FrozenClock
 from swe.runtime_errors import SweHandlerError
@@ -317,6 +325,107 @@ async def test_cancelled_waiter_does_not_corrupt_or_pin_a_flight() -> None:
     await asyncio.sleep(0)
     assert cache.metrics().entries == 1
     assert cache.active_flight_count == 0
+    assert cache.orphaned_computes() == ()
+
+
+async def test_orphaned_compute_is_tracked_and_reattaches() -> None:
+    cache = InMemoryDecisionCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    computes = 0
+
+    async def stubborn() -> Mapping[str, Any]:
+        nonlocal computes
+        computes += 1
+        started.set()
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                if release.is_set():
+                    break
+        return {"choice": "yes"}
+
+    lone = asyncio.create_task(
+        cache.resolve("k", stubborn, provider="p", prompt_key="k")
+    )
+    await started.wait()
+    lone.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await lone
+    await asyncio.sleep(0)
+    assert cache.active_flight_count == 0
+    orphans = cache.orphaned_computes()
+    assert len(orphans) == 1
+    assert not orphans[0].done()
+
+    started.clear()
+    rejoined = asyncio.create_task(
+        cache.resolve("k", stubborn, provider="p", prompt_key="k")
+    )
+    await asyncio.sleep(0)
+    assert cache.active_flight_count == 1
+    assert cache.orphaned_computes() == ()
+    assert computes == 1
+    release.set()
+    answer, hit = await rejoined
+    assert answer["choice"] == "yes"
+    assert hit is True
+    assert computes == 1
+
+
+async def test_cancelling_one_waiter_does_not_signal_shared_compute_handle() -> None:
+    cache = InMemoryDecisionCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    compute_handle: InvocationHandle | None = None
+
+    async def compute() -> Mapping[str, Any]:
+        nonlocal compute_handle
+        compute_handle = current_invocation()
+        started.set()
+        await release.wait()
+        handle = current_invocation()
+        if handle is not None and handle.cancel.is_set():
+            raise RuntimeError("socket abort")
+        return {"choice": "yes"}
+
+    waiter_handles = [
+        make_invocation_handle(
+            invocation_id=f"waiter-{index}",
+            node_id="decide",
+            deadline_ms=86_400_000,
+        )
+        for index in (1, 2)
+    ]
+
+    async def bound_resolve(
+        handle: InvocationHandle,
+    ) -> tuple[Mapping[str, Any], bool]:
+        token = bind_current_invocation(handle)
+        try:
+            return await cache.resolve("k", compute, provider="p", prompt_key="k")
+        finally:
+            reset_current_invocation(token)
+
+    first = asyncio.create_task(bound_resolve(waiter_handles[0]))
+    await started.wait()
+    second = asyncio.create_task(bound_resolve(waiter_handles[1]))
+    deadline = asyncio.get_running_loop().time() + 5
+    while cache.metrics().coalesced < 1:
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError("exact-cache waiters did not coalesce")
+        await asyncio.sleep(0)
+    request_cancel(waiter_handles[0], first, "cancel")
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    assert compute_handle is not None
+    assert not compute_handle.cancel.is_set()
+    assert compute_handle.reason() is None
+    release.set()
+    answer, _hit = await second
+    assert answer == {"choice": "yes"}
+    assert not compute_handle.cancel.is_set()
 
 
 async def test_latency_samples_stay_bounded_and_percentiles_match_window() -> None:

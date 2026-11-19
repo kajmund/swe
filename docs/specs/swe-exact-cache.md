@@ -35,7 +35,9 @@ reads and writes.
 - cache of validated successful objects only (`choice` is a non-empty string);
 - no store on exception, timeout, cancellation, or invalid answer;
 - waiter cancellation that does not corrupt an entry or leave a stuck flight
-  (the last waiter cancels the compute task);
+  (the last waiter cancels the compute task and drops the flight; an
+  unfinished compute is tracked as an orphan and harvested into the runner
+  abandoned-work cap);
 - metrics: hit, miss, coalesced/wait, compute, error, eviction, expiry,
   latency, peak in-flight, bytes;
 - a bounded latency sample window (default 4096) for p50/p95, so memory does

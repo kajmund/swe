@@ -51,21 +51,50 @@ Host-owned `WorkflowResources.action_timeouts` bound individual task and
 provider invocations by SWD node id without changing the SWD document.
 Action expiry cancels that asyncio task and is terminal for the invocation
 (`kind=timeout`, `path=nodes.{node_id}`); it does not call `Machine.tick`
-(tick remains workflow-wide). A handler that swallows `CancelledError` or
-returns after the deadline does not complete or route; the late result is
-discarded. Expiry uses the handler's completion time, so a delayed
-`RunStore.record` cannot convert a timely success into a timeout. After
-cancel, SWE waits a short grace period and then detaches a task that has
-not finished into a runner-owned abandoned-work registry (cap =
-`concurrency`) so `reap_owned` cannot hang, including when `cancel_event`
-fires during grace. New dispatch fails closed (`kind=limit`) while the
-registry is full. Blocking I/O (`time.sleep`, blocking sockets, threads
-that ignore cancel) is not force-stopped and may continue after SWE has
-settled the timeout. Retry stays unsupported. Cancellation emits
-cancellation effects for outstanding host work.
+(tick remains workflow-wide). Host `cancel_event` is terminal `cancelled`,
+not timeout. A handler that swallows `CancelledError` or returns after the
+deadline does not complete or route; the late result is discarded and does
+not write a second journal row. Expiry uses the handler's completion time,
+so a delayed `RunStore.record` cannot convert a timely success into a
+timeout.
+
+Each handler and provider call is bound to `InvocationHandle` via
+`current_invocation()`. The handle's `deadline_ms` is
+`min(action deadline, workflow deadline)`. On action timeout, workflow tick,
+or host `cancel_event`, SWE sets `handle.cancel` and `reason` (`timeout` vs
+`cancel`) and only then `task.cancel()`, so the Event is visible before
+`CancelledError`. Handler signatures stay `async def handler(payload)`.
+
+After cancel, SWE persists terminal status without waiting for physical I/O,
+waits a short grace period, and detaches unfinished work into a bounded
+abandoned-work registry (cap defaults to runner `concurrency`). The registry
+is keyed by task identity, so two attempts of the same invocation id both
+occupy a slot. Exact-cache provider computes that outlive their waiters are
+harvested into the same cap. The registry is observable (`abandoned_count`,
+invocation ids, age). Exceeding the cap fails closed on new dispatch
+(`kind=limit`); the success path never waits for abandoned I/O.
+`WorkflowRunner.run` / `resume` `finally` may cancel abandoned tasks but
+must not hang: a tiny timeout, then detach. A host `cancel_event` during
+that grace still uses the bounded detach path.
+
+SWE cannot guarantee that a provider received cancel, that a provider
+stopped billing, or that an OS thread or socket actually closed if the host
+ignores `InvocationHandle.cancel`. `task.cancel()` is cooperative asyncio
+only; blocking I/O (`time.sleep`, blocking sockets, threads that ignore
+cancel) is not aborted by SWE. Retry stays unsupported.
+
+Budget settlement is not on the Python runtime path. `swe-budget` is a
+separate ledger (reference host and ActionOffer). Timeout and cancel must
+not call `complete` / `fail` twice on the machine; hosts that settle from
+those completions therefore cannot double-settle. SWE does not invent a
+second ledger. A timed-out or cancelled invocation that never completed is
+not replayed as success; resume of a persisted timeout/cancel stays
+failed/cancelled and does not re-dispatch.
 
 ## Non-goals
 
 The runtime is not a broker, database, distributed scheduler, provider SDK, or
 prompt catalog. It makes no exactly-once claim for unknown external side effects;
 that guarantee requires an idempotent external system or fail-stop recovery.
+Cancel and timeout are at-most-once for the machine and the journal, not for
+unknown provider or OS effects.
