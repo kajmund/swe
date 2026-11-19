@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Add host-owned per-action timeouts on `WorkflowResources.action_timeouts`,
+  keyed by SWD node id. SWD 1.0 is unchanged, retry stays unsupported, and
+  action expiry does not call `Machine.tick`. Once the per-action deadline
+  has passed, the invocation is terminal `kind=timeout` even if the handler
+  swallows `CancelledError` or later returns a value; the late result is
+  discarded. Expiry uses handler completion time, not delayed settlement.
+  After cancel, SWE waits a short grace period and then detaches a task
+  that has not finished into a runner-owned abandoned-work registry (cap =
+  `concurrency`), including when `cancel_event` fires during grace. New
+  dispatch fails closed at that cap. Blocking I/O (`time.sleep`, blocking
+  sockets, threads that ignore cancel) is not force-stopped and may continue
+  after SWE has settled the timeout.
 - Accept structured invocation errors (`kind`, `message`, optional `path` and
   opaque `payload`) on `InvocationRecord.error` and `Machine.fail`, while still
   replaying legacy string errors as `handler`. No journal schema change.
