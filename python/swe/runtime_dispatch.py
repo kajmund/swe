@@ -120,14 +120,19 @@ async def reap_owned(
     cancel_task: asyncio.Task[bool] | None,
     abandoned: AbandonedWorkRegistry,
     invocation_nodes: Mapping[str, str] | None = None,
+    handles: Mapping[str, InvocationHandle] | None = None,
+    reason: CancelReason = "cancel",
 ) -> None:
     """Cancel leftover work, wait a short grace, then detach.
 
     Must not await abandoned tasks. The caller's ``finally`` uses this so a
-    handler that ignores cancel cannot hang ``run`` / ``resume``.
+    handler that ignores cancel cannot hang ``run`` / ``resume``. Signal the
+    invocation handle before ``task.cancel()`` so a cancelled ``run`` still
+    publishes ``handle.cancel`` for host socket abort.
     """
 
     nodes = dict(invocation_nodes or {})
+    bound = dict(handles or {})
     owned = list(pending.items())
     pending.clear()
     still: list[tuple[str, asyncio.Task[HandlerOutcome]]] = []
@@ -135,7 +140,7 @@ async def reap_owned(
         if task.done():
             consume_task_result(task)
             continue
-        task.cancel()
+        request_cancel(bound.get(invocation_id), task, reason)
         still.append((invocation_id, task))
     extra: list[asyncio.Task[Any]] = []
     if cancel_task is not None and not cancel_task.done():

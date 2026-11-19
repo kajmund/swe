@@ -4,6 +4,9 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Give cancelled siblings a cancel grace before they count as abandoned, and
+  signal `InvocationHandle` from `reap_owned` when `run` / `resume` itself is
+  cancelled so hosts still see `handle.cancel`.
 - Add `InvocationHandle` and `current_invocation()` around every handler and
   provider call. Hosts keep `async def handler(payload)` and read the
   ContextVar. SWE sets `handle.cancel` and `reason` (`timeout` vs `cancel`)

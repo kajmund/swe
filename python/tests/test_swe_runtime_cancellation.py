@@ -494,3 +494,75 @@ async def test_handle_deadline_ms_is_min_of_action_and_workflow() -> None:
     assert seen["deadline_ms"] == 2_000
     assert seen["remaining"] == 2.0
     assert swe_tasks() == []
+
+
+def _fail_join_flow() -> object:
+    return compile_runtime(
+        {
+            "split": {
+                "type": "fork",
+                "branches": {"left": "boom", "right": "hang"},
+                "join": "together",
+            },
+            "boom": {"type": "task", "handler": "demo.boom"},
+            "hang": {"type": "task", "handler": "demo.hang"},
+            "together": {"type": "join", "mode": "all", "next": "done"},
+            "done": {"type": "end", "status": "completed"},
+        },
+        name="failjoin",
+        entrypoint="split",
+        handlers=frozenset({"demo.boom", "demo.hang"}),
+    )
+
+
+async def test_cooperative_sibling_does_not_fill_abandoned_cap() -> None:
+    async def boom(_payload: dict[str, object]) -> dict[str, str]:
+        raise RuntimeError("need failed")
+
+    async def hang(_payload: dict[str, object]) -> dict[str, str]:
+        await asyncio.Event().wait()
+        return {"ok": "no"}
+
+    runner = WorkflowRunner(
+        _fail_join_flow(),
+        {"demo.boom": boom, "demo.hang": hang},
+        concurrency=1,
+    )
+    first = await asyncio.wait_for(runner.run({}, run_id="coop-sib-1"), timeout=5)
+    assert first.status == "failed"
+    assert first.error is not None
+    assert first.error["kind"] != "limit"
+    assert runner.abandoned_count == 0
+
+    second = await asyncio.wait_for(runner.run({}, run_id="coop-sib-2"), timeout=5)
+    assert second.status == "failed"
+    assert second.error is not None
+    assert second.error["kind"] != "limit"
+    assert runner.abandoned_count == 0
+    assert swe_tasks() == []
+
+
+async def test_outer_task_cancel_signals_invocation_handle() -> None:
+    started = asyncio.Event()
+    seen: dict[str, object] = {}
+
+    async def work(_payload: dict[str, object]) -> dict[str, str]:
+        handle = current_invocation()
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            seen["cancel"] = None if handle is None else handle.cancel.is_set()
+            seen["reason"] = None if handle is None else handle.reason()
+            raise
+        return {"ok": "late"}
+
+    runner = WorkflowRunner(_task_flow(), {"demo.work": work})
+    run_task = asyncio.create_task(runner.run({}))
+    await started.wait()
+    run_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run_task
+    assert seen["cancel"] is True
+    assert seen["reason"] == "cancel"
+    await _cancel_swe_tasks()

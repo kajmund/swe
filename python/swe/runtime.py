@@ -229,6 +229,8 @@ class WorkflowRunner:
                 driver.cancel_task,
                 driver.abandoned,
                 driver.invocation_nodes,
+                driver.handles,
+                driver.interrupt_reason or "cancel",
             )
             driver.cancel_task = None
 
@@ -293,6 +295,8 @@ class WorkflowRunner:
                 driver.cancel_task,
                 driver.abandoned,
                 driver.invocation_nodes,
+                driver.handles,
+                driver.interrupt_reason or "cancel",
             )
             driver.cancel_task = None
 
