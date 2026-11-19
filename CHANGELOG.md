@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Add `InvocationHandle` and `current_invocation()` around every handler and
+  provider call. Hosts keep `async def handler(payload)` and read the
+  ContextVar. SWE sets `handle.cancel` and `reason` (`timeout` vs `cancel`)
+  before `task.cancel()`. Unfinished work is detached into a bounded
+  abandoned-work registry so `reap_owned` cannot hang; exceeding the cap
+  fails closed on new dispatch. SWE does not claim the provider received
+  cancel, stopped billing, or that the OS socket closed.
 - Add host-owned per-action timeouts on `WorkflowResources.action_timeouts`,
   keyed by SWD node id. SWD 1.0 is unchanged, retry stays unsupported, and
   action expiry does not call `Machine.tick`. Once the per-action deadline
