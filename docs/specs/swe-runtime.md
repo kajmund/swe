@@ -46,8 +46,23 @@ replays its ledger and deduplicates settlement by charge id.
 
 Unknown handlers/providers/choices, malformed completions, missing prompt data,
 invalid bindings, deadlines, and host exceptions become typed failures. Limits
-bound steps, graph depth, map concurrency, and wall-clock runtime. Cancellation
-emits cancellation effects for outstanding host work.
+bound steps, graph depth, map concurrency, and wall-clock runtime.
+Host-owned `WorkflowResources.action_timeouts` bound individual task and
+provider invocations by SWD node id without changing the SWD document.
+Action expiry cancels that asyncio task and is terminal for the invocation
+(`kind=timeout`, `path=nodes.{node_id}`); it does not call `Machine.tick`
+(tick remains workflow-wide). A handler that swallows `CancelledError` or
+returns after the deadline does not complete or route; the late result is
+discarded. Expiry uses the handler's completion time, so a delayed
+`RunStore.record` cannot convert a timely success into a timeout. After
+cancel, SWE waits a short grace period and then detaches a task that has
+not finished into a runner-owned abandoned-work registry (cap =
+`concurrency`) so `reap_owned` cannot hang, including when `cancel_event`
+fires during grace. New dispatch fails closed (`kind=limit`) while the
+registry is full. Blocking I/O (`time.sleep`, blocking sockets, threads
+that ignore cancel) is not force-stopped and may continue after SWE has
+settled the timeout. Retry stays unsupported. Cancellation emits
+cancellation effects for outstanding host work.
 
 ## Non-goals
 
