@@ -10,14 +10,16 @@ and the cache state is part of the completion payload.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from swe.prompt_render import render_prompt
 from swe.cache import DecisionCache, assert_cache_isolation, decision_cache_key
 from swe.invocation_error import invocation_error_from_exception
+from swe.prompt_render import render_prompt
 from swe.runtime_errors import SweHandlerError
 from swe.runtime_validate import require_json_value, validate_output_schema
 
@@ -113,6 +115,108 @@ class AbandonedWorkRegistry:
                 self._items.pop(key, None)
 
 
+@dataclass
+class _CapacityWaiter:
+    loop: asyncio.AbstractEventLoop
+    future: asyncio.Future[None]
+    state: str = "queued"
+
+
+class CapacityLimiter:
+    """Loop-neutral async capacity shared by every run on one runner.
+
+    A permit stays held while a cancellation-resistant handler remains inside
+    its dispatch boundary. Waiters use futures from their own event loops;
+    the synchronous lock protects reservation transfer without binding the
+    limiter itself to the first loop that experiences contention.
+    """
+
+    def __init__(self, capacity: int) -> None:
+        if capacity < 1:
+            raise ValueError("capacity must be at least 1")
+        self.capacity = capacity
+        self._available = capacity
+        self._lock = threading.Lock()
+        self._waiters: deque[_CapacityWaiter] = deque()
+
+    async def __aenter__(self) -> None:
+        await self.acquire()
+
+    async def __aexit__(self, *_exc: object) -> None:
+        self.release()
+
+    async def acquire(self) -> None:
+        loop = asyncio.get_running_loop()
+        waiter = _CapacityWaiter(loop, loop.create_future())
+        with self._lock:
+            if self._available > 0 and not self._waiters:
+                self._available -= 1
+                return
+            self._waiters.append(waiter)
+        try:
+            await waiter.future
+        except BaseException:
+            release_permit = False
+            with self._lock:
+                if waiter.state == "queued":
+                    waiter.state = "cancelled"
+                    try:
+                        self._waiters.remove(waiter)
+                    except ValueError:
+                        pass
+                elif waiter.state == "transferring":
+                    # The releaser will observe cancellation and transfer the
+                    # same permit to another waiter.
+                    waiter.state = "cancelled"
+                elif waiter.state == "granted":
+                    waiter.state = "cancelled"
+                    release_permit = True
+            if release_permit:
+                self.release()
+            raise
+
+    def release(self) -> None:
+        while True:
+            with self._lock:
+                waiter = self._next_waiter_locked()
+                if waiter is None:
+                    if self._available >= self.capacity:
+                        raise RuntimeError("capacity limiter released too many times")
+                    self._available += 1
+                    return
+                waiter.state = "transferring"
+            try:
+                waiter.loop.call_soon_threadsafe(
+                    _complete_capacity_waiter,
+                    waiter.future,
+                )
+            except RuntimeError:
+                scheduled = False
+            else:
+                scheduled = True
+            with self._lock:
+                if scheduled and waiter.state != "cancelled":
+                    waiter.state = "granted"
+                    return
+                # A loop may close, or its task may be cancelled, while its
+                # permit is transferring. Give that permit to the next live
+                # waiter instead of leaking or duplicating it.
+                waiter.state = "cancelled"
+
+    def _next_waiter_locked(self) -> _CapacityWaiter | None:
+        while self._waiters:
+            waiter = self._waiters.popleft()
+            if waiter.state != "queued" or waiter.loop.is_closed():
+                continue
+            return waiter
+        return None
+
+
+def _complete_capacity_waiter(future: asyncio.Future[None]) -> None:
+    if not future.done():
+        future.set_result(None)
+
+
 def consume_task_result(task: asyncio.Task[Any]) -> None:
     """Observe a task result so abandoned work is not an unhandled warning."""
 
@@ -145,7 +249,7 @@ def spawn_invocations(
     handlers: Mapping[str, Handler],
     nodes: Mapping[str, Any],
     pending: dict[str, asyncio.Task[HandlerOutcome]],
-    semaphore: asyncio.Semaphore,
+    semaphore: CapacityLimiter,
     provider_dispatch: ProviderDispatch,
     now_ms: NowMs,
 ) -> None:
@@ -243,7 +347,7 @@ async def _run_handler(
     effect: Mapping[str, Any],
     handlers: Mapping[str, Handler],
     nodes: Mapping[str, Any],
-    semaphore: asyncio.Semaphore,
+    semaphore: CapacityLimiter,
     now_ms: NowMs,
 ) -> HandlerOutcome:
     invocation_id = effect["invocation_id"]
@@ -263,12 +367,19 @@ async def _run_handler(
             now_ms=now_ms,
             value=invocation_error_from_exception(exc),
         )
+    except Exception as exc:  # noqa: BLE001 - handler boundary returns typed failures
+        return _outcome(
+            invocation_id,
+            node_id,
+            now_ms=now_ms,
+            value=invocation_error_from_exception(exc),
+        )
 
 
 async def _run_provider(
     effect: Mapping[str, Any],
     dispatch: ProviderDispatch,
-    semaphore: asyncio.Semaphore,
+    semaphore: CapacityLimiter,
     now_ms: NowMs,
 ) -> HandlerOutcome:
     invocation_id = effect["invocation_id"]
@@ -283,6 +394,13 @@ async def _run_provider(
     except asyncio.CancelledError:
         return _outcome(invocation_id, node_id, now_ms=now_ms, cancelled=True)
     except SweHandlerError as exc:
+        return _outcome(
+            invocation_id,
+            node_id,
+            now_ms=now_ms,
+            value=invocation_error_from_exception(exc),
+        )
+    except Exception as exc:  # noqa: BLE001 - provider boundary returns typed failures
         return _outcome(
             invocation_id,
             node_id,

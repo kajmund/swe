@@ -45,9 +45,16 @@ from typing import Any
 
 from swe.definition import CompiledDefinition
 from swe.invocation_error import live_invocation_error, normalize_invocation_error
+from swe.run_store import (
+    InvocationRecord,
+    RunRecord,
+    RunStore,
+    WorkflowResources,
+)
 from swe.runtime_clock import FrozenClock, WorkflowClock
 from swe.runtime_dispatch import (
     AbandonedWorkRegistry,
+    CapacityLimiter,
     Handler,
     HandlerOutcome,
     ProviderDispatch,
@@ -62,12 +69,6 @@ from swe.runtime_preflight import (
     assert_handlers_registered,
     assert_phase2_supported,
     assert_providers_registered,
-)
-from swe.run_store import (
-    InvocationRecord,
-    RunRecord,
-    RunStore,
-    WorkflowResources,
 )
 from swe.runtime_thaw import thaw_json
 from swe.schema import NODE_ID_PATTERN
@@ -87,7 +88,7 @@ class _Driver:
     clock: WorkflowClock | FrozenClock
     cancel_event: asyncio.Event | None
     pending: dict[str, asyncio.Task[HandlerOutcome]]
-    semaphore: asyncio.Semaphore
+    semaphore: CapacityLimiter
     run_id: str
     definition_sha256: str
     input_data: Mapping[str, Any]
@@ -164,6 +165,11 @@ class WorkflowRunner:
         self.run_store = run_store
         self.clock = clock
         self.concurrency = concurrency
+        # One runner-wide semaphore makes active and detached work share the
+        # same capacity reservation. An abandoned handler keeps its permit
+        # until it actually finishes, so later or concurrent runs cannot
+        # create more untracked work than the documented concurrency cap.
+        self._semaphore = CapacityLimiter(concurrency)
         self.abandoned = AbandonedWorkRegistry(cap=concurrency)
 
     @property
@@ -299,7 +305,7 @@ def _build_driver(runner: WorkflowRunner, start: _RunStart) -> _Driver:
         clock=start.clock,
         cancel_event=runner.resources.cancel_event,
         pending={},
-        semaphore=asyncio.Semaphore(runner.concurrency),
+        semaphore=runner._semaphore,
         run_id=start.run_id,
         definition_sha256=runner.compiled.sha256,
         input_data=start.input_data,

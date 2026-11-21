@@ -10,10 +10,10 @@ import pytest
 
 pytest.importorskip("swe_native")
 
+from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord
 from swe.runtime import WorkflowResources, WorkflowRunner, run_workflow
 from swe.runtime_clock import FrozenClock
 from swe.runtime_errors import SwePreflightError
-from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord
 from swe_runtime_helpers import compile_runtime, swe_tasks
 
 pytestmark = pytest.mark.swe_runtime
@@ -47,6 +47,30 @@ def _fork_flow() -> object:
         name="fanout",
         entrypoint="split",
         handlers=frozenset({"demo.slow", "demo.fast"}),
+    )
+
+
+def _three_branch_fork_flow() -> object:
+    return compile_runtime(
+        {
+            "split": {
+                "type": "fork",
+                "branches": {
+                    "boom": "boom",
+                    "left": "left",
+                    "right": "right",
+                },
+                "join": "together",
+            },
+            "boom": {"type": "task", "handler": "demo.boom"},
+            "left": {"type": "task", "handler": "demo.left"},
+            "right": {"type": "task", "handler": "demo.right"},
+            "together": {"type": "join", "mode": "all", "next": "done"},
+            "done": {"type": "end", "status": "completed"},
+        },
+        name="three_way_fanout",
+        entrypoint="split",
+        handlers=frozenset({"demo.boom", "demo.left", "demo.right"}),
     )
 
 
@@ -238,6 +262,49 @@ async def test_delayed_persist_does_not_timeout_timely_success() -> None:
     await _cancel_swe_tasks()
 
 
+async def test_delayed_persist_does_not_reclassify_timely_handler_error() -> None:
+    class _SlowStore(MemoryRunStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self._settled = 0
+
+        async def record(
+            self,
+            run: RunRecord,
+            *,
+            events: Sequence[Mapping[str, Any]] = (),
+            invocation: InvocationRecord | None = None,
+        ) -> None:
+            if invocation is not None:
+                self._settled += 1
+                if self._settled == 1:
+                    await asyncio.sleep(1.2)
+            await super().record(run, events=events, invocation=invocation)
+
+    async def left(_payload: dict[str, object]) -> dict[str, str]:
+        return {"who": "left"}
+
+    async def right(_payload: dict[str, object]) -> dict[str, str]:
+        await asyncio.sleep(0.05)
+        raise RuntimeError("right failed promptly")
+
+    result = await asyncio.wait_for(
+        WorkflowRunner(
+            _fork_flow(),
+            {"demo.slow": left, "demo.fast": right},
+            resources=WorkflowResources(action_timeouts={"slow": 1, "fast": 1}),
+            run_store=_SlowStore(),
+        ).run({}),
+        timeout=5,
+    )
+    assert result.status == "failed"
+    assert result.error is not None
+    assert result.error["kind"] == "handler"
+    assert result.error["path"] == ""
+    assert "RuntimeError: right failed promptly" in result.error["message"]
+    await _cancel_swe_tasks()
+
+
 async def test_abandoned_work_is_bounded_across_runs() -> None:
     async def never(_payload: dict[str, object]) -> dict[str, str]:
         try:
@@ -269,6 +336,100 @@ async def test_abandoned_work_is_bounded_across_runs() -> None:
     assert third.error["path"] == "abandoned"
     assert runner.abandoned_count == 2
     await _cancel_swe_tasks()
+
+
+async def test_failed_fork_cannot_overshoot_abandoned_work_cap() -> None:
+    phase = 0
+    release = asyncio.Event()
+
+    async def boom(_payload: dict[str, object]) -> dict[str, str]:
+        await asyncio.sleep(0)
+        raise RuntimeError("fork failed")
+
+    async def stubborn(side: str) -> dict[str, str]:
+        should_stick = (phase in {1, 2} and side == "left") or phase == 3
+        if not should_stick:
+            await asyncio.Event().wait()
+            return {"ok": "no"}
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                continue
+        return {"ok": "late"}
+
+    async def left(_payload: dict[str, object]) -> dict[str, str]:
+        return await stubborn("left")
+
+    async def right(_payload: dict[str, object]) -> dict[str, str]:
+        return await stubborn("right")
+
+    runner = WorkflowRunner(
+        _three_branch_fork_flow(),
+        {"demo.boom": boom, "demo.left": left, "demo.right": right},
+        concurrency=3,
+    )
+    try:
+        phase = 1
+        first = await asyncio.wait_for(runner.run({}, run_id="fork-cap-1"), timeout=5)
+        assert first.status == "failed"
+        assert runner.abandoned_count == 1
+
+        phase = 2
+        second = await asyncio.wait_for(runner.run({}, run_id="fork-cap-2"), timeout=5)
+        assert second.status == "failed"
+        assert runner.abandoned_count == 2
+
+        phase = 3
+        third = await asyncio.wait_for(runner.run({}, run_id="fork-cap-3"), timeout=5)
+        assert third.status == "failed"
+        assert runner.abandoned_count <= runner.concurrency
+    finally:
+        release.set()
+        await _cancel_swe_tasks()
+
+
+def test_runner_capacity_is_loop_neutral_after_contention() -> None:
+    async def work(_payload: dict[str, object]) -> dict[str, str]:
+        await asyncio.sleep(0.01)
+        return {"ok": "yes"}
+
+    runner = WorkflowRunner(
+        _fork_flow(),
+        {"demo.slow": work, "demo.fast": work},
+        concurrency=1,
+    )
+
+    first = asyncio.run(runner.run({}, run_id="loop-neutral-1"))
+    second = asyncio.run(runner.run({}, run_id="loop-neutral-2"))
+
+    assert first.status == "completed"
+    assert second.status == "completed"
+
+
+async def test_concurrent_runs_share_runner_capacity() -> None:
+    active = 0
+    peak = 0
+
+    async def work(_payload: dict[str, object]) -> dict[str, str]:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            await asyncio.sleep(0.01)
+        finally:
+            active -= 1
+        return {"ok": "yes"}
+
+    runner = WorkflowRunner(_task_flow(), {"demo.work": work}, concurrency=1)
+    first, second = await asyncio.gather(
+        runner.run({}, run_id="concurrent-cap-1"),
+        runner.run({}, run_id="concurrent-cap-2"),
+    )
+
+    assert first.status == "completed"
+    assert second.status == "completed"
+    assert peak == 1
 
 
 async def test_cooperative_fork_sibling_gets_grace_before_abandon() -> None:
