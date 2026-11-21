@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import gc
+import weakref
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -741,6 +743,194 @@ async def test_exact_cache_orphan_keeps_runner_provider_capacity() -> None:
         if not second_task.done():
             second_task.cancel()
         await asyncio.gather(first_task, second_task, return_exceptions=True)
+        await _cancel_swe_tasks()
+
+
+async def test_shared_cache_orphan_counts_only_against_its_owner_runner() -> None:
+    cache = InMemoryDecisionCache()
+    first_started = asyncio.Event()
+    second_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    async def provider(request: Mapping[str, object]) -> str:
+        topic = str(request["input"]["topic"])  # type: ignore[index]
+        if topic == "alpha":
+            first_started.set()
+            while not release_first.is_set():
+                try:
+                    await release_first.wait()
+                except asyncio.CancelledError:
+                    continue
+        else:
+            second_started.set()
+        return "yes"
+
+    provider.cache_params = scoped_cache_params(  # type: ignore[attr-defined]
+        auth_scope="tenant-a",
+        model="m1",
+        policy_version="pol-1",
+    )
+    resources = WorkflowResources(
+        providers={"mock.decision": provider},
+        prompts={"demo.assessment": "choose {topic}"},
+        prompt_keys=frozenset({"demo.assessment"}),
+        cache=cache,
+        action_timeouts={"decide": 1},
+    )
+    first_runner = WorkflowRunner(
+        _exact_provider_flow(),
+        {},
+        resources=resources,
+        concurrency=1,
+    )
+    second_runner = WorkflowRunner(
+        _exact_provider_flow(),
+        {},
+        resources=resources,
+        concurrency=1,
+    )
+    try:
+        first_task = asyncio.create_task(
+            first_runner.run({"topic": "alpha"}, run_id="owned-orphan-alpha")
+        )
+        await asyncio.wait_for(first_started.wait(), timeout=5)
+        first = await asyncio.wait_for(first_task, timeout=5)
+        _assert_action_timeout(first, node_id="decide", timeout=1)
+        assert first_runner.abandoned_count == 1
+        assert second_runner.abandoned_count == 0
+
+        second = await asyncio.wait_for(
+            second_runner.run({"topic": "beta"}, run_id="owned-orphan-beta"),
+            timeout=5,
+        )
+        assert second.status == "completed"
+        assert second.output["decide"]["choice"] == "yes"
+        assert second_started.is_set()
+        assert second_runner.abandoned_count == 0
+    finally:
+        release_first.set()
+        leftover = _cache_tasks()
+        if leftover:
+            await asyncio.wait_for(
+                asyncio.gather(*leftover, return_exceptions=True),
+                timeout=1,
+            )
+        await _cancel_swe_tasks()
+
+
+async def test_last_cross_runner_waiter_pushes_orphan_to_compute_owner() -> None:
+    cache = InMemoryDecisionCache()
+    first_cancel = asyncio.Event()
+    second_cancel = asyncio.Event()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    loop_errors: list[dict[str, object]] = []
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
+
+    async def provider(_request: Mapping[str, object]) -> str:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await release.wait()
+            raise RuntimeError("late cache compute failure")
+
+    provider.cache_params = scoped_cache_params(  # type: ignore[attr-defined]
+        auth_scope="tenant-a",
+        model="m1",
+        policy_version="pol-1",
+    )
+
+    def resources(cancel_event: asyncio.Event) -> WorkflowResources:
+        return WorkflowResources(
+            providers={"mock.decision": provider},
+            prompts={"demo.assessment": "choose {topic}"},
+            prompt_keys=frozenset({"demo.assessment"}),
+            cache=cache,
+            cancel_event=cancel_event,
+        )
+
+    first_runner = WorkflowRunner(
+        _exact_provider_flow(),
+        {},
+        resources=resources(first_cancel),
+        concurrency=1,
+    )
+    second_runner = WorkflowRunner(
+        _exact_provider_flow(),
+        {},
+        resources=resources(second_cancel),
+        concurrency=1,
+    )
+    first_task = asyncio.create_task(
+        first_runner.run({"topic": "alpha"}, run_id="owner-push-first")
+    )
+    first_runner_ref = weakref.ref(first_runner)
+    first_registry_ref = weakref.ref(first_runner.abandoned)
+    first_owner_ref = weakref.ref(first_runner._cache_owner)
+    second_task: asyncio.Task[Any] | None = None
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        second_task = asyncio.create_task(
+            second_runner.run({"topic": "alpha"}, run_id="owner-push-second")
+        )
+        deadline = loop.time() + 5
+        while cache.metrics().coalesced < 1:
+            if loop.time() > deadline:
+                raise AssertionError("exact-cache waiters did not coalesce")
+            await asyncio.sleep(0)
+
+        first_cancel.set()
+        first = await asyncio.wait_for(first_task, timeout=5)
+        assert first.status == "cancelled"
+        assert first_runner.abandoned_count == 0
+        assert second_runner.abandoned_count == 0
+
+        del first_runner
+        gc.collect()
+        assert first_runner_ref() is None
+        assert first_registry_ref() is not None
+        assert first_owner_ref() is not None
+
+        second_cancel.set()
+        second = await asyncio.wait_for(second_task, timeout=5)
+        assert second.status == "cancelled"
+        first_registry = first_registry_ref()
+        assert first_registry is not None
+        assert first_registry.abandoned_count == 1
+        assert second_runner.abandoned_count == 0
+        del first_registry
+
+        release.set()
+        deadline = loop.time() + 5
+        while True:
+            first_registry = first_registry_ref()
+            if first_registry is None or first_registry.abandoned_count == 0:
+                break
+            del first_registry
+            if loop.time() > deadline:
+                raise AssertionError("owned cache orphan did not finish")
+            await asyncio.sleep(0)
+        del first_registry
+        gc.collect()
+        await asyncio.sleep(0)
+        assert first_registry_ref() is None
+        assert first_owner_ref() is None
+        assert loop_errors == []
+    finally:
+        loop.set_exception_handler(previous_handler)
+        release.set()
+        if not first_task.done():
+            first_task.cancel()
+        if second_task is not None and not second_task.done():
+            second_task.cancel()
+        await asyncio.gather(
+            first_task,
+            *(task for task in (second_task,) if task is not None),
+            return_exceptions=True,
+        )
         await _cancel_swe_tasks()
 
 

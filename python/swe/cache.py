@@ -32,13 +32,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol, assert_never
+from typing import Any, Protocol, assert_never, runtime_checkable
 
 from swe.canonicalize import canonical_json_bytes
 from swe.freeze import freeze_json
 from swe.invocation_handle import (
     InvocationHandle,
     bind_current_invocation,
+    consume_task_result,
     current_invocation,
     make_invocation_handle,
     request_cancel,
@@ -68,6 +69,57 @@ class DecisionCache(Protocol):
         prompt_key: str,
     ) -> tuple[Mapping[str, Any], bool]:
         """Return ``(answer, hit)``; concurrent identical keys compute once."""
+        ...
+
+
+class CacheComputeOwner:
+    """Identity and orphan-adoption hook for one runner's cache computes.
+
+    The hook is intentionally synchronous: the cache invokes it exactly when
+    the last waiter leaves an unfinished compute. Runners use it to register
+    the task immediately in their abandoned-work registry; owner-filtered
+    polling remains a deduplicated fallback.
+    """
+
+    __slots__ = ("__weakref__", "_adopt")
+
+    def __init__(
+        self,
+        adopt: Callable[[asyncio.Task[Mapping[str, Any]]], None] | None = None,
+    ) -> None:
+        self._adopt = adopt
+
+    def adopt(self, task: asyncio.Task[Mapping[str, Any]]) -> None:
+        """Notify the owner without letting observer failure escape cleanup."""
+        if self._adopt is None:
+            return
+        try:
+            self._adopt(task)
+        except Exception:  # noqa: BLE001 - observer failure must not escape cleanup
+            consume_task_result(task)
+
+
+@runtime_checkable
+class OwnedOrphanDecisionCache(Protocol):
+    """Optional cache capability for runner-owned orphan accounting."""
+
+    async def resolve_owned(
+        self,
+        key: str,
+        compute: Callable[[], Awaitable[Mapping[str, Any]]],
+        *,
+        provider: str,
+        prompt_key: str,
+        owner: CacheComputeOwner,
+    ) -> tuple[Mapping[str, Any], bool]:
+        """Resolve while binding a new compute to ``owner``."""
+        ...
+
+    def orphaned_computes_for(
+        self,
+        owner: CacheComputeOwner,
+    ) -> tuple[asyncio.Task[Mapping[str, Any]], ...]:
+        """Return only unfinished orphan computes created by ``owner``."""
         ...
 
 
@@ -227,6 +279,7 @@ class _Flight:
     task: asyncio.Task[Mapping[str, Any]]
     waiters: int = 0
     handle: InvocationHandle | None = None
+    owner: CacheComputeOwner | None = None
 
 
 class InMemoryDecisionCache:
@@ -282,11 +335,24 @@ class InMemoryDecisionCache:
 
     def orphaned_computes(self) -> tuple[asyncio.Task[Mapping[str, Any]], ...]:
         """Unfinished computes no waiter owns. Last waiter still drops the flight."""
+        return self._orphaned_computes_for(None)
+
+    def orphaned_computes_for(
+        self,
+        owner: CacheComputeOwner,
+    ) -> tuple[asyncio.Task[Mapping[str, Any]], ...]:
+        """Return unfinished orphan computes whose capacity belongs to ``owner``."""
+        return self._orphaned_computes_for(owner)
+
+    def _orphaned_computes_for(
+        self,
+        owner: CacheComputeOwner | None,
+    ) -> tuple[asyncio.Task[Mapping[str, Any]], ...]:
         live: list[asyncio.Task[Mapping[str, Any]]] = []
         for task, (_key, flight) in list(self._orphans.items()):
             if task.done():
                 self._orphans.pop(task, None)
-            else:
+            elif owner is None or flight.owner is owner:
                 live.append(flight.task)
         return tuple(live)
 
@@ -321,11 +387,45 @@ class InMemoryDecisionCache:
         provider: str,
         prompt_key: str,
     ) -> tuple[Mapping[str, Any], bool]:
+        return await self._resolve_request(
+            key,
+            compute,
+            provider=provider,
+            prompt_key=prompt_key,
+            owner=None,
+        )
+
+    async def resolve_owned(
+        self,
+        key: str,
+        compute: Callable[[], Awaitable[Mapping[str, Any]]],
+        *,
+        provider: str,
+        prompt_key: str,
+        owner: CacheComputeOwner,
+    ) -> tuple[Mapping[str, Any], bool]:
+        return await self._resolve_request(
+            key,
+            compute,
+            provider=provider,
+            prompt_key=prompt_key,
+            owner=owner,
+        )
+
+    async def _resolve_request(
+        self,
+        key: str,
+        compute: Callable[[], Awaitable[Mapping[str, Any]]],
+        *,
+        provider: str,
+        prompt_key: str,
+        owner: CacheComputeOwner | None,
+    ) -> tuple[Mapping[str, Any], bool]:
         del provider, prompt_key
         started = time.perf_counter_ns()
         storage_key = self._storage_key(key)
         try:
-            answer, hit = await self._resolve(storage_key, compute)
+            answer, hit = await self._resolve(storage_key, compute, owner=owner)
             return dict(answer), hit
         except Exception:
             self._errors += 1
@@ -337,6 +437,8 @@ class InMemoryDecisionCache:
         self,
         key: str,
         compute: Callable[[], Awaitable[Mapping[str, Any]]],
+        *,
+        owner: CacheComputeOwner | None,
     ) -> tuple[Mapping[str, Any], bool]:
         waiter_handle = current_invocation()
         async with self._lock:
@@ -370,7 +472,7 @@ class InMemoryDecisionCache:
                 finally:
                     reset_current_invocation(token)
                 task.add_done_callback(lambda _done: self._drop_orphan(task))
-                flight = _Flight(task=task, waiters=1, handle=handle)
+                flight = _Flight(task=task, waiters=1, handle=handle, owner=owner)
                 self._flights[key] = flight
                 coalesced = False
             else:
@@ -401,6 +503,8 @@ class InMemoryDecisionCache:
                                     else "cancel"
                                 )
                             request_cancel(current.handle, current.task, reason)
+                            if current.owner is not None:
+                                current.owner.adopt(current.task)
 
     async def _compute(
         self,
@@ -732,9 +836,11 @@ __all__ = [
     "DEFAULT_MAX_ENTRIES",
     "DEFAULT_MAX_LATENCY_SAMPLES",
     "CacheBenchmark",
+    "CacheComputeOwner",
     "CacheMetrics",
     "DecisionCache",
     "InMemoryDecisionCache",
+    "OwnedOrphanDecisionCache",
     "assert_cache_isolation",
     "benchmark_exact_cache",
     "benchmark_main",

@@ -18,10 +18,16 @@ import asyncio
 import threading
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from swe.cache import DecisionCache, assert_cache_isolation, decision_cache_key
+from swe.cache import (
+    CacheComputeOwner,
+    DecisionCache,
+    OwnedOrphanDecisionCache,
+    assert_cache_isolation,
+    decision_cache_key,
+)
 from swe.invocation_error import invocation_error_from_exception
 from swe.invocation_handle import (
     AbandonedWorkRegistry,
@@ -165,6 +171,7 @@ class ProviderDispatch:
     providers: Mapping[str, Provider]
     prompts: Mapping[str, str] | None = None
     cache: DecisionCache | None = None
+    cache_owner: CacheComputeOwner = field(default_factory=CacheComputeOwner)
 
 
 def spawn_invocations(
@@ -336,6 +343,7 @@ async def _run_provider(
             request,
             dispatch.cache,
             semaphore,
+            dispatch.cache_owner,
         )
         output = _provider_output(effect, answer, cache_state)
         return _outcome(invocation_id, node_id, now_ms=now_ms, ok=True, value=output)
@@ -389,6 +397,7 @@ async def _call_provider(
     request: Mapping[str, Any],
     cache: DecisionCache | None,
     semaphore: CapacityLimiter,
+    cache_owner: CacheComputeOwner,
 ) -> tuple[Mapping[str, Any], str | None]:
     if request["cache_policy"] != "exact":
         return await _invoke_provider_with_capacity(provider, request, semaphore), None
@@ -406,12 +415,22 @@ async def _call_provider(
         choices=request["choices"],
         params=params,
     )
-    answer, hit = await cache.resolve(
-        key,
-        lambda: _invoke_provider_with_capacity(provider, request, semaphore),
-        provider=request["provider"],
-        prompt_key=request["prompt_key"],
-    )
+    compute = lambda: _invoke_provider_with_capacity(provider, request, semaphore)
+    if isinstance(cache, OwnedOrphanDecisionCache):
+        answer, hit = await cache.resolve_owned(
+            key,
+            compute,
+            provider=request["provider"],
+            prompt_key=request["prompt_key"],
+            owner=cache_owner,
+        )
+    else:
+        answer, hit = await cache.resolve(
+            key,
+            compute,
+            provider=request["provider"],
+            prompt_key=request["prompt_key"],
+        )
     return answer, "hit" if hit else "miss"
 
 

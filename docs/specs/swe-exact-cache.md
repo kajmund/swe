@@ -36,8 +36,11 @@ reads and writes.
 - no store on exception, timeout, cancellation, or invalid answer;
 - waiter cancellation that does not corrupt an entry or leave a stuck flight
   (the last waiter cancels the compute task and drops the flight; an
-  unfinished compute is tracked as an orphan and harvested into the runner
-  abandoned-work cap);
+  unfinished compute is tracked as an orphan and immediately adopted into
+  the abandoned-work cap of the runner whose capacity owns that compute,
+  even when several runners share one cache; owner-filtered harvesting
+  remains a deduplicated fallback; cancellation is requested before owner
+  notification, and a failing notification cannot escape cache cleanup);
 - metrics: hit, miss, coalesced/wait, compute, error, eviction, expiry,
   latency, peak in-flight, bytes;
 - a bounded latency sample window (default 4096) for p50/p95, so memory does

@@ -70,8 +70,13 @@ waits a short grace period, and detaches unfinished work into a bounded
 abandoned-work registry (cap defaults to runner `concurrency`). The registry
 is keyed by task identity, so two attempts of the same invocation id both
 occupy a slot. Exact-cache provider computes that outlive their waiters are
-harvested into the same cap. The registry is observable (`abandoned_count`,
-invocation ids, age). Exceeding the cap fails closed on new dispatch
+immediately adopted into the same cap through an explicit cache-owner
+capability; owner-filtered harvesting remains a deduplicated fallback. Cache
+compute cancellation is requested before notification, and notification
+failure cannot replace the waiter's cancellation or escape cleanup. A shared
+cache never charges one runner's orphan to another runner's registry.
+The registry is observable (`abandoned_count`, invocation ids, age).
+Exceeding the cap fails closed on new dispatch
 (`kind=limit`); the success path never waits for abandoned I/O.
 `WorkflowRunner.run` / `resume` `finally` may cancel abandoned tasks but
 must not hang: a tiny timeout, then detach. A host `cancel_event` during

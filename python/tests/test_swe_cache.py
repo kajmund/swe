@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 from collections.abc import Mapping
 from typing import Any
 
 import pytest
-
 from swe.cache import (
     CACHE_ISOLATION_FIELDS,
+    CacheComputeOwner,
     InMemoryDecisionCache,
     _percentile_ms,
     assert_cache_isolation,
@@ -545,6 +546,117 @@ async def test_cancelling_one_waiter_does_not_signal_shared_compute_handle() -> 
     assert not compute_handle.cancel.is_set()
 
 
+async def test_coalesced_compute_orphan_keeps_first_owner() -> None:
+    cache = InMemoryDecisionCache()
+    first_owner = CacheComputeOwner()
+    second_owner = CacheComputeOwner()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def stubborn() -> Mapping[str, Any]:
+        started.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            await release.wait()
+        return {"choice": "yes"}
+
+    first = asyncio.create_task(
+        cache.resolve_owned(
+            "k",
+            stubborn,
+            provider="p",
+            prompt_key="k",
+            owner=first_owner,
+        )
+    )
+    await started.wait()
+    second = asyncio.create_task(
+        cache.resolve_owned(
+            "k",
+            stubborn,
+            provider="p",
+            prompt_key="k",
+            owner=second_owner,
+        )
+    )
+    deadline = asyncio.get_running_loop().time() + 5
+    while cache.metrics().coalesced < 1:
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError("exact-cache waiters did not coalesce")
+        await asyncio.sleep(0)
+
+    first.cancel()
+    second.cancel()
+    await asyncio.gather(first, second, return_exceptions=True)
+    first_orphans = cache.orphaned_computes_for(first_owner)
+    assert len(first_orphans) == 1
+    assert cache.orphaned_computes_for(second_owner) == ()
+    assert cache.orphaned_computes() == first_orphans
+
+    release.set()
+    await asyncio.gather(*first_orphans)
+    assert cache.orphaned_computes() == ()
+
+
+async def test_raising_owner_adoption_does_not_replace_waiter_cancel() -> None:
+    cache = InMemoryDecisionCache()
+
+    def fail_adoption(_task: asyncio.Task[Mapping[str, Any]]) -> None:
+        raise RuntimeError("adoption failed")
+
+    owner = CacheComputeOwner(fail_adoption)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    loop_errors: list[dict[str, object]] = []
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
+
+    async def late_failure() -> Mapping[str, Any]:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await release.wait()
+            raise RuntimeError("late cache failure")
+
+    waiter = asyncio.create_task(
+        cache.resolve_owned(
+            "k",
+            late_failure,
+            provider="p",
+            prompt_key="k",
+            owner=owner,
+        )
+    )
+    try:
+        await started.wait()
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+        orphans = cache.orphaned_computes_for(owner)
+        assert len(orphans) == 1
+        assert orphans[0].cancelling() > 0
+
+        release.set()
+        del orphans
+        deadline = loop.time() + 5
+        while cache.orphaned_computes_for(owner):
+            if loop.time() > deadline:
+                raise AssertionError("orphaned cache failure did not finish")
+            await asyncio.sleep(0)
+        gc.collect()
+        await asyncio.sleep(0)
+        assert loop_errors == []
+    finally:
+        loop.set_exception_handler(previous_handler)
+        release.set()
+        if not waiter.done():
+            waiter.cancel()
+        await asyncio.gather(waiter, return_exceptions=True)
+
+
 async def test_latency_samples_stay_bounded_and_percentiles_match_window() -> None:
     cache = InMemoryDecisionCache(max_entries=8, max_latency_samples=32)
 
@@ -662,6 +774,40 @@ async def test_cache_policy_off_does_not_read_or_write() -> None:
     assert calls == 1
     assert cache.reads == 0
     assert cache.writes == 0
+
+
+async def test_exact_policy_preserves_external_decision_cache_contract() -> None:
+    pytest.importorskip("swe_native")
+    cache = _CountingCache()
+    compiled = _provider_definition("exact")
+    calls = 0
+
+    async def provider(_request: Mapping[str, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        return "yes"
+
+    provider.cache_params = scoped_cache_params(  # type: ignore[attr-defined]
+        auth_scope="tenant-a",
+        model="m1",
+        policy_version="pol-1",
+    )
+    result = await run_workflow(
+        compiled,
+        {},
+        {"topic": "alpha"},
+        resources=WorkflowResources(
+            providers={"mock.decision": provider},
+            prompts={"demo.assessment": "choose {topic}"},
+            prompt_keys=frozenset({"demo.assessment"}),
+            cache=cache,
+        ),
+    )
+    assert result.status == "completed"
+    assert result.output["decide"]["choice"] == "yes"
+    assert calls == 1
+    assert cache.reads == 1
+    assert cache.writes == 1
 
 
 async def test_exact_policy_uses_l1_and_does_not_recompute() -> None:

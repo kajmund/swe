@@ -50,6 +50,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from swe.cache import CacheComputeOwner, OwnedOrphanDecisionCache
 from swe.definition import CompiledDefinition
 from swe.invocation_error import live_invocation_error, normalize_invocation_error
 from swe.invocation_handle import (
@@ -188,6 +189,12 @@ class WorkflowRunner:
         # create more untracked work than the documented concurrency cap.
         self._semaphore = CapacityLimiter(concurrency)
         self.abandoned = AbandonedWorkRegistry(cap=concurrency)
+        abandoned = self.abandoned
+
+        def adopt_cache_orphan(task: asyncio.Task[Mapping[str, Any]]) -> None:
+            abandoned.register("swe-cache", "cache", task)
+
+        self._cache_owner = CacheComputeOwner(adopt_cache_orphan)
 
     @property
     def abandoned_count(self) -> int:
@@ -323,6 +330,7 @@ def _build_driver(runner: WorkflowRunner, start: _RunStart) -> _Driver:
             providers=runner.resources.providers,
             prompts=runner.resources.prompts,
             cache=runner.resources.cache,
+            cache_owner=runner._cache_owner,
         ),
         nodes=start.document["nodes"],
         clock=start.clock,
@@ -618,10 +626,9 @@ def _abandon_pending(driver: _Driver) -> None:
 
 def _harvest_cache_orphans(driver: _Driver) -> None:
     cache = driver.provider_dispatch.cache
-    orphaned = getattr(cache, "orphaned_computes", None)
-    if not callable(orphaned):
+    if not isinstance(cache, OwnedOrphanDecisionCache):
         return
-    for task in orphaned():
+    for task in cache.orphaned_computes_for(driver.provider_dispatch.cache_owner):
         driver.abandoned.register("swe-cache", "cache", task)
 
 

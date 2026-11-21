@@ -14,9 +14,14 @@ All notable changes to this project are documented here.
   abandoned-work registry so `reap_owned` cannot hang; exceeding the cap
   fails closed on new dispatch. The registry is keyed by task identity so
   resume of the same invocation id cannot overwrite an earlier attempt.
-  Orphaned exact-cache provider computes count toward the same cap; the
-  last waiter still drops the L1 flight. SWE does not claim the provider
-  received cancel, stopped billing, or that the OS socket closed.
+  Orphaned exact-cache provider computes count toward the same cap of the
+  runner whose capacity owns the compute, including when caches are shared.
+  The cache notifies that owner immediately when the last waiter leaves, so
+  late exceptions are consumed without charging a coalesced runner; the last
+  waiter still drops the L1 flight. Compute cancellation precedes that
+  notification, whose failure is contained so it cannot replace the waiter's
+  cancellation. SWE does not claim the provider received cancel, stopped
+  billing, or that the OS socket closed.
 - Add host-owned per-action timeouts on `WorkflowResources.action_timeouts`,
   keyed by SWD node id. SWD 1.0 is unchanged, retry stays unsupported, and
   action expiry does not call `Machine.tick`. Once the per-action deadline
