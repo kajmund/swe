@@ -4,6 +4,36 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Give cancelled siblings a cancel grace before they count as abandoned, and
+  signal `InvocationHandle` from `reap_owned` when `run` / `resume` itself is
+  cancelled so hosts still see `handle.cancel`.
+- Add `InvocationHandle` and `current_invocation()` around every handler and
+  provider call. Hosts keep `async def handler(payload)` and read the
+  ContextVar. SWE sets `handle.cancel` and `reason` (`timeout` vs `cancel`)
+  before `task.cancel()`. Unfinished work is detached into a bounded
+  abandoned-work registry so `reap_owned` cannot hang; exceeding the cap
+  fails closed on new dispatch. The registry is keyed by task identity so
+  resume of the same invocation id cannot overwrite an earlier attempt.
+  Orphaned exact-cache provider computes count toward the same cap of the
+  runner whose capacity owns the compute, including when caches are shared.
+  The cache notifies that owner immediately when the last waiter leaves, so
+  late exceptions are consumed without charging a coalesced runner; the last
+  waiter still drops the L1 flight. Compute cancellation precedes that
+  notification, whose failure is contained so it cannot replace the waiter's
+  cancellation. SWE does not claim the provider received cancel, stopped
+  billing, or that the OS socket closed.
+- Add host-owned per-action timeouts on `WorkflowResources.action_timeouts`,
+  keyed by SWD node id. SWD 1.0 is unchanged, retry stays unsupported, and
+  action expiry does not call `Machine.tick`. Once the per-action deadline
+  has passed, the invocation is terminal `kind=timeout` even if the handler
+  swallows `CancelledError` or later returns a value; the late result is
+  discarded. Expiry uses handler completion time, not delayed settlement.
+  After cancel, SWE waits a short grace period and then detaches a task
+  that has not finished into a runner-owned abandoned-work registry (cap =
+  `concurrency`), including when `cancel_event` fires during grace. New
+  dispatch fails closed at that cap. Blocking I/O (`time.sleep`, blocking
+  sockets, threads that ignore cancel) is not force-stopped and may continue
+  after SWE has settled the timeout.
 - Accept structured invocation errors (`kind`, `message`, optional `path` and
   opaque `payload`) on `InvocationRecord.error` and `Machine.fail`, while still
   replaying legacy string errors as `handler`. No journal schema change.

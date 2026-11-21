@@ -115,6 +115,19 @@ class WorkflowResources:
     ``prompt_keys`` is the active prompt catalog. It is required once the
     definition contains a provider decision, exactly like the compile-time
     allowlist: execution never renders a prompt that is not declared.
+
+    ``action_timeouts`` is host-owned and keyed by SWD node id. It does not
+    change the SWD document, does not call ``Machine.tick``, and does not
+    enable retry (retry stays unsupported in SWE v1). When the per-action
+    deadline has passed, the invocation is terminal ``kind=timeout`` even if
+    the handler later returns a value. Expiry is judged at handler completion
+    time. Host ``cancel_event`` is terminal ``cancelled``, not timeout. After
+    cancel, SWE waits a short grace period and then detaches a task that has
+    not finished into a bounded abandoned-work registry; blocking I/O
+    (``time.sleep``, blocking sockets, threads that ignore cancel) is not
+    force-stopped. A host ``cancel_event`` during that grace still uses the
+    bounded detach path so ``reap_owned`` cannot hang. Hosts abort sockets
+    from ``InvocationHandle.cancel``.
     """
 
     providers: Mapping[str, Callable[..., Awaitable[Any]]] = field(
@@ -124,3 +137,4 @@ class WorkflowResources:
     prompt_keys: Collection[str] | None = None
     cache: DecisionCache | None = None
     cancel_event: asyncio.Event | None = None
+    action_timeouts: Mapping[str, int] = field(default_factory=dict)
