@@ -36,6 +36,14 @@ from typing import Any, Protocol, assert_never
 
 from swe.canonicalize import canonical_json_bytes
 from swe.freeze import freeze_json
+from swe.invocation_handle import (
+    InvocationHandle,
+    bind_current_invocation,
+    current_invocation,
+    make_invocation_handle,
+    request_cancel,
+    reset_current_invocation,
+)
 from swe.runtime_clock import FrozenClock, WorkflowClock
 from swe.runtime_errors import SweHandlerError
 from swe.runtime_validate import is_json_value
@@ -218,6 +226,7 @@ class _CacheEntry:
 class _Flight:
     task: asyncio.Task[Mapping[str, Any]]
     waiters: int = 0
+    handle: InvocationHandle | None = None
 
 
 class InMemoryDecisionCache:
@@ -249,6 +258,10 @@ class InMemoryDecisionCache:
         self._clock: WorkflowClock | FrozenClock = clock or WorkflowClock()
         self._entries: dict[str, _CacheEntry] = {}
         self._flights: dict[str, _Flight] = {}
+        self._orphans: dict[
+            asyncio.Task[Mapping[str, Any]], tuple[str, _Flight]
+        ] = {}
+        self._invalidated_tasks: set[asyncio.Task[Mapping[str, Any]]] = set()
         self._lock = asyncio.Lock()
         self._hits = 0
         self._misses = 0
@@ -266,6 +279,16 @@ class InMemoryDecisionCache:
     @property
     def active_flight_count(self) -> int:
         return len(self._flights)
+
+    def orphaned_computes(self) -> tuple[asyncio.Task[Mapping[str, Any]], ...]:
+        """Unfinished computes no waiter owns. Last waiter still drops the flight."""
+        live: list[asyncio.Task[Mapping[str, Any]]] = []
+        for task, (_key, flight) in list(self._orphans.items()):
+            if task.done():
+                self._orphans.pop(task, None)
+            else:
+                live.append(flight.task)
+        return tuple(live)
 
     @property
     def latency_samples_ns(self) -> tuple[int, ...]:
@@ -315,6 +338,7 @@ class InMemoryDecisionCache:
         key: str,
         compute: Callable[[], Awaitable[Mapping[str, Any]]],
     ) -> tuple[Mapping[str, Any], bool]:
+        waiter_handle = current_invocation()
         async with self._lock:
             now = self._clock.now_ms()
             self._purge_expired(now)
@@ -324,13 +348,29 @@ class InMemoryDecisionCache:
                 return cached.value, True
             flight = self._flights.get(key)
             if flight is None:
+                flight = self._reattach_orphan(key)
+            if flight is None:
                 self._misses += 1
                 self._computes += 1
-                task = asyncio.create_task(
-                    self._compute(key, compute),
-                    name=f"swe-cache:{key[:12]}",
+                handle = (
+                    make_invocation_handle(
+                        invocation_id=waiter_handle.invocation_id,
+                        node_id=waiter_handle.node_id,
+                        deadline_ms=waiter_handle.deadline_ms,
+                    )
+                    if waiter_handle is not None
+                    else None
                 )
-                flight = _Flight(task=task, waiters=1)
+                token = bind_current_invocation(handle)
+                try:
+                    task = asyncio.create_task(
+                        self._compute(key, compute, handle),
+                        name=f"swe-cache:{key[:12]}",
+                    )
+                finally:
+                    reset_current_invocation(token)
+                task.add_done_callback(lambda _done: self._drop_orphan(task))
+                flight = _Flight(task=task, waiters=1, handle=handle)
                 self._flights[key] = flight
                 coalesced = False
             else:
@@ -348,28 +388,76 @@ class InMemoryDecisionCache:
                 current = self._flights.get(key)
                 if current is flight:
                     current.waiters = max(0, current.waiters - 1)
-                    if current.waiters == 0 and not current.task.done():
-                        current.task.cancel()
+                    if current.waiters == 0:
                         self._flights.pop(key, None)
+                        if not current.task.done():
+                            self._orphans[current.task] = (key, current)
+                            self._invalidated_tasks.add(current.task)
+                            reason = "cancel"
+                            if waiter_handle is not None:
+                                reason = waiter_handle.reason() or (
+                                    "timeout"
+                                    if self._clock.now_ms() >= waiter_handle.deadline_ms
+                                    else "cancel"
+                                )
+                            request_cancel(current.handle, current.task, reason)
 
     async def _compute(
         self,
         key: str,
         compute: Callable[[], Awaitable[Mapping[str, Any]]],
+        handle: InvocationHandle | None,
     ) -> Mapping[str, Any]:
         try:
-            raw = await compute()
+            token = bind_current_invocation(handle)
+            try:
+                raw = await compute()
+            finally:
+                reset_current_invocation(token)
             answer = _validated_success(raw)
             async with self._lock:
-                now = self._clock.now_ms()
-                self._purge_expired(now)
-                self._store(key, answer, now)
+                task = asyncio.current_task()
+                if task not in self._invalidated_tasks:
+                    now = self._clock.now_ms()
+                    self._purge_expired(now)
+                    self._store(key, answer, now)
             return answer
         finally:
             async with self._lock:
+                task = asyncio.current_task()
                 flight = self._flights.get(key)
-                if flight is not None and flight.task is asyncio.current_task():
+                if flight is not None and flight.task is task:
                     self._flights.pop(key, None)
+                self._drop_orphan(task)
+                if task is not None:
+                    self._invalidated_tasks.discard(task)
+
+    def _reattach_orphan(self, key: str) -> _Flight | None:
+        for task, (orphan_key, flight) in list(self._orphans.items()):
+            if task.done():
+                self._orphans.pop(task, None)
+                continue
+            if orphan_key != key:
+                continue
+            if (
+                task in self._invalidated_tasks
+                or task.cancelling()
+                or (flight.handle is not None and flight.handle.cancel.is_set())
+            ):
+                continue
+            self._orphans.pop(task, None)
+            flight.waiters = 0
+            self._flights[key] = flight
+            return flight
+        return None
+
+    def _drop_orphan(
+        self,
+        task: asyncio.Task[Mapping[str, Any]] | None,
+    ) -> None:
+        if task is not None:
+            self._orphans.pop(task, None)
+            self._invalidated_tasks.discard(task)
 
     def _storage_key(self, key: str) -> str:
         if not self.namespace:

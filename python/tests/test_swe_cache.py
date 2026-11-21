@@ -18,6 +18,14 @@ from swe.cache import (
     scoped_cache_params,
 )
 from swe.definition import compile_definition
+from swe.invocation_handle import (
+    InvocationHandle,
+    bind_current_invocation,
+    current_invocation,
+    make_invocation_handle,
+    request_cancel,
+    reset_current_invocation,
+)
 from swe.runtime import WorkflowResources, run_workflow
 from swe.runtime_clock import FrozenClock
 from swe.runtime_errors import SweHandlerError
@@ -317,6 +325,224 @@ async def test_cancelled_waiter_does_not_corrupt_or_pin_a_flight() -> None:
     await asyncio.sleep(0)
     assert cache.metrics().entries == 1
     assert cache.active_flight_count == 0
+    assert cache.orphaned_computes() == ()
+
+
+async def test_cancel_requested_orphan_is_not_reattached() -> None:
+    cache = InMemoryDecisionCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    computes = 0
+
+    async def stubborn() -> Mapping[str, Any]:
+        nonlocal computes
+        computes += 1
+        started.set()
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                if release.is_set():
+                    break
+        return {"choice": "yes"}
+
+    lone = asyncio.create_task(
+        cache.resolve("k", stubborn, provider="p", prompt_key="k")
+    )
+    await started.wait()
+    lone.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await lone
+    await asyncio.sleep(0)
+    assert cache.active_flight_count == 0
+    orphans = cache.orphaned_computes()
+    assert len(orphans) == 1
+    assert not orphans[0].done()
+
+    rejoined = asyncio.create_task(
+        cache.resolve("k", stubborn, provider="p", prompt_key="k")
+    )
+    for _ in range(10):
+        await asyncio.sleep(0)
+    release.set()
+    answer, hit = await rejoined
+    assert cache.active_flight_count == 0
+    assert answer["choice"] == "yes"
+    assert hit is False
+    assert computes == 2
+    await asyncio.gather(*cache.orphaned_computes(), return_exceptions=True)
+    assert cache.orphaned_computes() == ()
+
+
+async def test_cancelled_compute_late_success_is_never_cached() -> None:
+    cache = InMemoryDecisionCache()
+    started = asyncio.Event()
+    release_late = asyncio.Event()
+    computes = 0
+
+    async def late() -> Mapping[str, Any]:
+        nonlocal computes
+        computes += 1
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await release_late.wait()
+            return {"choice": "late"}
+
+    waiter = asyncio.create_task(
+        cache.resolve("k", late, provider="p", prompt_key="k")
+    )
+    await started.wait()
+    waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiter
+    orphans = cache.orphaned_computes()
+    assert len(orphans) == 1
+
+    async def fresh() -> Mapping[str, Any]:
+        nonlocal computes
+        computes += 1
+        return {"choice": "fresh"}
+
+    answer, hit = await cache.resolve("k", fresh, provider="p", prompt_key="k")
+    assert hit is False
+    assert answer == {"choice": "fresh"}
+    assert computes == 2
+    release_late.set()
+    await asyncio.gather(*orphans)
+    cached, cached_hit = await cache.resolve(
+        "k",
+        lambda: asyncio.sleep(0, result={"choice": "unexpected"}),
+        provider="p",
+        prompt_key="k",
+    )
+    assert cached_hit is True
+    assert cached == {"choice": "fresh"}
+
+
+async def test_cooperative_cancelled_compute_is_not_rejoined() -> None:
+    cache = InMemoryDecisionCache()
+    started = asyncio.Event()
+    computes = 0
+
+    async def cooperative() -> Mapping[str, Any]:
+        nonlocal computes
+        computes += 1
+        started.set()
+        await asyncio.Event().wait()
+        return {"choice": "old"}
+
+    first = asyncio.create_task(
+        cache.resolve("k", cooperative, provider="p", prompt_key="k")
+    )
+    await started.wait()
+    first.cancel()
+    second = asyncio.create_task(
+        cache.resolve(
+            "k",
+            lambda: asyncio.sleep(0, result={"choice": "fresh"}),
+            provider="p",
+            prompt_key="k",
+        )
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    answer, hit = await second
+    assert answer == {"choice": "fresh"}
+    assert hit is False
+    assert computes == 1
+
+
+async def test_cache_compute_preserves_deadline_and_timeout_reason() -> None:
+    cache = InMemoryDecisionCache()
+    parent = make_invocation_handle(
+        invocation_id="run:decide:root:0:1",
+        node_id="decide",
+        deadline_ms=12_345,
+    )
+    started = asyncio.Event()
+    observed: dict[str, object] = {}
+
+    async def compute() -> Mapping[str, Any]:
+        handle = current_invocation()
+        assert handle is not None
+        observed["deadline_ms"] = handle.deadline_ms
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            observed["reason"] = handle.reason()
+            raise
+
+    async def bound_resolve() -> tuple[Mapping[str, Any], bool]:
+        token = bind_current_invocation(parent)
+        try:
+            return await cache.resolve("k", compute, provider="p", prompt_key="k")
+        finally:
+            reset_current_invocation(token)
+
+    waiter = asyncio.create_task(bound_resolve())
+    await started.wait()
+    request_cancel(parent, waiter, "timeout")
+    with pytest.raises(asyncio.CancelledError):
+        await waiter
+    await asyncio.gather(*cache.orphaned_computes(), return_exceptions=True)
+    assert observed == {"deadline_ms": 12_345, "reason": "timeout"}
+
+
+async def test_cancelling_one_waiter_does_not_signal_shared_compute_handle() -> None:
+    cache = InMemoryDecisionCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    compute_handle: InvocationHandle | None = None
+
+    async def compute() -> Mapping[str, Any]:
+        nonlocal compute_handle
+        compute_handle = current_invocation()
+        started.set()
+        await release.wait()
+        handle = current_invocation()
+        if handle is not None and handle.cancel.is_set():
+            raise RuntimeError("socket abort")
+        return {"choice": "yes"}
+
+    waiter_handles = [
+        make_invocation_handle(
+            invocation_id=f"waiter-{index}",
+            node_id="decide",
+            deadline_ms=86_400_000,
+        )
+        for index in (1, 2)
+    ]
+
+    async def bound_resolve(
+        handle: InvocationHandle,
+    ) -> tuple[Mapping[str, Any], bool]:
+        token = bind_current_invocation(handle)
+        try:
+            return await cache.resolve("k", compute, provider="p", prompt_key="k")
+        finally:
+            reset_current_invocation(token)
+
+    first = asyncio.create_task(bound_resolve(waiter_handles[0]))
+    await started.wait()
+    second = asyncio.create_task(bound_resolve(waiter_handles[1]))
+    deadline = asyncio.get_running_loop().time() + 5
+    while cache.metrics().coalesced < 1:
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError("exact-cache waiters did not coalesce")
+        await asyncio.sleep(0)
+    request_cancel(waiter_handles[0], first, "cancel")
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    assert compute_handle is not None
+    assert not compute_handle.cancel.is_set()
+    assert compute_handle.reason() is None
+    release.set()
+    answer, _hit = await second
+    assert answer == {"choice": "yes"}
+    assert not compute_handle.cancel.is_set()
 
 
 async def test_latency_samples_stay_bounded_and_percentiles_match_window() -> None:
