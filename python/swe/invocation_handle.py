@@ -170,11 +170,11 @@ class AbandonedWorkRegistry:
         node_id: str,
         task: asyncio.Task[Any],
     ) -> None:
-        consume_task_result(task)
-        if task.done():
-            return
         key = id(task)
         if key in self._items:
+            return
+        consume_task_result(task)
+        if task.done():
             return
         work = AbandonedWork(invocation_id, node_id, time.monotonic())
         self._items[key] = (work, task)

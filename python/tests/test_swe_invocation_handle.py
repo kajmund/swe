@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from swe import InvocationHandle, current_invocation
+from swe import InvocationHandle, current_invocation, invocation_handle
 from swe.invocation_handle import (
     AbandonedWorkRegistry,
     make_invocation_handle,
@@ -106,3 +106,22 @@ async def test_abandoned_registry_keeps_distinct_tasks_with_same_invocation_id()
     second.cancel()
     await asyncio.gather(second, return_exceptions=True)
     assert registry.abandoned_count == 0
+
+
+async def test_abandoned_registry_deduplicates_before_result_observer(
+    monkeypatch,
+) -> None:
+    registry = AbandonedWorkRegistry(cap=1)
+    observed: list[asyncio.Task[object]] = []
+
+    def observe(task: asyncio.Task[object]) -> None:
+        observed.append(task)
+
+    monkeypatch.setattr(invocation_handle, "consume_task_result", observe)
+    task = asyncio.create_task(asyncio.Event().wait())
+    await asyncio.sleep(0)
+    registry.register("same", "node", task)
+    registry.register("same", "node", task)
+    assert observed == [task]
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
