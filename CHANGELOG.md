@@ -53,3 +53,5 @@ All notable changes to this project are documented here.
 - Make ActionOffer claim takeover a lease-token CAS, refuse const-alias
   collisions, skip freshness only when completed or replayable work exists,
   and keep both the definition cache and L1 decision cache on true LRU eviction.
+- Reconcile expired ActionOffers when a handler effect is already persisted,
+  so crash recovery can settle without a second side effect.

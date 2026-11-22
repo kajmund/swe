@@ -72,10 +72,13 @@ Reject and revoke use the same compare-and-set. A rejected or revoked offer
 cannot enter `APPROVING`, so its handler never starts. An in-flight approve
 holds `APPROVING` and makes reject/revoke fail closed with `conflict`.
 Unstarted claims revert to `proposed` only when the caller still owns the
-lease and no effect or run exists. Claim leases (`claim_lease_ms`) let a
-second host finish a crashed approve by CAS-replacing an expired or missing
-lease; a live lease is not stolen, and a stored effect is not dispatched
-while another host still holds the claim.
+lease and no effect or run exists. Freshness (expiry, revalidation, policy)
+is skipped when a completed run, approved record, or persisted handler
+effect already exists, so settlement can finish after the offer expires.
+Authorization still applies, and the handler is not invoked again. Claim
+leases (`claim_lease_ms`) let a second host finish a crashed approve by
+CAS-replacing an expired or missing lease; a live lease is not stolen, and
+a stored effect is not dispatched while another host still holds the claim.
 
 Double approve is idempotent: a completed run or stored effect is replayed
 and the handler is not called again. A cancelled or failed run is not treated
