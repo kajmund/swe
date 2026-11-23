@@ -1,0 +1,73 @@
+{
+  "arm_id": "hy4",
+  "calls": [
+    {
+      "attempt": 1,
+      "done_reason": "stop",
+      "eval_count": 207,
+      "http_status": 200,
+      "latency_ms": 2434.433,
+      "price_period": "off_peak",
+      "prompt_eval_count": 590
+    }
+  ],
+  "max_output_tokens": 1024,
+  "model": "hy4:cloud",
+  "prompt_sha256": "5e2aad3afe8eabe2f7740c2528cac1fe09f51c5d5b5e36df957d649575f2e4b7",
+  "question_id": "missing_helios_retention",
+  "steps": [
+    {
+      "latency_ms": 0,
+      "needs": [
+        {
+          "target_quotes": [
+            {
+              "quote": "Helios-9 is a research programme. Its current phase is discovery.",
+              "source_id": "helios-overview"
+            }
+          ]
+        }
+      ],
+      "type": "decompose"
+    },
+    {
+      "gap": {
+        "quote": "Helios-9 is a research programme. Its current phase is discovery.",
+        "source_id": "helios-overview"
+      },
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "Helios-9 is a research programme. Its current phase is discovery.",
+        "source_id": "helios-overview"
+      },
+      "latency_ms": 0,
+      "tool": "read_passage",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "quote": {
+        "quote": "Helios-9 is a research programme. Its current phase is discovery.",
+        "source_id": "helios-overview"
+      },
+      "tool": "read_passage",
+      "type": "tool"
+    },
+    {
+      "answer_complete": false,
+      "claims": [],
+      "conclusion": "INSUFFICIENT_EVIDENCE",
+      "latency_ms": 0,
+      "type": "stop"
+    }
+  ]
+}

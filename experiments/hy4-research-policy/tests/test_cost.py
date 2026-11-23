@@ -39,7 +39,7 @@ def test_absent_usage_stays_na_and_does_not_become_zero_cost() -> None:
     assert cost["usd_per_verified_evidence"] == NA
     assert cost["quota"]["credits_consumed_usd"] == NA
     assert cost["budget"]["per_question_allocated_milli"] == 50_000
-    assert cost["budget"]["usd_cap"] == "25.0"
+    assert cost["budget"]["usd_cap"] == "2"
 
 
 def test_cache_is_priced_apart_from_input_and_reasoning_is_not_priced() -> None:
@@ -190,7 +190,7 @@ def test_comparison_uses_one_budget_and_leaves_unknown_deltas_na() -> None:
     )
     report = compare_with_deepseek([hy4, deepseek], protocol)
     assert report["budget"]["per_question_allocated_milli"] == 50_000
-    assert report["budget"]["usd_cap"] == "25.0"
+    assert report["budget"]["usd_cap"] == "2"
     assert report["quality_threshold"]["same_for_every_arm"] is True
     pair = report["questions"][0]["versus_deepseek_flash"][0]
     assert pair["arm_id"] == "hy4"

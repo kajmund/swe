@@ -4,8 +4,9 @@ Offline comparison harness for three policy models on the frozen Research Gym.
 The questions, corpus, tool menu, Sweycoin allocation, and USD cap are the
 existing Gym values. SWE core is not modified.
 
-Status: `OFFLINE_PREPARED_NOT_LIVE`. This directory has no provider client.
-`refuse_live_dispatch` is the only live entry point, and it always refuses.
+Status: pilot `runs/20261123T205650Z` ran through the local Ollama daemon.
+`refuse_live_dispatch` still refuses an uncapped dispatch. Hy4 Flash and JEV
+were not called.
 
 ## Frozen inputs
 
@@ -16,7 +17,7 @@ Status: `OFFLINE_PREPARED_NOT_LIVE`. This directory has no provider client.
 | Tools | `retrieve` (1 000 milli), `read_passage` (500 milli). No web search |
 | Evaluator | Live pin `jev-1.13.0`. Offline method `exact-quote-v1` |
 | Sweycoins | 50 000 milli per question, 250 000 milli per arm. Lexical baseline spent 29 250 milli |
-| USD cap | 25.0, the existing Research experiment cap |
+| USD cap | 2, approved for the Hy4 vs DeepSeek Flash Ollama Cloud pilot |
 
 The same budget object applies to `hy4`, `hy4-flash`, and `deepseek-flash`.
 
@@ -69,8 +70,8 @@ request counts only; it does not return the plan or a remaining credit balance.
 daemon is the existing cloud path and does not require a Hy4 download.
 
 DeepSeek's own `GET /models` still lists `deepseek-flash`. JEV stays
-`jev-1.13.0` at $0.042 per 1M input tokens and $0 output. No chat completion
-and no System One request were sent.
+`jev-1.13.0` at $0.042 per 1M input tokens and $0 output. The pilot did not
+call JEV; verification was the local exact-quote check.
 
 ## Cost estimate, not a measurement
 
@@ -86,10 +87,13 @@ question. Hy4 Flash adds nothing because it has no cloud tag. Low output is
 | Approval (high output) | 2.7584 |
 | JEV portion | 0.02688 |
 
+That high estimate is above the approved $2 cap, so it is not dispatched. The
+live pilot is a separate plan: one completion per frozen question per available
+arm, one reserved retry, `num_predict` as the output ceiling, peak cache-miss
+prices, and local exact-quote verification at $0.
+
 Sweycoin worst case inside those assumptions is 11 750 milli per question and
-58 750 milli per arm, below the 50 000 milli question allocation and the
-250 000 milli arm allocation. The existing USD cap is 25. The estimate fitting
-under that cap is not approval to dispatch.
+58 750 milli per arm, below the 50 000 milli question allocation.
 
 ## Cost comparison against DeepSeek Flash
 
@@ -116,13 +120,13 @@ lacks the corresponding amount.
 python3 -m pytest experiments/hy4-research-policy/tests
 ```
 
-## Blockers before any paid call
+## Pilot
 
-1. Explicit approval of the approval bound, or a revised bound if reasoning
-   tokens will exceed 16 000 output tokens per call.
-2. Hy4 Flash has no Ollama Cloud tag, so that arm cannot be run through the
-   existing cloud integration.
-3. A live runner still has to be written. It must call Ollama as `hy4` on
-   `https://ollama.com/api/chat` or `hy4:cloud` through the local daemon, keep
-   domain policy out of `python/swe` and `crates/`, and keep `jev-1.13.0`
-   independent of the policy arm.
+`runs/20261123T205650Z` is the approved Hy4 vs DeepSeek Flash run. Preflight
+worst case was $0.05034956 at 1 098 input tokens, 1 024 output tokens, one
+retry, and peak cache-miss prices. Ten completions were sent. None exceeded
+`num_predict`. No weights were downloaded. Hy4 Flash stayed out.
+
+The high 16 000-output matrix remains above the $2 cap and is not dispatched.
+JEV was not called. Ollama did not return cache tokens or a dollar charge, so
+`calculated_usd` and `actual_usd` stay `N/A`.

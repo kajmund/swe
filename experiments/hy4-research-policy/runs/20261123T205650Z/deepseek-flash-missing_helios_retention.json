@@ -1,0 +1,32 @@
+{
+  "arm_id": "deepseek-flash",
+  "calls": [
+    {
+      "attempt": 1,
+      "done_reason": "stop",
+      "eval_count": 568,
+      "http_status": 200,
+      "latency_ms": 1523.817,
+      "price_period": "off_peak",
+      "prompt_eval_count": 583
+    }
+  ],
+  "max_output_tokens": 1024,
+  "model": "deepseek-v4.1-flash:cloud",
+  "prompt_sha256": "5e2aad3afe8eabe2f7740c2528cac1fe09f51c5d5b5e36df957d649575f2e4b7",
+  "question_id": "missing_helios_retention",
+  "steps": [
+    {
+      "latency_ms": 0,
+      "needs": [],
+      "type": "decompose"
+    },
+    {
+      "answer_complete": false,
+      "claims": [],
+      "conclusion": "",
+      "latency_ms": 0,
+      "type": "stop"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": "hy4-research-policy-v1",
-  "status": "OFFLINE_PREPARED_NOT_LIVE",
+  "status": "PILOT_RUN_20261123T205650Z",
   "swe_baseline": "eff1c7e8943dd64827fb4916719ced5515bf3db5",
   "frozen": {
     "questions": "frozen/gym/questions.json",
@@ -54,8 +54,9 @@
     "per_question_allocated_milli": 50000,
     "question_count": 5,
     "suite_allocated_milli": 250000,
-    "usd_cap": "25.0",
-    "usd_cap_source": "research_engine.provider_usage.EXPERIMENT_USD_CAP",
+    "usd_cap": "2",
+    "usd_cap_source": "user-approved Hy4 vs DeepSeek Flash Ollama Cloud pilot on 2026-11-23",
+    "previous_usd_cap": "25.0",
     "lexical_baseline_spent_milli": 29250,
     "lexical_baseline_source": "benchmarks/results/baseline.json",
     "same_for_every_arm": true
@@ -123,7 +124,7 @@
       "reasoning": {
         "library_marks_thinking": true,
         "preference": "disabled",
-        "documented_control": "No chat completion was sent, so the Ollama request field that disables thinking is unverified."
+        "documented_control": "The 2026-11-23 pilot sent think false. Stored responses had no thinking field. That does not prove thinking tokens are inside num_predict."
       },
       "credential_env": "OLLAMA_API_KEY"
     },

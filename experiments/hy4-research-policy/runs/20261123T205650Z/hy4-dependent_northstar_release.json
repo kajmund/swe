@@ -1,0 +1,156 @@
+{
+  "arm_id": "hy4",
+  "calls": [
+    {
+      "attempt": 1,
+      "done_reason": "stop",
+      "eval_count": 549,
+      "http_status": 200,
+      "latency_ms": 3832.711,
+      "price_period": "off_peak",
+      "prompt_eval_count": 596
+    }
+  ],
+  "max_output_tokens": 1024,
+  "model": "hy4:cloud",
+  "prompt_sha256": "7bb195e6ae8f0b405f2376abeaef370a80e811dfa7a20be086f310823ecd0660",
+  "question_id": "dependent_northstar_release",
+  "steps": [
+    {
+      "latency_ms": 0,
+      "needs": [
+        {
+          "target_quotes": [
+            {
+              "quote": "Approval allows Northstar to ship to production.",
+              "source_id": "northstar-security"
+            },
+            {
+              "quote": "No critical findings remain after review NS-44.",
+              "source_id": "northstar-security"
+            },
+            {
+              "quote": "An approved security review is required before a service may ship to production.",
+              "source_id": "release-handbook"
+            },
+            {
+              "quote": "A release remains blocked while a critical finding is open.",
+              "source_id": "release-handbook"
+            }
+          ]
+        }
+      ],
+      "type": "decompose"
+    },
+    {
+      "gap": {
+        "quote": "The security review for Northstar is approved.",
+        "source_id": "northstar-security"
+      },
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "Approval allows Northstar to ship to production.",
+        "source_id": "northstar-security"
+      },
+      "latency_ms": 0,
+      "tool": "read_passage",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "quote": {
+        "quote": "Approval allows Northstar to ship to production.",
+        "source_id": "northstar-security"
+      },
+      "tool": "read_passage",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "No critical findings remain after review NS-44.",
+        "source_id": "northstar-security"
+      },
+      "latency_ms": 0,
+      "tool": "read_passage",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "quote": {
+        "quote": "No critical findings remain after review NS-44.",
+        "source_id": "northstar-security"
+      },
+      "tool": "read_passage",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "An approved security review is required before a service may ship to production.",
+        "source_id": "release-handbook"
+      },
+      "latency_ms": 0,
+      "tool": "read_passage",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "quote": {
+        "quote": "An approved security review is required before a service may ship to production.",
+        "source_id": "release-handbook"
+      },
+      "tool": "read_passage",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "A release remains blocked while a critical finding is open.",
+        "source_id": "release-handbook"
+      },
+      "latency_ms": 0,
+      "tool": "read_passage",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "quote": {
+        "quote": "A release remains blocked while a critical finding is open.",
+        "source_id": "release-handbook"
+      },
+      "tool": "read_passage",
+      "type": "tool"
+    },
+    {
+      "answer_complete": true,
+      "claims": [
+        {
+          "quote": "Approval allows Northstar to ship to production.",
+          "source_id": "northstar-security"
+        },
+        {
+          "quote": "No critical findings remain after review NS-44.",
+          "source_id": "northstar-security"
+        },
+        {
+          "quote": "An approved security review is required before a service may ship to production.",
+          "source_id": "release-handbook"
+        },
+        {
+          "quote": "A release remains blocked while a critical finding is open.",
+          "source_id": "release-handbook"
+        }
+      ],
+      "conclusion": "ANSWERED",
+      "latency_ms": 0,
+      "type": "stop"
+    }
+  ]
+}

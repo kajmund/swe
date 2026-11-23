@@ -1,0 +1,122 @@
+{
+  "arm_id": "hy4",
+  "calls": [
+    {
+      "attempt": 1,
+      "done_reason": "stop",
+      "eval_count": 430,
+      "http_status": 200,
+      "latency_ms": 7518.994,
+      "price_period": "off_peak",
+      "prompt_eval_count": 594
+    }
+  ],
+  "max_output_tokens": 1024,
+  "model": "hy4:cloud",
+  "prompt_sha256": "ad749440f797c2140eb7e4f4c65bf304124d5fd476e18caac99df48017898d2e",
+  "question_id": "multi_document_orbit",
+  "steps": [
+    {
+      "latency_ms": 0,
+      "needs": [
+        {
+          "target_quotes": [
+            {
+              "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+              "source_id": "orbit-approval"
+            }
+          ]
+        },
+        {
+          "target_quotes": [
+            {
+              "quote": "The review cadence for ORBIT-7 is every 90 days.",
+              "source_id": "orbit-approval"
+            }
+          ]
+        }
+      ],
+      "type": "decompose"
+    },
+    {
+      "gap": {
+        "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+        "source_id": "orbit-approval"
+      },
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+        "source_id": "orbit-approval"
+      },
+      "latency_ms": 0,
+      "tool": "read_passage",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "quote": {
+        "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+        "source_id": "orbit-approval"
+      },
+      "tool": "read_passage",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "The review cadence for ORBIT-7 is every 90 days.",
+        "source_id": "orbit-approval"
+      },
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "The review cadence for ORBIT-7 is every 90 days.",
+        "source_id": "orbit-approval"
+      },
+      "latency_ms": 0,
+      "tool": "read_passage",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "quote": {
+        "quote": "The review cadence for ORBIT-7 is every 90 days.",
+        "source_id": "orbit-approval"
+      },
+      "tool": "read_passage",
+      "type": "tool"
+    },
+    {
+      "answer_complete": true,
+      "claims": [
+        {
+          "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+          "source_id": "orbit-approval"
+        },
+        {
+          "quote": "The review cadence for ORBIT-7 is every 90 days.",
+          "source_id": "orbit-approval"
+        }
+      ],
+      "conclusion": "ANSWERED",
+      "latency_ms": 0,
+      "type": "stop"
+    }
+  ]
+}

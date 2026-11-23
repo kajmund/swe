@@ -1,0 +1,78 @@
+{
+  "arm_id": "hy4",
+  "calls": [
+    {
+      "attempt": 1,
+      "done_reason": "stop",
+      "eval_count": 156,
+      "http_status": 200,
+      "latency_ms": 1987.875,
+      "price_period": "off_peak",
+      "prompt_eval_count": 588
+    }
+  ],
+  "max_output_tokens": 1024,
+  "model": "hy4:cloud",
+  "prompt_sha256": "24caf9fb8ef82cdd440b75dbb24087a00dce135e8adc195cf89a109bb42a3a5b",
+  "question_id": "direct_effective_date",
+  "steps": [
+    {
+      "latency_ms": 0,
+      "needs": [
+        {
+          "target_quotes": [
+            {
+              "quote": "The effective date of Policy P-17 is 2026-03-01.",
+              "source_id": "policy-p17"
+            }
+          ]
+        }
+      ],
+      "type": "decompose"
+    },
+    {
+      "gap": {
+        "quote": "Policy P-17 governs production change control.",
+        "source_id": "policy-p17"
+      },
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "tool": "retrieve",
+      "type": "tool"
+    },
+    {
+      "gap": {
+        "quote": "The effective date of Policy P-17 is 2026-03-01.",
+        "source_id": "policy-p17"
+      },
+      "latency_ms": 0,
+      "tool": "read_passage",
+      "type": "select_next"
+    },
+    {
+      "latency_ms": 0,
+      "quote": {
+        "quote": "The effective date of Policy P-17 is 2026-03-01.",
+        "source_id": "policy-p17"
+      },
+      "tool": "read_passage",
+      "type": "tool"
+    },
+    {
+      "answer_complete": true,
+      "claims": [
+        {
+          "quote": "The effective date of Policy P-17 is 2026-03-01.",
+          "source_id": "policy-p17"
+        }
+      ],
+      "conclusion": "ANSWERED",
+      "latency_ms": 0,
+      "type": "stop"
+    }
+  ]
+}
