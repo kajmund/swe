@@ -166,3 +166,110 @@ PYTHONPATH=. python3 -m barrier_free_scheduler
 - `t1bp` (microtask-swarm): informerad om samma avgränsning; deras
   `experiment/microtask-swarm`-worktree rördes inte.
 - PR11 lämnades orörd; inga kosmetiska commits där under Codex-granskning.
+
+## 8. Riktiga offline-handlers via SWE host/runtime
+
+`swe_host/` kör experimentet genom den befintliga `WorkflowRunner`-vägen med
+riktiga async-handlers och `MemoryRunStore`; ingen separat produktionsmotor och
+ingen budget. Native `swe_native` byggdes från denna branchs `python/`.
+
+Uppmätt på straggler-DAG:en med riktiga `asyncio.sleep`-handlers:
+
+```text
+real handlers: layer≈195–198ms ready≈146–147ms layer_peak=4 ready_peak=4
+5 passed
+```
+
+Den statiska ready queue-varianten är **en enda SWE `map`** med en handler per
+task som väntar på host-events för sina dependencies. Det ger per-task
+`InvocationRecord` och bounded concurrency, men:
+
+- väntande handlers håller kvar map-slots (effektiv concurrency kan sjunka),
+- dependency-grafen är host-state, inte machine-state,
+- replay kräver att hosten pre-seedar dependency-events från
+  `RunStore.replay_results` innan `resume`; annars skulle en replayed task
+  aldrig sätta sin event. Testet med en store som kraschar efter fem records
+  visar att resume kan slutföra med pre-seeding, men det är en host-workaround,
+- dynamisk tillkomst kan inte lägga till nya map-items. Worker-pool-varianten
+  (två fasta map-items som loopar över en host-kö) kör en sent submittad task,
+  men journalen ser två worker-invocations, inte fyra task-invocations. Per-task
+  journal/replay går därmed förlorad.
+
+Cancellation testades med `cancel_event`: runen blir `cancelled`, pågående
+handlers avbryts och inga nya tasks startar. Bounded concurrency testades med
+`ActiveMeter`: peak ≤ 4 i båda varianterna.
+
+## 9. Exakt Rust/SWD-förändring som krävs
+
+Den befintliga maskinen kan **inte** uttrycka en ready queue som en
+förstaklassmedborgare. `map`-items är oberoende värden; `spawn_map_children`
+startar barn i indataordning och känner bara `map.concurrency`
+(`crates/swe-native/src/machine/schedule.rs:396–455`). Det finns ingen
+per-item-beroendegraf; `finish_map` väntar på `remaining == 0`
+(`complete.rs:255–256,310`). En host-workaround kan simulera ready queue, men
+inte ge maskinägda beroenden, per-task replay eller dynamisk admission.
+
+Minsta tänkbara förstaklassvariant är att utöka `map`-noden med en ready-mode:
+
+```json
+{
+  "type": "map",
+  "items": "$.input.tasks",
+  "child": "work",
+  "concurrency": 4,
+  "schedule": "ready",
+  "item_id": "$.item.task_id",
+  "item_depends_on": "$.item.depends_on"
+}
+```
+
+Alternativet är en ny `dag`-nod med samma semantik. Båda är en SWD-wireändring,
+inte en tyst v1-utökning.
+
+Förändringen kräver minst:
+
+1. **Schema och kompilering**
+   - `python/swe/swd_v1.schema.json:267–283` (`mapNode`) och
+     `python/swe/schema.py:12–14` (`NODE_TYPES`).
+   - `python/swe/definition.py`, `graph.py`, `joins.py`: validera unika
+     item-id:n, kända beroenden, acyklisk graf och stabil tie-break.
+   - `crates/swe-native/src/definition.rs:76–83` (`Node::Map`) och
+     `preflight.rs:12`: nya fält/flaggor.
+2. **Maskinen**
+   - `machine/schedule.rs:372–455`: bygg item-DAG, ready-set och starta endast
+     redo items upp till `concurrency`.
+   - `machine/complete.rs:219–256,310`: när ett item blir klart, decrementera
+     dependents och admission; `finish_map` först när alla items är terminala.
+   - `events.rs:13,31,47` och `effects.rs`: item-id/index i events och
+     invocation-identitet; `BranchSpawned` för redo items.
+   - `journal.rs`: per-item invocation/replay; vid resume ska persistrade
+     item-resultat rekonstruera ready-set och admittera dependents, utan host-
+     pre-seeding.
+3. **Cancellation, budget, fel**
+   - Cancel: sluta admittera, avbryta pågående children, terminal status.
+   - Budget: varje child-invocation går genom befintlig dispatch/budget (PR11)
+     utan ny ledger.
+   - Fel i ett item: fail-closed enligt befintlig map/join-semantik.
+4. **Kompilator och kontrakt**
+   - `python/swe/microtasks.py:169–310` kan emittera en ready-`map` i stället
+     för en map per lager; `_topological_layers` behålls för stabil ordning.
+   - `contracts/`, `docs/specs/swe-swd-1.0.md`, schema-version och
+     kontraktsbeslut måste uppdateras; frysta v1-dokument ska fortsätta fungera.
+5. **Dynamisk tillkomst**
+   - Kräver ett separat admission-kontrakt (t.ex. en host-effekt/ett event som
+     lägger till items i en aktiv DAG) med journalposter och replay. Det ingår
+     inte i den minimala statiska ready-mode-förändringen; worker-pool är bara
+     ett host-experiment.
+
+Ingen sådan ändring är gjord här. Rekommendationen är att först köra en
+host-level prototyp med riktiga handlare, journal/replay, cancellation och
+budget på samma DAG, och därefter fatta ett SWD-kontraktsbeslut.
+
+## 10. PR13-preflight
+
+PR13:s offline-preflight är pushad separat som `a69bd50` på
+`experiment/agent-microtask-contract`, med `PREFLIGHT.md` och
+`preflight-trace.json`. Den rapporterar att lagerbarriären håller och att
+handler-input bara innehåller `task_id`, `payload` och `depends_on`; ingen
+`RuntimeBudget` och inga betalda anrop. Den branchen och denna branch är
+oberoende; ingen ändring gjordes i PR13 eller dess worktree.
