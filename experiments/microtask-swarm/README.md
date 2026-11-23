@@ -209,6 +209,11 @@ reasoning-off, so its arm is not strictly comparable on reasoning cost.
 Reasoning tokens are not separately reported by Ollama, and live 4/8/16/32
 were not dispatched because of the plan's 3-request limit.
 
+A per-contract deep dive on Nemotron distributed vs single, including Wilson
+intervals, false-support accounting, normalized latency, cost per correct
+microtask, and confounders, is in
+[`reports/nemotron-distributed-analysis.md`](reports/nemotron-distributed-analysis.md).
+
 ## Reuse and intentional gaps
 
 | Concern | Reused | Gap |
