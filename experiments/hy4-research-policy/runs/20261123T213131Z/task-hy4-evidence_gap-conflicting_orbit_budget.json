@@ -1,0 +1,150 @@
+{
+  "name": "task-hy4-evidence_gap-conflicting_orbit_budget",
+  "transport": "ollama-native-chat",
+  "arm_id": "hy4",
+  "model": "hy4:cloud",
+  "question_id": "conflicting_orbit_budget",
+  "task": "evidence_gap",
+  "prompt_sha256": "5a25c8847059b8f4dbc34b973b1a804ca161419519504e4f991ce9332630d276",
+  "request": {
+    "model": "hy4:cloud",
+    "stream": false,
+    "think": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "{\"corpus\": [{\"source_id\": \"helios-overview\", \"text\": \"Helios-9 is a research programme. Its current phase is discovery.\"}, {\"source_id\": \"northstar-security\", \"text\": \"The security review for Northstar is approved. Approval allows Northstar to ship to production. No critical findings remain after review NS-44.\"}, {\"source_id\": \"orbit-approval\", \"text\": \"ORBIT-7 was approved for production on 2026-05-12. The review cadence for ORBIT-7 is every 90 days. The ORBIT-7 programme budget is 1200000 SEK.\"}, {\"source_id\": \"orbit-audit\", \"text\": \"The audited ORBIT-7 programme budget is 1500000 SEK. The audit confirms the production approval recorded in May.\"}, {\"source_id\": \"policy-p17\", \"text\": \"Policy P-17 governs production change control. The effective date of Policy P-17 is 2026-03-01. Reviews are required before a production release.\"}, {\"source_id\": \"release-handbook\", \"text\": \"An approved security review is required before a service may ship to production. A release remains blocked while a critical finding is open.\"}], \"instructions\": \"Set corpus_contains_answer from the corpus alone. unresolved lists exact quotes still required.\", \"question\": \"What is the ORBIT-7 budget?\", \"question_id\": \"conflicting_orbit_budget\", \"task\": \"evidence_gap\"}"
+      }
+    ],
+    "options": {
+      "num_predict": 512,
+      "temperature": 0,
+      "seed": 0
+    },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "evidence_gap",
+          "description": "evidence_gap",
+          "parameters": {
+            "$defs": {
+              "Quote": {
+                "additionalProperties": false,
+                "properties": {
+                  "source_id": {
+                    "title": "Source Id",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "quote"
+                ],
+                "title": "Quote",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "corpus_contains_answer": {
+                "title": "Corpus Contains Answer",
+                "type": "boolean"
+              },
+              "unresolved": {
+                "items": {
+                  "$ref": "#/$defs/Quote"
+                },
+                "title": "Unresolved",
+                "type": "array"
+              }
+            },
+            "required": [
+              "corpus_contains_answer",
+              "unresolved"
+            ],
+            "title": "EvidenceGap",
+            "type": "object"
+          }
+        }
+      }
+    ]
+  },
+  "http_status": 200,
+  "latency_ms": 1264.069,
+  "price_period": "off_peak",
+  "output_usd": "0.000215086",
+  "actual_usd": "N/A",
+  "classification": {
+    "channel": "tool",
+    "structure_error": null,
+    "validation_errors": null,
+    "json_keys": [
+      "corpus_contains_answer",
+      "unresolved"
+    ],
+    "truncated": false,
+    "model_returned": "hy4",
+    "model_tag_match": true,
+    "content_present": true,
+    "content": "",
+    "thinking_present": false,
+    "thinking": null,
+    "thinking_is_object": false,
+    "tool_calls": [
+      {
+        "id": "call_jfepvhye",
+        "function": {
+          "index": 0,
+          "name": "evidence_gap",
+          "arguments": {
+            "corpus_contains_answer": false,
+            "unresolved": [
+              {
+                "quote": "The ORBIT-7 programme budget is 1200000 SEK.",
+                "source_id": "orbit-approval"
+              },
+              {
+                "quote": "The audited ORBIT-7 programme budget is 1500000 SEK.",
+                "source_id": "orbit-audit"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "finish_reason": "stop",
+    "usage": {
+      "input": 614,
+      "output": 86
+    },
+    "parsed": {
+      "corpus_contains_answer": false,
+      "unresolved": [
+        {
+          "quote": "The ORBIT-7 programme budget is 1200000 SEK.",
+          "source_id": "orbit-approval"
+        },
+        {
+          "quote": "The audited ORBIT-7 programme budget is 1500000 SEK.",
+          "source_id": "orbit-audit"
+        }
+      ]
+    }
+  },
+  "exact_quote": {
+    "exact_quote": {
+      "recall": 1.0,
+      "precision": 1.0,
+      "unsupported": 0,
+      "verified": 2,
+      "expected": 2,
+      "contains_answer_correct": false
+    }
+  },
+  "hidden_retry": false
+}

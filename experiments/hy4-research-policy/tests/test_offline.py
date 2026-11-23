@@ -193,7 +193,7 @@ def test_package_has_no_network_or_engine_imports() -> None:
             for name in names:
                 if name not in banned:
                     continue
-                if path.name == "pilot.py" and name == "urllib":
+                if path.name in {"pilot.py", "native_chat.py", "jev_quote.py"} and name == "urllib":
                     continue
                 offenders.append(f"{path.name}: {name}")
     assert offenders == []

@@ -1,0 +1,118 @@
+{
+  "name": "replay-conflicting_orbit_budget-think-false",
+  "transport": "ollama-native-chat",
+  "arm_id": "deepseek-flash",
+  "model": "deepseek-v4.1-flash:cloud",
+  "question_id": "conflicting_orbit_budget",
+  "task": null,
+  "prompt_sha256": "78bc8e972e274ec6e91b9786f55f3ef274adba7292ff72cb94cf957385d11607",
+  "request": {
+    "model": "deepseek-v4.1-flash:cloud",
+    "stream": false,
+    "think": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "{\"conclusions\": [\"ANSWERED\", \"CONTRADICTED\", \"INSUFFICIENT_EVIDENCE\"], \"corpus\": [{\"source_id\": \"helios-overview\", \"text\": \"Helios-9 is a research programme. Its current phase is discovery.\"}, {\"source_id\": \"northstar-security\", \"text\": \"The security review for Northstar is approved. Approval allows Northstar to ship to production. No critical findings remain after review NS-44.\"}, {\"source_id\": \"orbit-approval\", \"text\": \"ORBIT-7 was approved for production on 2026-05-12. The review cadence for ORBIT-7 is every 90 days. The ORBIT-7 programme budget is 1200000 SEK.\"}, {\"source_id\": \"orbit-audit\", \"text\": \"The audited ORBIT-7 programme budget is 1500000 SEK. The audit confirms the production approval recorded in May.\"}, {\"source_id\": \"policy-p17\", \"text\": \"Policy P-17 governs production change control. The effective date of Policy P-17 is 2026-03-01. Reviews are required before a production release.\"}, {\"source_id\": \"release-handbook\", \"text\": \"An approved security review is required before a service may ship to production. A release remains blocked while a critical finding is open.\"}], \"question\": \"What is the ORBIT-7 budget?\", \"question_id\": \"conflicting_orbit_budget\", \"response_schema\": {\"actions\": [{\"gap\": {\"quote\": \"exact text\", \"source_id\": \"document id\"}, \"tool\": \"retrieve\"}, {\"gap\": {\"quote\": \"exact text\", \"source_id\": \"document id\"}, \"tool\": \"read_passage\"}], \"needs\": [{\"target_quotes\": [{\"quote\": \"exact text\", \"source_id\": \"document id\"}]}], \"stop\": {\"answer_complete\": true, \"claims\": [{\"quote\": \"exact text\", \"source_id\": \"document id\"}], \"conclusion\": \"ANSWERED\"}}, \"rules\": [\"target_quotes and claims must be exact substrings of the named document.\", \"Every claim must also appear as a read_passage action.\", \"Use CONTRADICTED when the corpus states conflicting values.\", \"Use INSUFFICIENT_EVIDENCE when the corpus does not state the answer.\", \"answer_complete is true only for ANSWERED with every required quote read.\"], \"task\": \"Decide the research policy for this question using only the corpus. Copy quotes exactly. Return one JSON object.\", \"tools\": [\"retrieve\", \"read_passage\"]}"
+      }
+    ],
+    "options": {
+      "num_predict": 1024,
+      "temperature": 0,
+      "seed": 0
+    }
+  },
+  "http_status": 200,
+  "latency_ms": 1988.709,
+  "price_period": "off_peak",
+  "output_usd": "0.0003456",
+  "actual_usd": "N/A",
+  "classification": {
+    "channel": "content",
+    "structure_error": "schema_validation",
+    "validation_errors": [
+      {
+        "loc": "needs",
+        "type": "missing",
+        "msg": "Field required"
+      },
+      {
+        "loc": "actions",
+        "type": "missing",
+        "msg": "Field required"
+      },
+      {
+        "loc": "stop",
+        "type": "missing",
+        "msg": "Field required"
+      },
+      {
+        "loc": "conclusions",
+        "type": "extra_forbidden",
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "loc": "corpus",
+        "type": "extra_forbidden",
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "loc": "question",
+        "type": "extra_forbidden",
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "loc": "question_id",
+        "type": "extra_forbidden",
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "loc": "response_schema",
+        "type": "extra_forbidden",
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "loc": "rules",
+        "type": "extra_forbidden",
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "loc": "task",
+        "type": "extra_forbidden",
+        "msg": "Extra inputs are not permitted"
+      },
+      {
+        "loc": "tools",
+        "type": "extra_forbidden",
+        "msg": "Extra inputs are not permitted"
+      }
+    ],
+    "json_keys": [
+      "conclusions",
+      "corpus",
+      "question",
+      "question_id",
+      "response_schema",
+      "rules",
+      "task",
+      "tools"
+    ],
+    "truncated": false,
+    "model_returned": "deepseek-v4.1-flash",
+    "model_tag_match": false,
+    "content_present": true,
+    "content": "{\"conclusions\": [\"ANSWERED\", \"CONTRADICTED\", \"INSUFFICIENT_EVIDENCE\"], \"corpus\": [{\"source_id\": \"helios-overview\", \"text\": \"Helios-9 is a research programme. Its current phase is discovery.\"}, {\"source_id\": \"northstar-security\", \"text\": \"The security review for Northstar is approved. Approval allows Northstar to ship to production. No critical findings remain after review NS-44.\"}, {\"source_id\": \"orbit-approval\", \"text\": \"ORBIT-7 was approved for production on 2026-05-12. The review cadence for ORBIT-7 is every 90 days. The ORBIT-7 programme budget is 1200000 SEK.\"}, {\"source_id\": \"orbit-audit\", \"text\": \"The audited ORBIT-7 programme budget is 1500000 SEK. The audit confirms the production approval recorded in May.\"}, {\"source_id\": \"policy-p17\", \"text\": \"Policy P-17 governs production change control. The effective date of Policy P-17 is 2026-03-01. Reviews are required before a production release.\"}, {\"source_id\": \"release-handbook\", \"text\": \"An approved security review is required before a service may ship to production. A release remains blocked while a critical finding is open.\"}], \"question\": \"What is the ORBIT-7 budget?\", \"question_id\": \"conflicting_orbit_budget\", \"response_schema\": {\"actions\": [{\"gap\": {\"quote\": \"exact text\", \"source_id\": \"document id\"}, \"tool\": \"retrieve\"}, {\"gap\": {\"quote\": \"exact text\", \"source_id\": \"document id\"}, \"tool\": \"read_passage\"}], \"needs\": [{\"target_quotes\": [{\"quote\": \"exact text\", \"source_id\": \"document id\"}]}], \"stop\": {\"answer_complete\": true, \"claims\": [{\"quote\": \"exact text\", \"source_id\": \"document id\"}], \"conclusion\": \"ANSWERED\"}}, \"rules\": [\"target_quotes and claims must be exact substrings of the named document.\", \"Every claim must also appear as a read_passage action.\", \"Use CONTRADICTED when the corpus states conflicting values.\", \"Use INSUFFICIENT_EVIDENCE when the corpus does not state the answer.\", \"answer_complete is true only for ANSWERED with every required quote read.\"], \"task\": \"Decide the research policy for this question using only the corpus. Copy quotes exactly. Return one JSON object.\", \"tools\": [\"retrieve\", \"read_passage\"]}",
+    "thinking_present": false,
+    "thinking": null,
+    "thinking_is_object": false,
+    "tool_calls": null,
+    "finish_reason": "stop",
+    "usage": {
+      "input": 580,
+      "output": 576
+    },
+    "parsed": null
+  },
+  "exact_quote": null,
+  "hidden_retry": false
+}

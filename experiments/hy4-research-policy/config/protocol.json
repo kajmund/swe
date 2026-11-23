@@ -1,6 +1,6 @@
 {
   "schema_version": "hy4-research-policy-v1",
-  "status": "PILOT_RUN_20261123T205650Z",
+  "status": "SCHEMA_DIAGNOSIS_20261123T213131Z",
   "swe_baseline": "eff1c7e8943dd64827fb4916719ced5515bf3db5",
   "frozen": {
     "questions": "frozen/gym/questions.json",

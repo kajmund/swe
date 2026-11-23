@@ -1,0 +1,132 @@
+{
+  "name": "task-hy4-evidence_gap-dependent_northstar_release",
+  "transport": "ollama-native-chat",
+  "arm_id": "hy4",
+  "model": "hy4:cloud",
+  "question_id": "dependent_northstar_release",
+  "task": "evidence_gap",
+  "prompt_sha256": "c79534d039406da06c6647c7cf219643c7bcfcaede26fc092955aa1a59587ccf",
+  "request": {
+    "model": "hy4:cloud",
+    "stream": false,
+    "think": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "{\"corpus\": [{\"source_id\": \"helios-overview\", \"text\": \"Helios-9 is a research programme. Its current phase is discovery.\"}, {\"source_id\": \"northstar-security\", \"text\": \"The security review for Northstar is approved. Approval allows Northstar to ship to production. No critical findings remain after review NS-44.\"}, {\"source_id\": \"orbit-approval\", \"text\": \"ORBIT-7 was approved for production on 2026-05-12. The review cadence for ORBIT-7 is every 90 days. The ORBIT-7 programme budget is 1200000 SEK.\"}, {\"source_id\": \"orbit-audit\", \"text\": \"The audited ORBIT-7 programme budget is 1500000 SEK. The audit confirms the production approval recorded in May.\"}, {\"source_id\": \"policy-p17\", \"text\": \"Policy P-17 governs production change control. The effective date of Policy P-17 is 2026-03-01. Reviews are required before a production release.\"}, {\"source_id\": \"release-handbook\", \"text\": \"An approved security review is required before a service may ship to production. A release remains blocked while a critical finding is open.\"}], \"instructions\": \"Set corpus_contains_answer from the corpus alone. unresolved lists exact quotes still required.\", \"question\": \"Can Northstar ship to production if its security review is approved and no critical findings remain?\", \"question_id\": \"dependent_northstar_release\", \"task\": \"evidence_gap\"}"
+      }
+    ],
+    "options": {
+      "num_predict": 512,
+      "temperature": 0,
+      "seed": 0
+    },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "evidence_gap",
+          "description": "evidence_gap",
+          "parameters": {
+            "$defs": {
+              "Quote": {
+                "additionalProperties": false,
+                "properties": {
+                  "source_id": {
+                    "title": "Source Id",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "quote"
+                ],
+                "title": "Quote",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "corpus_contains_answer": {
+                "title": "Corpus Contains Answer",
+                "type": "boolean"
+              },
+              "unresolved": {
+                "items": {
+                  "$ref": "#/$defs/Quote"
+                },
+                "title": "Unresolved",
+                "type": "array"
+              }
+            },
+            "required": [
+              "corpus_contains_answer",
+              "unresolved"
+            ],
+            "title": "EvidenceGap",
+            "type": "object"
+          }
+        }
+      }
+    ]
+  },
+  "http_status": 200,
+  "latency_ms": 641.079,
+  "price_period": "off_peak",
+  "output_usd": "0.000062525",
+  "actual_usd": "N/A",
+  "classification": {
+    "channel": "tool",
+    "structure_error": null,
+    "validation_errors": null,
+    "json_keys": [
+      "corpus_contains_answer",
+      "unresolved"
+    ],
+    "truncated": false,
+    "model_returned": "hy4",
+    "model_tag_match": true,
+    "content_present": true,
+    "content": "",
+    "thinking_present": false,
+    "thinking": null,
+    "thinking_is_object": false,
+    "tool_calls": [
+      {
+        "id": "call_qpefnh7e",
+        "function": {
+          "index": 0,
+          "name": "evidence_gap",
+          "arguments": {
+            "corpus_contains_answer": true,
+            "unresolved": []
+          }
+        }
+      }
+    ],
+    "finish_reason": "stop",
+    "usage": {
+      "input": 622,
+      "output": 25
+    },
+    "parsed": {
+      "corpus_contains_answer": true,
+      "unresolved": []
+    }
+  },
+  "exact_quote": {
+    "exact_quote": {
+      "recall": 0.0,
+      "precision": 1.0,
+      "unsupported": 0,
+      "verified": 0,
+      "expected": 3,
+      "contains_answer_correct": true
+    }
+  },
+  "hidden_retry": false
+}

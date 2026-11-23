@@ -4,9 +4,9 @@ Offline comparison harness for three policy models on the frozen Research Gym.
 The questions, corpus, tool menu, Sweycoin allocation, and USD cap are the
 existing Gym values. SWE core is not modified.
 
-Status: pilot `runs/20261123T205650Z` ran through the local Ollama daemon.
-`refuse_live_dispatch` still refuses an uncapped dispatch. Hy4 Flash and JEV
-were not called.
+Status: schema diagnosis `runs/20261123T213131Z` is a separate $2 pool.
+`refuse_live_dispatch` still refuses an uncapped dispatch. Pydantic AI is used
+only inside this experiment and does not schedule SWE work.
 
 ## Frozen inputs
 
@@ -128,5 +128,20 @@ retry, and peak cache-miss prices. Ten completions were sent. None exceeded
 `num_predict`. No weights were downloaded. Hy4 Flash stayed out.
 
 The high 16 000-output matrix remains above the $2 cap and is not dispatched.
-JEV was not called. Ollama did not return cache tokens or a dollar charge, so
-`calculated_usd` and `actual_usd` stay `N/A`.
+JEV was not called in that run. Ollama did not return cache tokens or a dollar
+charge, so `calculated_usd` and `actual_usd` stay `N/A`.
+
+## Schema diagnosis
+
+`runs/20261123T213131Z` has its own $2 cap, zero retries, and saved request
+bodies. With `think` false, DeepSeek's four empty decisions were the prompt
+JSON echoed back (`conclusions`, `corpus`, `question`, …), `done_reason` stop,
+and no thinking field. The server reports the model as `deepseek-v4.1-flash`
+for a `:cloud` request. Native `format` accepted the call and did not enforce
+the schema. Native tools returned an object. `think` true filled all 1 024
+tokens with reasoning and an empty answer. Pydantic AI 2.54 treats
+`:cloud` on the local daemon as native-schema capable; this adapter refuses
+that mode before HTTP. Its prompted call returned 2 264 tokens after
+`max_tokens` 1 024 and still included thinking. Isolated tasks then used native
+tools, where `num_predict` held. Exact-quote scores and the 26 JEV relation
+calls are stored separately. No provider charge field was returned.

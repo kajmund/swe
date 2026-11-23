@@ -1,0 +1,173 @@
+{
+  "name": "task-hy4-stop-multi_document_orbit",
+  "transport": "ollama-native-chat",
+  "arm_id": "hy4",
+  "model": "hy4:cloud",
+  "question_id": "multi_document_orbit",
+  "task": "stop",
+  "prompt_sha256": "11f752ed0dcddbba8ac1b588b6a10e8a349da8af058615a5c44ac3efc843eb1b",
+  "request": {
+    "model": "hy4:cloud",
+    "stream": false,
+    "think": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "{\"corpus\": [{\"source_id\": \"helios-overview\", \"text\": \"Helios-9 is a research programme. Its current phase is discovery.\"}, {\"source_id\": \"northstar-security\", \"text\": \"The security review for Northstar is approved. Approval allows Northstar to ship to production. No critical findings remain after review NS-44.\"}, {\"source_id\": \"orbit-approval\", \"text\": \"ORBIT-7 was approved for production on 2026-05-12. The review cadence for ORBIT-7 is every 90 days. The ORBIT-7 programme budget is 1200000 SEK.\"}, {\"source_id\": \"orbit-audit\", \"text\": \"The audited ORBIT-7 programme budget is 1500000 SEK. The audit confirms the production approval recorded in May.\"}, {\"source_id\": \"policy-p17\", \"text\": \"Policy P-17 governs production change control. The effective date of Policy P-17 is 2026-03-01. Reviews are required before a production release.\"}, {\"source_id\": \"release-handbook\", \"text\": \"An approved security review is required before a service may ship to production. A release remains blocked while a critical finding is open.\"}], \"instructions\": \"Stop with ANSWERED, CONTRADICTED, or INSUFFICIENT_EVIDENCE. Claims must be exact quotes.\", \"question\": \"Is ORBIT-7 approved for production, and what is its review cadence?\", \"question_id\": \"multi_document_orbit\", \"task\": \"stop\"}"
+      }
+    ],
+    "options": {
+      "num_predict": 512,
+      "temperature": 0,
+      "seed": 0
+    },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "stop",
+          "description": "stop",
+          "parameters": {
+            "$defs": {
+              "Quote": {
+                "additionalProperties": false,
+                "properties": {
+                  "source_id": {
+                    "title": "Source Id",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "quote"
+                ],
+                "title": "Quote",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "conclusion": {
+                "enum": [
+                  "ANSWERED",
+                  "CONTRADICTED",
+                  "INSUFFICIENT_EVIDENCE"
+                ],
+                "title": "Conclusion",
+                "type": "string"
+              },
+              "answer_complete": {
+                "title": "Answer Complete",
+                "type": "boolean"
+              },
+              "claims": {
+                "items": {
+                  "$ref": "#/$defs/Quote"
+                },
+                "title": "Claims",
+                "type": "array"
+              }
+            },
+            "required": [
+              "conclusion",
+              "answer_complete",
+              "claims"
+            ],
+            "title": "StopDecision",
+            "type": "object"
+          }
+        }
+      }
+    ]
+  },
+  "http_status": 200,
+  "latency_ms": 1196.035,
+  "price_period": "off_peak",
+  "output_usd": "0.000282613",
+  "actual_usd": "N/A",
+  "classification": {
+    "channel": "tool",
+    "structure_error": null,
+    "validation_errors": null,
+    "json_keys": [
+      "answer_complete",
+      "claims",
+      "conclusion"
+    ],
+    "truncated": false,
+    "model_returned": "hy4",
+    "model_tag_match": true,
+    "content_present": true,
+    "content": "",
+    "thinking_present": false,
+    "thinking": null,
+    "thinking_is_object": false,
+    "tool_calls": [
+      {
+        "id": "call_68yu4l5w",
+        "function": {
+          "index": 0,
+          "name": "stop",
+          "arguments": {
+            "conclusion": "ANSWERED",
+            "answer_complete": true,
+            "claims": [
+              {
+                "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+                "source_id": "orbit-approval"
+              },
+              {
+                "quote": "The review cadence for ORBIT-7 is every 90 days.",
+                "source_id": "orbit-approval"
+              },
+              {
+                "quote": "The audit confirms the production approval recorded in May.",
+                "source_id": "orbit-audit"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "finish_reason": "stop",
+    "usage": {
+      "input": 655,
+      "output": 113
+    },
+    "parsed": {
+      "conclusion": "ANSWERED",
+      "answer_complete": true,
+      "claims": [
+        {
+          "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+          "source_id": "orbit-approval"
+        },
+        {
+          "quote": "The review cadence for ORBIT-7 is every 90 days.",
+          "source_id": "orbit-approval"
+        },
+        {
+          "quote": "The audit confirms the production approval recorded in May.",
+          "source_id": "orbit-audit"
+        }
+      ]
+    }
+  },
+  "exact_quote": {
+    "exact_quote": {
+      "recall": 1.0,
+      "precision": 1.0,
+      "unsupported": 0,
+      "verified": 3,
+      "expected": 3,
+      "conclusion_correct": true,
+      "false_completeness": false,
+      "stop_correct": true
+    }
+  },
+  "hidden_retry": false
+}
