@@ -24,6 +24,14 @@ behaviour: no reservation, no settlement, no new event.
 | Lifecycle: when to reserve, settle, release, or keep pending | Python `swe.budget.RuntimeBudget` | this document |
 | Prices, provider identity, token/cost estimates | Host `BudgetPolicy` | this document |
 
+A `RuntimeBudget` instance owns its ledger/account for its lifetime. Do not run
+two live instances over the same ledger/account: the stale-snapshot guard is
+instance-local, and a stale object in one instance is still current in the
+other. On replay/resume, discard the old instance and call `restore(run_id)` on
+the current one; within the owning instance, use `reconcile_invocation` by
+id. Cross-instance ownership/generation requires a ledger-level owner token and
+is out of scope for this version.
+
 The policy is deliberately domain-neutral. SWE never interprets currency,
 model names, token prices, tenant billing rules, or provider contracts. It
 passes a `BudgetRequest` to the policy and receives integer milli-unit
@@ -128,9 +136,12 @@ or take a fresh snapshot.
    SWE cannot know whether the provider billed the cancelled call. A later
    outcome may settle it; otherwise the host calls `reconcile_invocation(...)`
    or `reconcile(..., release=True)`. When the runtime abandons a
-   cancellation-resistant handler, it marks that invocation's hold pending
-   before registering the orphan. A settlement failure (policy exception,
-   invalid amount, overrun, or ledger error) also marks the hold pending; it is
+   cancellation-resistant handler, it marks that attempt's own reservation
+   object pending before registering the orphan. The mark is bound to the
+   attempt, not looked up by invocation id, so a retry that adopted the hold is
+   not marked pending by the old runner's cleanup. A settlement failure (policy
+   exception, invalid amount, overrun, or ledger error) also marks the hold
+   pending; it is
    never left as an invisible `RESERVED` hold.
 8. **Replay.** The host persists and replays the ledger event log alongside the
    `RunStore`. `WorkflowRunner.resume` calls `budget.restore(run_id=...)` for
@@ -225,6 +236,8 @@ See `docs/swe-standalone/17-budget-runtime-decision.md` for the decision record.
 - Rate limiting. The budget is a spend cap, not a request-rate limiter.
 - A second ledger. `swe-budget` is the only currency implementation.
 - Semantic or token-based cost estimation. The host policy owns that.
+- Cross-instance ownership/generation. One live `RuntimeBudget` owns one
+  ledger/account; a ledger-level owner token is a later change.
 
 ## Verification
 

@@ -1056,3 +1056,76 @@ async def test_runtime_stale_reconcile_rejects_and_retry_completes() -> None:
     await _cancel_swe_tasks()
     assert len(calls) == 2
 
+
+@pytest.mark.asyncio
+async def test_abandon_cleanup_does_not_mark_the_adopted_retry() -> None:
+    started1 = asyncio.Event()
+    release1 = asyncio.Event()
+    started2 = asyncio.Event()
+    go2 = asyncio.Event()
+    calls1: list[int] = []
+
+    async def work1(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        calls1.append(len(calls1))
+        if len(calls1) == 1:
+            started1.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await release1.wait()
+        return {"ok": True}
+
+    async def work2(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        started2.set()
+        await go2.wait()
+        return {"ok": True}
+
+    budget, ledger = _budget(cap_milli=5)
+    runner1 = WorkflowRunner(
+        _one_node_flow(),
+        {"m.work": work1},
+        resources=WorkflowResources(
+            budget=budget, action_timeouts={"work": 1}
+        ),
+    )
+    first = await runner1.run({}, run_id="abandon-adopt")
+    assert first.status == "failed"
+    assert started1.is_set()
+    snapshot = budget.pending()[0]
+
+    retry_task = asyncio.create_task(
+        WorkflowRunner(
+            _one_node_flow(),
+            {"m.work": work2},
+            resources=WorkflowResources(budget=budget),
+        ).run({}, run_id="abandon-adopt")
+    )
+    await asyncio.wait_for(started2.wait(), timeout=5)
+    retry_reservation = budget.reservation_for(
+        snapshot.request.invocation_id
+    )
+    assert retry_reservation is not None
+    assert retry_reservation.state is ReservationState.RESERVED
+
+    # Completing an unrelated run on the original runner triggers its
+    # runner-wide abandoned cleanup. It must mark the old attempt only, not the
+    # adopted retry's fresh RESERVED object.
+    unrelated = await runner1.run({}, run_id="unrelated")
+    assert unrelated.status == "completed"
+    assert retry_reservation.state is ReservationState.RESERVED
+    with pytest.raises(BudgetStateError, match="requires a pending reservation"):
+        budget.reconcile_invocation(
+            snapshot.request.invocation_id, release=True
+        )
+
+    go2.set()
+    retried = await asyncio.wait_for(retry_task, timeout=5)
+    assert retried.status == "completed"
+    # One charge for the unrelated run, one for the retry.
+    assert ledger.balance(account="a")["spent"] == 2
+    assert ledger.balance(account="a")["reserved"] == 0
+
+    release1.set()
+    await asyncio.sleep(0)
+    await _cancel_swe_tasks()
+

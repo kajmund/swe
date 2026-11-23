@@ -73,7 +73,10 @@ Kort:
    den med `reconcile_invocation(invocation_id, ...)` utan att behöva
    reservationsobjektet. En pågående `reserved`-hold visas i `unresolved()`
    men får inte reconcileras förrän den är pending eller har settlement:ats
-   normalt.
+   normalt. När runtime abandonerar en cancel-resistant handler markerar den
+   den **avbrutna attemptens eget** reservationsobjekt, inte aktuellt objekt
+   för invocation-id, så en retry som adopterat holden påverkas inte av den
+   gamla runnerns cleanup.
 6. Replay anropar inte budget för redan persistrade invocations. Hosten
    persisterar och replayar ledgerhändelserna tillsammans med `RunStore`.
    `resume` kallar `restore(run_id=...)` för både terminala och running runs,
@@ -136,6 +139,11 @@ Kort:
 - Host-reconciliation av pending-reservationer är ett host-ansvar. En framtida
   host-adapter kan exponera en tidsgräns eller en återkommande kvittningskö,
   men det hör inte till detta beslut.
+- En live `RuntimeBudget` äger sitt ledger/account. Två samtidiga instanser
+  över samma ledger/account stöds inte: stale-snapshot-vakten är
+  instanslokal. Vid replay/resume ska den gamla instansen släppas och
+  `restore(run_id)` anropas på den aktuella. Cross-instance
+  owner/generation kräver ledger-nivå och är en separat framtida ändring.
 - Om kernelns `ErrorKind` senare får `budget` krävs en separat
   kontraktsändring och versionering; tills dess är mappningen till `handler`
   avsiktlig och dokumenterad.

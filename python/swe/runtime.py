@@ -52,7 +52,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from swe.budget import RuntimeBudget
+from swe.budget import BudgetReservation, RuntimeBudget
 from swe.cache import CacheComputeOwner, OwnedOrphanDecisionCache
 from swe.definition import CompiledDefinition
 from swe.invocation_error import live_invocation_error, normalize_invocation_error
@@ -119,6 +119,9 @@ class _Driver:
     action_timeouts: Mapping[str, int]
     abandoned: AbandonedWorkRegistry
     budget: RuntimeBudget | None = None
+    budget_slots: dict[str, list[BudgetReservation | None]] = field(
+        default_factory=dict
+    )
     invocation_nodes: dict[str, str] = field(default_factory=dict)
     handles: dict[str, InvocationHandle] = field(default_factory=dict)
     cancel_task: asyncio.Task[bool] | None = None
@@ -499,6 +502,7 @@ async def _apply_effect(
             now_ms=driver.clock.now_ms,
             handles=driver.handles,
             budget=driver.budget,
+            budget_slots=driver.budget_slots,
             run_id=driver.run_id,
         )
         _arm_action_deadline(driver, effect)
@@ -632,19 +636,28 @@ def _abandon_pending(driver: _Driver) -> None:
                 )
         elif not task.done():
             task.cancel()
-        if driver.budget is not None:
-            driver.budget.mark_pending_invocation(invocation_id)
+        _mark_pending_slot(driver, invocation_id)
         driver.abandoned.register(invocation_id, node_id, task)
     _harvest_cache_orphans(driver)
 
 
+def _mark_pending_slot(driver: _Driver, invocation_id: str) -> None:
+    """Mark the abandoned attempt's own reservation, not a retry's fresh one."""
+
+    if driver.budget is None:
+        return
+    slot = driver.budget_slots.pop(invocation_id, None)
+    if slot and slot[0] is not None:
+        driver.budget.mark_pending(slot[0])
+
+
 def _mark_abandoned_budget(driver: _Driver) -> None:
-    """Expose every abandoned handler's hold to the host for reconciliation."""
+    """Expose every abandoned handler's own hold to the host for reconciliation."""
 
     if driver.budget is None:
         return
     for invocation_id in driver.abandoned.invocation_ids():
-        driver.budget.mark_pending_invocation(invocation_id)
+        _mark_pending_slot(driver, invocation_id)
 
 
 def _harvest_cache_orphans(driver: _Driver) -> None:
