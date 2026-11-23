@@ -75,10 +75,12 @@ RuntimeBudget:
 ```
 
 `RuntimeBudget` composes one ledger, one policy, and one account. The host
-constructs it; the runtime calls `reserve`, `settle`, `mark_pending`,
-`mark_pending_invocation`, `restore`, and `reservation_for`. On a late return
-after cancel or timeout, `BudgetOutcome` carries `cancelled`/`timed_out` from
-the invocation handle; `ok` still reflects whether the call itself returned.
+constructs it; the runtime calls `reserve`, `settle`, `mark_pending` on the
+bound attempt object, `restore`, and `reservation_for`.
+`mark_pending_invocation` remains a host convenience for the current object.
+On a late return after cancel or timeout, `BudgetOutcome` carries
+`cancelled`/`timed_out` from the invocation handle; `ok` still reflects whether
+the call itself returned.
 
 `pending()` is the recovery queue: cancel/timeout holds **and failed
 settlements**. `unresolved()` additionally includes still-reserved in-flight
@@ -137,7 +139,8 @@ or take a fresh snapshot.
    outcome may settle it; otherwise the host calls `reconcile_invocation(...)`
    or `reconcile(..., release=True)`. When the runtime abandons a
    cancellation-resistant handler, it marks that attempt's own reservation
-   object pending before registering the orphan. The mark is bound to the
+   object pending at detach, or in the runner cleanup before it returns. The
+   mark is bound to the
    attempt, not looked up by invocation id, so a retry that adopted the hold is
    not marked pending by the old runner's cleanup. A settlement failure (policy
    exception, invalid amount, overrun, or ledger error) also marks the hold
@@ -160,7 +163,7 @@ or take a fresh snapshot.
 | Handler/provider raises | `settle` with the policy's failure cost (often 0) |
 | Provider exact-cache hit | `reserve` still happens; policy may settle 0 using `cache_state="hit"` |
 | `cancel_event` or action timeout cancels the call | `mark_pending`; no release |
-| Runtime abandons a cancellation-resistant handler | `mark_pending_invocation`; the hold is reconcilable, the orphan may still return |
+| Runtime abandons a cancellation-resistant handler | `mark_pending` on the attempt's own reservation object; the hold is reconcilable, the orphan may still return |
 | `policy.settle` raises, returns an invalid amount, or exceeds the ceiling | `mark_pending`; the hold stays reserved and visible |
 | Ledger `settle` fails | `mark_pending`; the hold stays reserved and visible. If the ledger already has a settlement for the key, it is authoritative and the in-process state becomes terminal |
 | Late handler returns after timeout | The dispatch boundary settles the actual cost; the machine still fails/cancels the invocation |

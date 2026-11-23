@@ -827,6 +827,7 @@ async def _settle_expired_unfinished(
     node_id = driver.invocation_nodes.get(invocation_id, "")
     driver.handles.pop(invocation_id, None)
     if task is not None and not task.done():
+        _mark_pending_slot(driver, invocation_id)
         driver.abandoned.register(invocation_id, node_id, task)
     elif task is not None:
         consume_task_result(task)
