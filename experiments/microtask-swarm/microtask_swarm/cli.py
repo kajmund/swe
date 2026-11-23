@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Sequence
 
 from microtask_swarm.estimate import estimate_matrix, estimate_sweycoins
+from microtask_swarm.async_benchmark import (
+    render_async_markdown,
+    run_async_benchmark,
+    write_async_report,
+)
 from microtask_swarm.live import (
     LiveDispatchRefused,
     OllamaCloudClient,
@@ -52,6 +57,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     estimate = sub.add_parser("estimate", help="print the pre-dispatch cost estimate")
     estimate.add_argument("--pretty", action="store_true")
+
+    async_bench = sub.add_parser(
+        "async", help="run the offline A/B/C/D scheduling benchmark"
+    )
+    async_bench.add_argument(
+        "--async-config",
+        type=Path,
+        default=_ROOT / "config" / "async-benchmark.json",
+    )
+    async_bench.add_argument(
+        "--report", type=Path, default=_ROOT / "reports" / "async-benchmark.json"
+    )
+    async_bench.add_argument(
+        "--markdown", type=Path, default=_ROOT / "reports" / "async-benchmark.md"
+    )
+    async_bench.add_argument(
+        "--scale", type=float, default=None, help="scale deterministic trace latencies"
+    )
 
     verify = sub.add_parser("verify-fixtures", help="validate the frozen gold fixtures")
     verify.add_argument("--pretty", action="store_true")
@@ -98,6 +121,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "credentials": credential_status(),
             }
             _print(payload, pretty=args.pretty)
+            return 0
+        if args.command == "async":
+            report = asyncio.run(
+                run_async_benchmark(
+                    args.config, args.async_config, scale=args.scale
+                )
+            )
+            write_async_report(report, args.report)
+            markdown = render_async_markdown(report)
+            args.markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.markdown.write_text(markdown, encoding="utf-8")
+            _print_async_summary(report, args.report, args.markdown)
             return 0
         if args.command == "verify-fixtures":
             config = load_config(args.config)
@@ -192,6 +227,25 @@ def _print_summary(report: dict, path: Path) -> None:
             f"calculated_complete={row['calculated_usd_complete_calls']} "
             f"actual_usd={row['actual_usd']} "
             f"sweycoins_milli={row['sweycoins_spent_milli']}"
+        )
+
+
+def _print_async_summary(report: dict, json_path: Path, md_path: Path) -> None:
+    print(f"report: {json_path}")
+    print(f"markdown: {md_path}")
+    print(f"evidence: {report['evidence_kind']}  runs: {report['summary']['run_count']}")
+    for strategy, row in sorted(report["summary"]["best_by_strategy"].items()):
+        print(
+            f"  {strategy}: wall={row['best_wall_ms']}ms "
+            f"first_verified={row['first_verified_ms']}ms "
+            f"p95={row['p95_ms']}ms "
+            f"worker_util={row['worker_utilization']} "
+            f"provider_util={row['provider_utilization']} "
+            f"accuracy={row['accuracy']} "
+            f"coverage={row['coverage']} "
+            f"false_support={row['false_support_rate']} "
+            f"settled_milli={row['settled_milli']} "
+            f"pending_before={row['pending_before_milli']}"
         )
 
 

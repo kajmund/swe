@@ -97,6 +97,12 @@ class OfflineHeuristicProvider:
         await asyncio.sleep(
             self.simulated_latency_ms * persona.latency_factor / 1000.0
         )
+        return self.respond(request)
+
+    def respond(self, request: ChatRequest) -> ProviderResponse:
+        """Return the deterministic answer without simulating latency."""
+
+        persona = self._persona[request.model_id]
         output = self._answer(request, persona)
         system, user = request.system, request.user
         input_chars = len(system) + len(user)

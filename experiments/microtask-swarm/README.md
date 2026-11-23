@@ -214,6 +214,87 @@ intervals, false-support accounting, normalized latency, cost per correct
 microtask, and confounders, is in
 [`reports/nemotron-distributed-analysis.md`](reports/nemotron-distributed-analysis.md).
 
+## Async scheduling benchmark (offline)
+
+The A/B/C/D benchmark isolates scheduling from model quality with a
+deterministic latency trace:
+
+- **A** — one combined large-model call per item (`deepseek-v4.1-flash`);
+- **B** — sequential microtasks in dependency order (`nemotron-3-super`);
+- **C** — bounded parallel microtasks with a global barrier per topological
+  layer;
+- **D** — event-driven ready queue: a microtask starts when its own
+  dependencies finish, without waiting for unrelated tasks in the same layer.
+
+B/C/D use the same frozen fixtures, verifier, model, and budget. The
+dependency DAG is relevance → extraction → {entailment, atomicity} →
+operation selection. The trace includes deterministic jitter and two
+straggler items, and the provider rate limit is 3. Cancellation and early stop
+keep reservations pending; the run reconciles them with a deterministic
+late-billing fraction. Quality values come from the offline heuristic personas,
+not from live model calls; only the scheduling and accounting are being
+measured here.
+
+```sh
+PYTHONPATH=. python3 -m microtask_swarm async \
+  --report reports/async-benchmark.json \
+  --markdown reports/async-benchmark.md
+```
+
+Evidence: [`reports/async-benchmark.json`](reports/async-benchmark.json) and
+[`reports/async-benchmark.md`](reports/async-benchmark.md). Reproducible tests:
+`tests/test_async_benchmark.py`.
+
+### Main results (no early stop, no cancellation)
+
+| Strategy | Best wall | First verified | p50 task | p95 task | Critical path | Provider util | Accuracy | Coverage | Calls | Settled milli | Calc USD |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A single large | 5.26 s | 1.28 s | 2.86 s | 5.26 s | 2.14 s | 0.88 | 0.68 | 0.10 | 10 | 12,500 | $0.00137 |
+| B sequential | 15.51 s | 0.11 s | 0.17 s | 0.91 s | 3.53 s | 0.33 | 0.90 | 0.80 | 50 | 20,000 | $0.00040 |
+| C layered barrier | **5.48 s** | 0.10 s | 0.78 s | 1.97 s | 3.53 s | **0.94** | 0.90 | 0.80 | 50 | 20,000 | $0.00040 |
+| D event ready | 5.76 s | 0.10 s | 0.25 s | 1.73 s | 3.53 s | 0.90 | 0.90 | 0.80 | 50 | 20,000 | $0.00040 |
+
+Readings:
+
+- **A** has the fewest calls and lowest Sweycoin charge, but its accuracy and
+  extraction coverage are much lower and its first verified result arrives
+  about 12× later. It also uses a different (large) model, so the A-vs-B/C/D
+  comparison confounds model and decomposition.
+- **B** is deterministic and simple but 2.8× slower than C/D. Its provider
+  utilization is only 0.33 because one call runs at a time.
+- **C and D** have identical quality (same fixtures, verifier, and model).
+  Under the 3-request provider limit, C's larger batches reach slightly lower
+  makespan (5.48 s vs 5.76 s) and higher provider utilization. D gives much
+  lower per-task latency (p50 0.25 s vs 0.78 s) because tasks start as soon as
+  their own dependencies finish, but its makespan is limited by provider
+  capacity and its worker utilization is lower. Both are 1.55–1.63× the DAG
+  critical path of 3.53 s.
+- The isolated straggler test shows the intended D advantage: when a slow
+  task blocks a barrier but is not on the longest chain, D finishes before C.
+  The main trace's provider limit and task mix make C marginally faster.
+
+### Early stop and cancellation
+
+| Scenario | Wall | Calls | Verified | Cancelled | Unscheduled | Accuracy | Coverage | Pending milli | Late milli | Released milli |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| C early stop (25) | 2.90 s | 40 | 25 | 15 | 10 | 0.42 | 0.80 | 500 | 500 | 0 |
+| D early stop (25) | 2.60 s | 32 | 25 | 7 | 18 | 0.44 | 0.80 | 1,250 | 1,250 | 0 |
+| C cancel at 1.5 s | 1.50 s | 20 | 13 | 7 | 30 | 0.22 | 0.20 | 3,000 | 2,000 | 1,000 |
+| D cancel at 1.5 s | 1.50 s | 24 | 16 | 8 | 26 | 0.28 | 0.50 | 3,000 | 2,000 | 1,000 |
+
+Early stop reaches the 25-verified target sooner in D and with fewer calls,
+but leaves more reservations pending because more tasks were in flight.
+Cancellation at the same wall time let D complete more verified work and higher
+coverage. Pending reservations are not silently counted as settled: the report
+separates settled, pending before reconciliation, late-billed, and released
+milli-Sweycoins. `actual_usd` is N/A throughout; calculated USD is a price-list
+equivalent.
+
+Across all 26 offline runs: **936 calls** (909 reaching the provider), 37
+cancelled tasks, **434,000 milli settled**, 7,750 milli pending before
+reconciliation, 5,750 milli late-billed, 2,000 milli released, and
+**$0.01633** calculated USD (complete-call subset). No paid call was made.
+
 ## Reuse and intentional gaps
 
 | Concern | Reused | Gap |
