@@ -109,10 +109,12 @@ def test_runtime_budget_retry_reuses_pending_but_refuses_terminal() -> None:
     assert first is not None
     budget.mark_pending(first)
 
-    # A retry may reuse an open/pending reservation; it must not create a second.
+    # A retry may reuse an open/pending ledger hold, but gets a fresh object so
+    # an abandoned task cannot share state with the admitted attempt.
     retry = budget.reserve(_request())
-    assert retry is first
+    assert retry is not first
     assert retry.reservation_id == first.reservation_id
+    assert retry.state is ReservationState.RESERVED
     budget.settle(retry, BudgetOutcome(ok=True, value={"attempt": 2}))
 
     # Once terminal, the logical delivery is closed to a different retry.

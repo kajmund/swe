@@ -12,8 +12,9 @@ SWE:s Python-runtime ska kunna bära budget som en förstaklassresurs:
   `swe.budget.RuntimeBudget`.
 - `RuntimeBudget` komponerar en host-policy med den **befintliga** Rust-ledgern
   `swe-budget`, exponerad via PyO3 som `swe_budget.Ledger`.
-- Runtime reserverar atomärt före handler-/provideranropet, settle:ar eller
-  release:ar exakt en gång och håller reservationen pending vid cancel/timeout.
+- Runtime reserverar atomärt före handler-/provideranropet, settle:ar en gång
+  och håller reservationen pending vid cancel/timeout/abandonment; hosten kan
+  release:a en pending hold vid reconciliation.
 - Ingen duplicerad ledger, ingen ny SWD-nod, inget nytt journalfält och ingen
   generell retry införs.
 
@@ -61,7 +62,8 @@ Kort:
    anropet reserverar inget.
 2. Reservera är den atomära check-and-hold-operationen. Otillräckliga medel
    ger `BudgetExceeded`; handlern anropas inte.
-3. En reservation avslutas exakt en gång: settle eller release. Dubbel
+3. En reservation avslutas exakt en gång: settle från dispatch eller release
+   från host-reconciliation. Dispatch release:ar aldrig. Dubbel
    settle/release avvisas av `RuntimeBudget` och dedupliceras av ledgern.
 4. Settlement får aldrig överstiga reservationen. Overrun failar closed och
    lämnar reservationen `pending`, aldrig som en osynlig `reserved`-hold.
@@ -74,9 +76,13 @@ Kort:
    normalt.
 6. Replay anropar inte budget för redan persistrade invocations. Hosten
    persisterar och replayar ledgerhändelserna tillsammans med `RunStore`.
-7. Ingen generell retry införs. En host-retry måste återanvända samma
-   `run_id`/`invocation_id`, vilket gör ledgerns idempotens till skyddet mot
-   dubbeldebitering.
+   `resume` kallar `restore(run_id=...)` även när runen redan är terminal, så
+   öppna holds blir synliga och terminala holds kan vägra re-dispatch.
+7. Ingen generell retry införs. En host-retry återanvänder samma
+   `run_id`/`invocation_id`; en `PENDING`-hold får en färsk `RESERVED`-objekt
+   med samma ledger-id, medan en terminal delivery vägras före handlern.
+   Ledgerns `lookup` är auktoritativ även när den in-process terminala
+   retentionen har evictat posten.
 8. Budgeten är domänoberoende: heltal i milli-enheter, ingen valuta, inga
    modellnamn och ingen prissättning i SWE.
 

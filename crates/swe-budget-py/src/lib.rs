@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::sync::Mutex;
 
-use budget_core::{Event, EventKind, Ledger, LedgerError};
+use budget_core::{Event, EventKind, Ledger, LedgerError, ReservationStatus};
 
 #[pymodule]
 fn swe_budget(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -54,6 +54,25 @@ impl PyLedger {
         self.lock()?
             .release(reservation_id, key)
             .map_err(ledger_to_py)
+    }
+
+    fn lookup(&self, py: Python<'_>, key: &str) -> PyResult<Py<PyAny>> {
+        match self.lock()?.lookup(key) {
+            Some(view) => {
+                let dict = PyDict::new(py);
+                dict.set_item("reservation_id", view.reservation_id)?;
+                dict.set_item("amount_milli", view.amount_milli)?;
+                dict.set_item("spent_milli", view.spent_milli)?;
+                let status = match view.status {
+                    ReservationStatus::Open => "open",
+                    ReservationStatus::Settled => "settled",
+                    ReservationStatus::Released => "released",
+                };
+                dict.set_item("status", status)?;
+                Ok(dict.into_any().unbind())
+            }
+            None => Ok(py.None()),
+        }
     }
 
     fn balance(&self, py: Python<'_>, account: &str) -> PyResult<Py<PyAny>> {

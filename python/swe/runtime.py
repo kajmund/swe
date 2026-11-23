@@ -270,6 +270,8 @@ class WorkflowRunner:
                 kind="resume",
             )
         if stored.status != "running":
+            if self.resources.budget is not None:
+                self.resources.budget.restore(run_id=run_id)
             return RunResult(
                 run_id=run_id,
                 status=stored.status,
@@ -309,8 +311,6 @@ class WorkflowRunner:
             persisted_events=len(events),
             last_seq=stored.last_seq,
         ))
-        if driver.budget is not None:
-            driver.budget.restore(run_id=run_id)
         try:
             return await self._execute(driver, outcome)
         finally:

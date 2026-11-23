@@ -18,6 +18,7 @@ from swe.budget import (
     BudgetRequest,
     BudgetStateError,
     NativeBudgetLedger,
+    ReservationState,
     RuntimeBudget,
 )
 from swe.cache import InMemoryDecisionCache, scoped_cache_params
@@ -748,4 +749,139 @@ def test_terminal_retention_is_bounded_and_drops_input() -> None:
     assert budget.reservation_for("inv-2") is reservations[2]
     assert reservations[0].request.input == {}
     assert ledger.balance(account="a")["spent"] == 3
+
+
+def test_evicted_terminal_delivery_is_still_refused_by_ledger_lookup() -> None:
+    ledger = NativeBudgetLedger()
+    ledger.allocate(run_id="r", account="a", amount_milli=10, key="alloc")
+    budget = RuntimeBudget(
+        ledger, _FixedPolicy(), account="a", terminal_capacity=1
+    )
+
+    def request(invocation_id: str) -> BudgetRequest:
+        return BudgetRequest(
+            run_id="r",
+            invocation_id=invocation_id,
+            node_id="work",
+            kind="handler",
+            name="m.work",
+            input={},
+        )
+
+    first = budget.reserve(request("inv-0"))
+    second = budget.reserve(request("inv-1"))
+    assert first is not None and second is not None
+    budget.settle(first, BudgetOutcome(ok=True))
+    budget.settle(second, BudgetOutcome(ok=True))
+    assert budget.reservation_for("inv-0") is None  # evicted from the window
+
+    with pytest.raises(BudgetStateError, match="already settled"):
+        budget.reserve(request("inv-0"))
+    assert ledger.balance(account="a")["spent"] == 2
+
+
+def test_pending_reuse_admits_a_fresh_reserved_object() -> None:
+    budget, ledger = _budget(cap_milli=10)
+    request = _request("inv-reuse")
+    first = budget.reserve(request)
+    assert first is not None
+    budget.mark_pending(first)
+
+    retry = budget.reserve(request)
+    assert retry is not None
+    assert retry is not first
+    assert retry.reservation_id == first.reservation_id
+    assert retry.state is ReservationState.RESERVED
+    assert budget.pending() == ()
+
+    with pytest.raises(BudgetStateError, match="active reservation"):
+        budget.reserve(request)
+
+    budget.settle(retry, BudgetOutcome(ok=True, value={"ok": True}))
+    assert ledger.balance(account="a")["spent"] == 1
+
+
+def test_restored_hold_is_rebound_to_the_actual_dispatch_request() -> None:
+    ledger = NativeBudgetLedger()
+    ledger.allocate(run_id="run-r", account="a", amount_milli=5, key="alloc")
+    ledger.reserve(
+        run_id="run-r",
+        account="a",
+        amount_milli=1,
+        key="run-r:inv-r:reserve",
+    )
+    replayed = NativeBudgetLedger.replay(ledger.events())
+
+    class EchoPolicy:
+        def reserve(self, request: BudgetRequest) -> int:
+            raise AssertionError("a restored hold must not be priced again")
+
+        def settle(
+            self, request: BudgetRequest, outcome: BudgetOutcome
+        ) -> int:
+            assert request.name == "m.work"
+            assert request.input == {"x": 1}
+            return 1
+
+    budget = RuntimeBudget(replayed, EchoPolicy(), account="a")
+    assert budget.restore(run_id="run-r") == 1
+    actual = BudgetRequest(
+        run_id="run-r",
+        invocation_id="inv-r",
+        node_id="work",
+        kind="handler",
+        name="m.work",
+        input={"x": 1},
+    )
+    reservation = budget.reserve(actual)
+    assert reservation is not None
+    assert reservation.request is actual
+    assert reservation.state is ReservationState.RESERVED
+    budget.settle(reservation, BudgetOutcome(ok=True, value={"ok": True}))
+    assert replayed.balance(account="a")["spent"] == 1
+    assert budget.pending() == ()
+
+
+@pytest.mark.asyncio
+async def test_resume_of_terminal_run_restores_an_open_budget_hold() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def hang(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await release.wait()
+        return {"ok": False}
+
+    store = MemoryRunStore()
+    budget, ledger = _budget(cap_milli=1)
+    first = await WorkflowRunner(
+        _one_node_flow(),
+        {"m.work": hang},
+        resources=WorkflowResources(
+            budget=budget, action_timeouts={"work": 1}
+        ),
+        run_store=store,
+    ).run({}, run_id="terminal-restore")
+    assert first.status == "failed"
+    assert ledger.balance(account="a")["reserved"] == 1
+
+    replayed = NativeBudgetLedger.replay(ledger.events())
+    resumed_budget = RuntimeBudget(replayed, _FixedPolicy(), account="a")
+    resumed = await WorkflowRunner(
+        _one_node_flow(),
+        {"m.work": hang},
+        resources=WorkflowResources(budget=resumed_budget),
+        run_store=store,
+    ).resume("terminal-restore")
+
+    assert resumed.status == "failed"
+    assert len(resumed_budget.pending()) == 1
+    assert replayed.balance(account="a")["reserved"] == 1
+
+    release.set()
+    await asyncio.sleep(0)
+    await _cancel_swe_tasks()
 

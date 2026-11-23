@@ -19,10 +19,13 @@ billed a cancelled call.
 
 Retries are not introduced here. If a host retries an invocation, it must reuse
 the same ``run_id`` and ``invocation_id`` so the ledger's idempotency keys
-prevent a second reservation or charge. A retry may reuse a ``PENDING`` hold;
-a terminal ``SETTLED``/``RELEASED`` delivery is refused before the handler. If
-the ledger already holds a settlement under the stable settle key, that
-settlement is authoritative and a different amount fails closed.
+prevent a second reservation or charge. A retry may reuse a ``PENDING`` hold,
+but receives a fresh ``RESERVED`` object bound to the actual request; a second
+overlapping retry is refused. A terminal ``SETTLED``/``RELEASED`` delivery is
+refused before the handler, including when the terminal window has evicted it:
+``reserve`` consults the ledger's authoritative ``lookup``. If the ledger
+already holds a settlement under the stable settle key, that settlement is
+authoritative and a different amount fails closed.
 """
 
 from __future__ import annotations
@@ -117,6 +120,8 @@ class BudgetLedger(Protocol):
 
     def release(self, *, reservation_id: int, key: str) -> None: ...
 
+    def lookup(self, *, key: str) -> Mapping[str, Any] | None: ...
+
     def balance(self, *, account: str) -> Mapping[str, int]: ...
 
     def events(self) -> Sequence[Mapping[str, Any]]: ...
@@ -170,7 +175,7 @@ class RuntimeBudget:
                 "terminal_capacity must be a positive integer",
                 path="terminal_capacity",
             )
-        for name in ("reserve", "settle", "release", "balance", "events"):
+        for name in ("reserve", "settle", "release", "lookup", "balance", "events"):
             if not callable(getattr(ledger, name, None)):
                 raise BudgetError(
                     f"budget ledger is missing {name}()", path="ledger"
@@ -222,14 +227,19 @@ class RuntimeBudget:
                     path=f"nodes.{request.node_id}",
                 )
             if existing.state is ReservationState.PENDING:
-                # A prior attempt was cancelled, abandoned, or failed to settle.
-                # Reuse its ceiling; a retry must not create a second reservation.
-                return existing
+                return self._admit_existing(existing, request)
             raise BudgetStateError(
                 f"invocation {request.invocation_id!r} already has an active "
                 "reservation; concurrent duplicate dispatch is not allowed",
                 path=f"nodes.{request.node_id}",
             )
+
+        # The in-process terminal window is bounded. The ledger is the
+        # authority when the cache has no entry, so an evicted terminal
+        # delivery cannot be re-dispatched just because it fell out of memory.
+        ledger_state = self.ledger.lookup(key=_key(request, "reserve"))
+        if ledger_state is not None:
+            return self._admit_from_ledger(request, ledger_state)
 
         try:
             amount = self.policy.reserve(request)
@@ -266,6 +276,71 @@ class RuntimeBudget:
             base_key=base,
             reservation_id=int(reservation_id),
             reserved_milli=amount,
+        )
+        self._by_invocation[request.invocation_id] = reservation
+        return reservation
+
+    def _admit_existing(
+        self,
+        existing: BudgetReservation,
+        request: BudgetRequest,
+    ) -> BudgetReservation:
+        """Admit a retry with a fresh object; never share with an orphan task."""
+
+        ledger_state = self.ledger.lookup(key=_key(existing.request, "reserve"))
+        if ledger_state is not None:
+            return self._admit_from_ledger(request, ledger_state)
+        fresh = BudgetReservation(
+            request=request,
+            base_key=existing.base_key,
+            reservation_id=existing.reservation_id,
+            reserved_milli=existing.reserved_milli,
+            state=ReservationState.RESERVED,
+        )
+        self._by_invocation[request.invocation_id] = fresh
+        return fresh
+
+    def _admit_from_ledger(
+        self,
+        request: BudgetRequest,
+        ledger_state: Mapping[str, Any],
+    ) -> BudgetReservation:
+        status = str(ledger_state.get("status", ""))
+        if status not in {"open", "settled", "released"}:
+            raise BudgetStateError(
+                f"ledger returned unknown reservation status {status!r}",
+                path=f"nodes.{request.node_id}",
+            )
+        reservation_id = int(ledger_state["reservation_id"])
+        amount = int(ledger_state["amount_milli"])
+        spent = int(ledger_state.get("spent_milli", 0))
+        base = f"{request.run_id}:{request.invocation_id}"
+        if status in {"settled", "released"}:
+            state = (
+                ReservationState.SETTLED
+                if status == "settled"
+                else ReservationState.RELEASED
+            )
+            terminal = BudgetReservation(
+                request=request,
+                base_key=base,
+                reservation_id=reservation_id,
+                reserved_milli=amount,
+                state=state,
+                spent_milli=spent,
+            )
+            self._remember_terminal(terminal)
+            raise BudgetStateError(
+                f"logical delivery {request.invocation_id!r} is already "
+                f"{status}; refusing to reserve it again",
+                path=f"nodes.{request.node_id}",
+            )
+        reservation = BudgetReservation(
+            request=request,
+            base_key=base,
+            reservation_id=reservation_id,
+            reserved_milli=amount,
+            state=ReservationState.RESERVED,
         )
         self._by_invocation[request.invocation_id] = reservation
         return reservation
@@ -646,6 +721,13 @@ class NativeBudgetLedger:
             self._ledger.release(reservation_id, key)
         except ValueError as exc:
             raise BudgetStateError(str(exc)) from exc
+
+    def lookup(self, *, key: str) -> Mapping[str, Any] | None:
+        try:
+            result = self._ledger.lookup(key)
+        except ValueError as exc:
+            raise BudgetStateError(str(exc)) from exc
+        return None if result is None else dict(result)
 
     def balance(self, *, account: str) -> Mapping[str, int]:
         return dict(self._ledger.balance(account))

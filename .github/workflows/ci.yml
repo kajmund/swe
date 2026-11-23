@@ -130,6 +130,8 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
+      - name: Clippy the PyO3 ledger shell
+        run: cargo clippy -p swe-budget-py --features extension-module --all-targets -- -D warnings
       - name: Build native wheels and run the standalone suite
         shell: bash
         run: |

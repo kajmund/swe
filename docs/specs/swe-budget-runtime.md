@@ -7,9 +7,10 @@ journal v1 contracts are unchanged.
 
 `WorkflowResources.budget` attaches a `swe.budget.RuntimeBudget` to a run.
 When present, every handler and provider invocation is priced by a host
-policy, reserved atomically before the call, and settled or released exactly
-once. The ledger is the existing Rust `swe-budget` crate, exposed to Python
-as `swe_budget.Ledger`; SWE does not implement a second ledger.
+policy, reserved atomically before the call, and settled once by dispatch;
+host reconciliation may release a pending hold. The ledger is the existing
+Rust `swe-budget` crate, exposed to Python as `swe_budget.Ledger`; SWE does not
+implement a second ledger.
 
 When the resource is absent, runtime behaviour is exactly the previous
 behaviour: no reservation, no settlement, no new event.
@@ -52,19 +53,24 @@ BudgetLedger:
     reserve(run_id, account, amount_milli, key) -> reservation_id
     settle(reservation_id, spent_milli, key) -> None
     release(reservation_id, key) -> None
+    lookup(key) -> {reservation_id, amount_milli, spent_milli, status} | None
     balance(account) -> {allocated, incoming, outgoing, spent, reserved, available}
     events() -> [...]
+
+RuntimeBudget:
     pending() -> tuple[BudgetReservation, ...]
     unresolved() -> tuple[BudgetReservation, ...]
     reservation_for(invocation_id) -> BudgetReservation | None
     reconcile_invocation(invocation_id, spent_milli=..., release=...)
+    mark_pending_invocation(invocation_id)
+    restore(run_id=...)
 ```
 
 `RuntimeBudget` composes one ledger, one policy, and one account. The host
-constructs it; the runtime only calls `reserve`, `settle`, `release`, and
-`mark_pending`. On a late return after cancel or timeout, `BudgetOutcome`
-carries `cancelled`/`timed_out` from the invocation handle; `ok` still reflects
-whether the call itself returned.
+constructs it; the runtime calls `reserve`, `settle`, `mark_pending`,
+`mark_pending_invocation`, `restore`, and `reservation_for`. On a late return
+after cancel or timeout, `BudgetOutcome` carries `cancelled`/`timed_out` from
+the invocation handle; `ok` still reflects whether the call itself returned.
 
 `pending()` is the recovery queue: cancel/timeout holds **and failed
 settlements**. `unresolved()` additionally includes still-reserved in-flight
@@ -96,13 +102,16 @@ object returned by `reserve`.
    called and no ledger event is written.
 6. **Idempotency and retries.** The ledger keys are stable:
    `{run_id}:{invocation_id}:reserve`, `:settle`, and `:release`. A retry may
-   reuse a `PENDING` hold for the same logical delivery; a terminal
-   `SETTLED`/`RELEASED` delivery is refused before the handler runs. If a
-   settlement already exists under the stable settle key, the ledger is
-   authoritative: a different amount fails closed instead of silently
-   repricing or double-charging. SWE does not introduce a general retry loop;
-   a host that needs a new cost for a settled delivery must issue a new
-   run/invocation (a new logical delivery).
+   reuse a `PENDING` hold, but receives a fresh `RESERVED` object bound to the
+   actual dispatch request; a second overlapping retry is refused. A terminal
+   `SETTLED`/`RELEASED` delivery is refused before the handler runs, including
+   when the bounded in-process terminal window has evicted it: `reserve()`
+   consults the ledger's authoritative `lookup(reserve_key)`. If a settlement
+   already exists under the stable settle key, the ledger is authoritative: a
+   different amount fails closed instead of silently repricing or
+   double-charging. SWE does not introduce a general retry loop; a host that
+   needs a new cost for a settled delivery must issue a new run/invocation (a
+   new logical delivery).
 7. **Cancellation, timeout, abandonment, and failed settlement.** `mark_pending`
    keeps the reservation on the ledger. Funds are not released early, because
    SWE cannot know whether the provider billed the cancelled call. A later
@@ -113,11 +122,11 @@ object returned by `reserve`.
    invalid amount, overrun, or ledger error) also marks the hold pending; it is
    never left as an invisible `RESERVED` hold.
 8. **Replay.** The host persists and replays the ledger event log alongside the
-   `RunStore`. `WorkflowRunner.resume` calls `budget.restore(run_id=...)`:
-   open reservations become `PENDING` and are reconcilable; terminal
-   reservations enter the bounded terminal window, so a re-dispatch of a
-   settled-but-unpersisted delivery fails closed before the handler. Replayed
-   invocations do not reserve or settle again.
+   `RunStore`. `WorkflowRunner.resume` calls `budget.restore(run_id=...)` even
+   when the run is already terminal. Open reservations become `PENDING` and are
+   reconcilable; terminal reservations enter the bounded terminal window, so a
+   re-dispatch of a settled-but-unpersisted delivery fails closed before the
+   handler. Replayed invocations do not reserve or settle again.
 
 ## Lifecycle
 
