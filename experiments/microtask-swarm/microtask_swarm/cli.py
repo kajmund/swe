@@ -16,6 +16,11 @@ from microtask_swarm.async_benchmark import (
     run_async_benchmark,
     write_async_report,
 )
+from microtask_swarm.adaptive_benchmark import (
+    render_adaptive_markdown,
+    run_adaptive_benchmark,
+    write_adaptive_report,
+)
 from microtask_swarm.live import (
     LiveDispatchRefused,
     OllamaCloudClient,
@@ -76,6 +81,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--scale", type=float, default=None, help="scale deterministic trace latencies"
     )
 
+    adaptive = sub.add_parser(
+        "adaptive", help="run the offline provider-aware adaptive analysis"
+    )
+    adaptive.add_argument(
+        "--async-config",
+        type=Path,
+        default=_ROOT / "config" / "async-benchmark.json",
+    )
+    adaptive.add_argument(
+        "--adaptive-config",
+        type=Path,
+        default=_ROOT / "config" / "adaptive-benchmark.json",
+    )
+    adaptive.add_argument(
+        "--report", type=Path, default=_ROOT / "reports" / "adaptive-benchmark.json"
+    )
+    adaptive.add_argument(
+        "--markdown", type=Path, default=_ROOT / "reports" / "adaptive-benchmark.md"
+    )
+    adaptive.add_argument(
+        "--scale", type=float, default=None, help="scale deterministic trace latencies"
+    )
+
     verify = sub.add_parser("verify-fixtures", help="validate the frozen gold fixtures")
     verify.add_argument("--pretty", action="store_true")
 
@@ -133,6 +161,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.markdown.parent.mkdir(parents=True, exist_ok=True)
             args.markdown.write_text(markdown, encoding="utf-8")
             _print_async_summary(report, args.report, args.markdown)
+            return 0
+        if args.command == "adaptive":
+            report = asyncio.run(
+                run_adaptive_benchmark(
+                    args.config,
+                    args.async_config,
+                    args.adaptive_config,
+                    scale=args.scale,
+                )
+            )
+            write_adaptive_report(report, args.report)
+            markdown = render_adaptive_markdown(report)
+            args.markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.markdown.write_text(markdown, encoding="utf-8")
+            _print_adaptive_summary(report, args.report, args.markdown)
             return 0
         if args.command == "verify-fixtures":
             config = load_config(args.config)
@@ -246,6 +289,26 @@ def _print_async_summary(report: dict, json_path: Path, md_path: Path) -> None:
             f"false_support={row['false_support_rate']} "
             f"settled_milli={row['settled_milli']} "
             f"pending_before={row['pending_before_milli']}"
+        )
+
+
+def _print_adaptive_summary(report: dict, json_path: Path, md_path: Path) -> None:
+    print(f"report: {json_path}")
+    print(f"markdown: {md_path}")
+    print(f"evidence: {report['evidence_kind']}  runs: {report['summary']['run_count']}")
+    for key, row in sorted(report["summary"]["best_by_strategy_and_limit"].items()):
+        print(
+            f"  {key}: wall={row['wall_ms']}ms "
+            f"first_verified={row['first_verified_ms']}ms "
+            f"p95={row['p95_ms']}ms "
+            f"adaptive_final={row['adaptive_limit_final']} "
+            f"worker_util={row['worker_utilization']} "
+            f"provider_util={row['provider_utilization']} "
+            f"accuracy={row['accuracy']} "
+            f"coverage={row['coverage']} "
+            f"false_support={row['false_support_rate']} "
+            f"calls={row['calls']} "
+            f"settled_milli={row['settled_milli']}"
         )
 
 

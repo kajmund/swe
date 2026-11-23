@@ -295,6 +295,90 @@ cancelled tasks, **434,000 milli settled**, 7,750 milli pending before
 reconciliation, 5,750 milli late-billed, 2,000 milli released, and
 **$0.01633** calculated USD (complete-call subset). No paid call was made.
 
+## Provider-aware adaptive/critical-path analysis (offline)
+
+This analysis lives in a new module and does **not** modify the frozen C/D
+baseline:
+
+- `microtask_swarm/adaptive_benchmark.py`
+- `config/adaptive-benchmark.json`
+- `tests/test_adaptive_benchmark.py`
+- `reports/adaptive-benchmark.json` / `.md`
+
+The frozen baseline files are hashed into the new report and a test fails if
+they drift.
+
+### SWE dispatch boundary
+
+SWE `swe.microtasks` lowers each topological layer to one ordinary `map` node;
+the next layer starts only after the whole previous layer completes
+(`docs/specs/swe-microtasks.md`, `python/swe/microtasks.py`). SWE dispatch has
+no per-task event-ready start. The D and P schedulers below are host-level
+experiment code, not a change to SWE dispatch or to t1bm's PR 13.
+
+### Strategies
+
+- **C** — frozen layered barrier baseline.
+- **D** — frozen event-ready queue baseline.
+- **P** — provider-aware P: event-ready queue, critical-path priority, and
+  adaptive worker concurrency capped at the provider rate limit. At provider
+  limit 8 it starts at 4 and increases 4→8 on low queue wait; at limits 1/3 it
+  starts at the cap.
+
+### Main results (same trace, 50 microtasks)
+
+| Provider limit | C wall | D wall | P wall | P provider util | P adaptive final | P first verified | Quality (all) |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | 15.52 s | 15.52 s | 15.53 s | 0.998 | 1 | 830 ms | 0.90 / 0.80 / 0.20 |
+| 3 | 5.49 s | 5.77 s | **5.18 s** | 0.997 | 3 | 129 ms | 0.90 / 0.80 / 0.20 |
+| 8 | 3.69 s | 3.65 s | **3.53 s** | 0.548 | 8 | 128 ms | 0.90 / 0.80 / 0.20 |
+
+Quality is accuracy / extraction coverage / false-support rate; it is identical
+across C/D/P because they use the same fixtures, verifier, model, and budget.
+P wins makespan at provider limits 3 and 8. At limit 1 it ties, but
+critical-path priority delays the first verified result (830 ms vs 109 ms).
+The P advantage is therefore a makespan/throughput trade, not a free
+first-result win.
+
+### Stragglers and quality-gated stop
+
+| Scenario | Wall | Calls | Cancelled | Unscheduled | Accuracy | Coverage | Pending milli | Late milli | Released milli |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| heavy straggler C | 11.57 s | 50 | 0 | 0 | 0.90 | 0.80 | 0 | 0 | 0 |
+| heavy straggler D | 11.62 s | 50 | 0 | 0 | 0.90 | 0.80 | 0 | 0 | 0 |
+| heavy straggler P | **10.82 s** | 50 | 0 | 0 | 0.90 | 0.80 | 0 | 0 | 0 |
+| quality-gated C | 5.49 s | 50 | 0 | 0 | 0.90 | 0.80 | 0 | 0 | 0 |
+| quality-gated D | 4.37 s | 49 | 5 | 1 | 0.78 | 0.80 | 750 | 750 | 0 |
+| quality-gated P | 5.07 s | 47 | 2 | 3 | 0.80 | 0.80 | 500 | 250 | 250 |
+
+The quality gate is real, not a verified-count proxy: stop requires at least
+5 completed items plus measured accuracy ≥ 0.80, extraction coverage ≥ 0.80,
+and false-support rate ≤ 0.20 on the completed subset. The gate values at stop
+were C 0.90/0.80/0.20 with all 10 items (the layer barrier leaves no room to
+stop earlier), D 0.88/0.80/0.20 after 5 items, and P 0.92/0.80/0.20 after 5
+items. P's completed-item quality at stop is highest, but its wall time is
+higher than D's because P caps workers at the provider limit while D queues
+more tasks behind the provider semaphore.
+
+Count-gated stop remains available as a control: P stopped 25 verified with 27
+calls and only 2 cancellations, but wall 3.86 s versus D 2.61 s. Fewer wasted
+calls does not automatically mean lower latency.
+
+Totals over all 63 runs: **3,095 calls**, **1,240,750 milli settled**, 3,500
+milli pending before reconciliation, 3,000 milli late-billed, 500 milli
+released, **$0.02464** calculated USD. `actual_usd` is N/A. The runtime budget
+remains the local pilot meter; PR #11 is still unmerged, so no shared
+`RuntimeBudget` is attached. No paid call was made.
+
+Run:
+
+```sh
+PYTHONPATH=. python3 -m microtask_swarm adaptive \
+  --report reports/adaptive-benchmark.json \
+  --markdown reports/adaptive-benchmark.md
+PYTHONPATH=. python3 -m unittest tests.test_adaptive_benchmark -v
+```
+
 ## Reuse and intentional gaps
 
 | Concern | Reused | Gap |
