@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Add an opt-in first-class runtime budget. `WorkflowResources.budget` accepts
+  `swe.budget.RuntimeBudget`, which composes a host policy with the existing
+  Rust `swe-budget` ledger exposed as `swe_native.Ledger`. Dispatch reserves
+  atomically before the handler/provider call, settles or releases exactly
+  once, and keeps cancel/timeout reservations pending so already-billed funds
+  are not reused early. Unknown cost fails closed; no general retry is added.
+  SWD 1.0, journal v1, `RunResult`, and the Rust machine are unchanged.
 - Give cancelled siblings a cancel grace before they count as abandoned, and
   signal `InvocationHandle` from `reap_owned` when `run` / `resume` itself is
   cancelled so hosts still see `handle.cancel`.

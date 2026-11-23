@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from swe.budget import RuntimeBudget
 from swe.cache import DecisionCache
 
 
@@ -128,6 +129,13 @@ class WorkflowResources:
     force-stopped. A host ``cancel_event`` during that grace still uses the
     bounded detach path so ``reap_owned`` cannot hang. Hosts abort sockets
     from ``InvocationHandle.cancel``.
+
+    ``budget`` is an optional :class:`swe.budget.RuntimeBudget`. When present,
+    every handler and provider call is priced by its policy, reserved atomically
+    before dispatch, and settled or released exactly once. The ledger remains
+    the existing Rust ``swe-budget`` crate; this resource adds no second ledger.
+    Cancellation and action timeout keep the reservation pending rather than
+    releasing funds that may already have been billed.
     """
 
     providers: Mapping[str, Callable[..., Awaitable[Any]]] = field(
@@ -138,3 +146,4 @@ class WorkflowResources:
     cache: DecisionCache | None = None
     cancel_event: asyncio.Event | None = None
     action_timeouts: Mapping[str, int] = field(default_factory=dict)
+    budget: RuntimeBudget | None = None

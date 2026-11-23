@@ -40,8 +40,12 @@ renders the selected prompt, calls the registered provider, validates its
 response, and completes the invocation. Accepted payloads contain a `choice`
 and may contain additional metadata.
 
-Provider invocations use the same deadline, cancellation, event, and journal
-semantics as tasks.
+Provider invocations use the same deadline, cancellation, event, journal, and
+optional runtime-budget semantics as tasks. With `WorkflowResources.budget`,
+the provider call is reserved before the call and settled or released exactly
+once; a cache hit still reserves conservatively and the policy may settle `0`
+using `BudgetOutcome.cache_state == "hit"`. See
+[`swe-budget-runtime.md`](swe-budget-runtime.md).
 
 ## Exact cache
 

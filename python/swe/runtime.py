@@ -30,8 +30,10 @@ attempt. Orphaned exact-cache provider computes count toward the same cap.
 Blocking I/O (`time.sleep`, blocking sockets, threads that ignore cancel)
 is not force-stopped and may continue after SWE has settled the timeout;
 the host must abort sockets from `InvocationHandle.cancel`. Retry stays
-unsupported. `swe-budget` is not on this path: timeout/cancel must not
-double-complete or double-fail the machine.
+unsupported. When `WorkflowResources.budget` is set, dispatch reserves
+before the handler/provider call and settles or releases exactly once;
+cancel and timeout keep the reservation pending so funds that may already
+be billed are not reused early.
 
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
@@ -50,6 +52,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from swe.budget import RuntimeBudget
 from swe.cache import CacheComputeOwner, OwnedOrphanDecisionCache
 from swe.definition import CompiledDefinition
 from swe.invocation_error import live_invocation_error, normalize_invocation_error
@@ -115,6 +118,7 @@ class _Driver:
     last_seq: int
     action_timeouts: Mapping[str, int]
     abandoned: AbandonedWorkRegistry
+    budget: RuntimeBudget | None = None
     invocation_nodes: dict[str, str] = field(default_factory=dict)
     handles: dict[str, InvocationHandle] = field(default_factory=dict)
     cancel_task: asyncio.Task[bool] | None = None
@@ -180,6 +184,7 @@ class WorkflowRunner:
         self.handlers = handlers
         self.resources = resources or WorkflowResources()
         self.action_timeouts = _validate_action_timeouts(self.resources.action_timeouts)
+        _validate_budget(self.resources.budget)
         self.run_store = run_store
         self.clock = clock
         self.concurrency = concurrency
@@ -347,6 +352,7 @@ def _build_driver(runner: WorkflowRunner, start: _RunStart) -> _Driver:
         last_seq=start.last_seq,
         action_timeouts=runner.action_timeouts,
         abandoned=runner.abandoned,
+        budget=runner.resources.budget,
     )
 
 
@@ -488,6 +494,8 @@ async def _apply_effect(
             provider_dispatch=driver.provider_dispatch,
             now_ms=driver.clock.now_ms,
             handles=driver.handles,
+            budget=driver.budget,
+            run_id=driver.run_id,
         )
         _arm_action_deadline(driver, effect)
         return []
@@ -687,6 +695,17 @@ def _validate_action_timeouts(action_timeouts: Mapping[str, int]) -> dict[str, i
             )
         validated[node_id] = timeout
     return validated
+
+
+def _validate_budget(budget: object | None) -> None:
+    if budget is None:
+        return
+    for name in ("reserve", "settle", "release", "mark_pending"):
+        if not callable(getattr(budget, name, None)):
+            raise SwePreflightError(
+                f"budget is missing {name}()",
+                path="budget",
+            )
 
 
 async def _timeout_run(driver: _Driver) -> None:

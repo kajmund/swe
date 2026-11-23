@@ -21,6 +21,7 @@ use crate::needs::NeedRef;
 #[pymodule]
 fn swe_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMachine>()?;
+    m.add_class::<PyLedger>()?;
     m.add_function(wrap_pyfunction!(py_sha256_hex, m)?)?;
     m.add_function(wrap_pyfunction!(py_canonical_json_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(py_evaluate_expression, m)?)?;
@@ -198,6 +199,154 @@ impl PyMachine {
         let outcome = py.allow_threads(|| op(&mut machine));
         *self.lock()? = Some(machine);
         Ok(outcome)
+    }
+}
+
+#[pyclass(name = "Ledger")]
+struct PyLedger {
+    inner: Mutex<swe_budget::Ledger>,
+}
+
+#[pymethods]
+impl PyLedger {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: Mutex::new(swe_budget::Ledger::new()),
+        }
+    }
+
+    fn allocate(&self, run_id: &str, account: &str, amount_milli: u64, key: &str) -> PyResult<()> {
+        self.lock()?
+            .allocate(run_id, account, amount_milli, key)
+            .map_err(ledger_to_py)
+    }
+
+    fn reserve(&self, run_id: &str, account: &str, amount_milli: u64, key: &str) -> PyResult<u64> {
+        self.lock()?
+            .reserve(run_id, account, amount_milli, key)
+            .map_err(ledger_to_py)
+    }
+
+    fn settle(&self, reservation_id: u64, spent_milli: u64, key: &str) -> PyResult<()> {
+        self.lock()?
+            .settle(reservation_id, spent_milli, key)
+            .map_err(ledger_to_py)
+    }
+
+    fn release(&self, reservation_id: u64, key: &str) -> PyResult<()> {
+        self.lock()?
+            .release(reservation_id, key)
+            .map_err(ledger_to_py)
+    }
+
+    fn balance(&self, py: Python<'_>, account: &str) -> PyResult<Py<PyAny>> {
+        let balance = self.lock()?.balance(account);
+        let dict = PyDict::new(py);
+        dict.set_item("allocated", balance.allocated)?;
+        dict.set_item("incoming", balance.incoming)?;
+        dict.set_item("outgoing", balance.outgoing)?;
+        dict.set_item("spent", balance.spent)?;
+        dict.set_item("reserved", balance.reserved)?;
+        dict.set_item("available", balance.available())?;
+        Ok(dict.into_any().unbind())
+    }
+
+    fn events(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let list = PyList::empty(py);
+        for event in self.lock()?.events() {
+            list.append(ledger_event_to_py(py, event)?)?;
+        }
+        Ok(list.into_any().unbind())
+    }
+
+    #[staticmethod]
+    fn replay(events: Bound<'_, PyAny>) -> PyResult<Self> {
+        let mut parsed = Vec::new();
+        for item in events.try_iter()? {
+            parsed.push(ledger_event_from_py(&item?)?);
+        }
+        let ledger = swe_budget::Ledger::replay(&parsed).map_err(ledger_to_py)?;
+        Ok(Self {
+            inner: Mutex::new(ledger),
+        })
+    }
+}
+
+impl PyLedger {
+    fn lock(&self) -> PyResult<std::sync::MutexGuard<'_, swe_budget::Ledger>> {
+        self.inner
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("ledger lock poisoned"))
+    }
+}
+
+fn ledger_to_py(error: swe_budget::LedgerError) -> PyErr {
+    PyValueError::new_err(error.to_string())
+}
+
+fn ledger_event_to_py(py: Python<'_>, event: &swe_budget::Event) -> PyResult<Py<PyAny>> {
+    let dict = PyDict::new(py);
+    dict.set_item("kind", ledger_event_kind_name(event.kind))?;
+    dict.set_item("run_id", &event.run_id)?;
+    dict.set_item("account", &event.account)?;
+    match &event.counterpart {
+        Some(value) => dict.set_item("counterpart", value)?,
+        None => dict.set_item("counterpart", py.None())?,
+    }
+    dict.set_item("amount_milli", event.amount_milli)?;
+    match event.reservation_id {
+        Some(value) => dict.set_item("reservation_id", value)?,
+        None => dict.set_item("reservation_id", py.None())?,
+    }
+    dict.set_item("key", &event.key)?;
+    Ok(dict.into_any().unbind())
+}
+
+fn ledger_event_from_py(value: &Bound<'_, PyAny>) -> PyResult<swe_budget::Event> {
+    let kind_name: String = value.get_item("kind")?.extract()?;
+    let kind = match kind_name.as_str() {
+        "allocate" => swe_budget::EventKind::Allocate,
+        "reserve" => swe_budget::EventKind::Reserve,
+        "spend" => swe_budget::EventKind::Spend,
+        "release" => swe_budget::EventKind::Release,
+        "transfer" => swe_budget::EventKind::Transfer,
+        "reward" => swe_budget::EventKind::Reward,
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown ledger event kind {other:?}"
+            )))
+        }
+    };
+    Ok(swe_budget::Event {
+        kind,
+        run_id: value.get_item("run_id")?.extract()?,
+        account: value.get_item("account")?.extract()?,
+        counterpart: optional_extract(value, "counterpart")?,
+        amount_milli: value.get_item("amount_milli")?.extract()?,
+        reservation_id: optional_extract(value, "reservation_id")?,
+        key: value.get_item("key")?.extract()?,
+    })
+}
+
+fn optional_extract<T>(value: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<T>>
+where
+    T: for<'py> FromPyObject<'py>,
+{
+    match value.get_item(key) {
+        Ok(item) => item.extract(),
+        Err(_) => Ok(None),
+    }
+}
+
+fn ledger_event_kind_name(kind: swe_budget::EventKind) -> &'static str {
+    match kind {
+        swe_budget::EventKind::Allocate => "allocate",
+        swe_budget::EventKind::Reserve => "reserve",
+        swe_budget::EventKind::Spend => "spend",
+        swe_budget::EventKind::Release => "release",
+        swe_budget::EventKind::Transfer => "transfer",
+        swe_budget::EventKind::Reward => "reward",
     }
 }
 

@@ -73,6 +73,44 @@ Run the 10,000-operation synthetic gate with:
 uv run swe-microtasks-benchmark --tasks 10000 --concurrency 64
 ```
 
+## Runtime budget
+
+`swe.budget.RuntimeBudget` makes spend a first-class run resource. It composes
+a host policy with the existing Rust `swe-budget` ledger, exposed as
+`swe_native.Ledger`; there is no second ledger. When
+`WorkflowResources(budget=...)` is present, dispatch reserves atomically before
+each handler/provider call, settles or releases exactly once, and keeps a
+cancelled or timed-out reservation pending so already-billed funds are not
+reused early.
+
+```python
+from swe.budget import NativeBudgetLedger, RuntimeBudget
+from swe.run_store import WorkflowResources
+
+ledger = NativeBudgetLedger()
+ledger.allocate(
+    run_id="run-1", account="demo", amount_milli=1_000, key="demo:alloc"
+)
+
+class Tariff:
+    def reserve(self, request):
+        return 100  # conservative ceiling, or 0 for a known-free call
+
+    def settle(self, request, outcome):
+        return 100 if outcome.ok else 0
+
+budget = RuntimeBudget(ledger, Tariff(), account="demo")
+result = await batch.run(
+    handler,
+    resources=WorkflowResources(budget=budget),
+    run_id="run-1",
+)
+```
+
+The policy owns prices and provider identity; SWE only moves integer
+milli-units. Unknown cost fails closed before dispatch. The full contract is in
+[`docs/specs/swe-budget-runtime.md`](docs/specs/swe-budget-runtime.md).
+
 ## ActionOffer and exact cache
 
 `swe.offers` is a host-layer proposal type: create/surface is pure,
