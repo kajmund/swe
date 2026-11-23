@@ -1,0 +1,36 @@
+{
+  "arm_id": "hy4",
+  "question_id": "missing_helios_retention",
+  "steps": [
+    {
+      "type": "decompose",
+      "latency_ms": 1,
+      "needs": [
+        {
+          "need_id": "retention",
+          "text": "retention period",
+          "target_quotes": [
+            {
+              "source_id": "helios-overview",
+              "quote": "The Helios-9 retention period is 7 years."
+            }
+          ]
+        }
+      ]
+    },
+    {"type": "select_next", "tool": "retrieve", "latency_ms": 0},
+    {"type": "tool", "tool": "retrieve", "latency_ms": 1},
+    {
+      "type": "stop",
+      "latency_ms": 1,
+      "conclusion": "ANSWERED",
+      "answer_complete": true,
+      "claims": [
+        {
+          "source_id": "helios-overview",
+          "quote": "The Helios-9 retention period is 7 years."
+        }
+      ]
+    }
+  ]
+}

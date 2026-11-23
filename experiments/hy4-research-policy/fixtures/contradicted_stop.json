@@ -1,0 +1,85 @@
+{
+  "arm_id": "deepseek-flash",
+  "question_id": "conflicting_orbit_budget",
+  "steps": [
+    {
+      "type": "decompose",
+      "latency_ms": 1,
+      "needs": [
+        {
+          "need_id": "budget",
+          "text": "programme budget",
+          "target_quotes": [
+            {
+              "source_id": "orbit-approval",
+              "quote": "The ORBIT-7 programme budget is 1200000 SEK."
+            },
+            {
+              "source_id": "orbit-audit",
+              "quote": "The audited ORBIT-7 programme budget is 1500000 SEK."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "select_next",
+      "tool": "retrieve",
+      "gap": {
+        "source_id": "orbit-approval",
+        "quote": "The ORBIT-7 programme budget is 1200000 SEK."
+      }
+    },
+    {"type": "tool", "tool": "retrieve", "latency_ms": 1},
+    {
+      "type": "select_next",
+      "tool": "read_passage",
+      "gap": {
+        "source_id": "orbit-approval",
+        "quote": "The ORBIT-7 programme budget is 1200000 SEK."
+      }
+    },
+    {
+      "type": "tool",
+      "tool": "read_passage",
+      "latency_ms": 1,
+      "quote": {
+        "source_id": "orbit-approval",
+        "quote": "The ORBIT-7 programme budget is 1200000 SEK."
+      }
+    },
+    {
+      "type": "select_next",
+      "tool": "read_passage",
+      "gap": {
+        "source_id": "orbit-audit",
+        "quote": "The audited ORBIT-7 programme budget is 1500000 SEK."
+      }
+    },
+    {
+      "type": "tool",
+      "tool": "read_passage",
+      "latency_ms": 1,
+      "quote": {
+        "source_id": "orbit-audit",
+        "quote": "The audited ORBIT-7 programme budget is 1500000 SEK."
+      }
+    },
+    {
+      "type": "stop",
+      "latency_ms": 1,
+      "conclusion": "CONTRADICTED",
+      "answer_complete": false,
+      "claims": [
+        {
+          "source_id": "orbit-approval",
+          "quote": "The ORBIT-7 programme budget is 1200000 SEK."
+        },
+        {
+          "source_id": "orbit-audit",
+          "quote": "The audited ORBIT-7 programme budget is 1500000 SEK."
+        }
+      ]
+    }
+  ]
+}

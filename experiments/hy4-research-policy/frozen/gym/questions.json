@@ -1,0 +1,80 @@
+{
+  "version": "1",
+  "questions": [
+    {
+      "question_id": "direct_effective_date",
+      "category": "direct_evidence",
+      "text": "What is the effective date of Policy P-17?",
+      "expected_conclusion": "ANSWERED",
+      "expected_evidence": [
+        {
+          "source_id": "policy-p17",
+          "quote": "The effective date of Policy P-17 is 2026-03-01."
+        }
+      ]
+    },
+    {
+      "question_id": "multi_document_orbit",
+      "category": "multi_document",
+      "text": "Is ORBIT-7 approved for production, and what is its review cadence?",
+      "expected_conclusion": "ANSWERED",
+      "expected_evidence": [
+        {
+          "source_id": "orbit-approval",
+          "quote": "ORBIT-7 was approved for production on 2026-05-12."
+        },
+        {
+          "source_id": "orbit-approval",
+          "quote": "The review cadence for ORBIT-7 is every 90 days."
+        },
+        {
+          "source_id": "orbit-audit",
+          "quote": "The audit confirms the production approval recorded in May."
+        }
+      ]
+    },
+    {
+      "question_id": "dependent_northstar_release",
+      "category": "dependent_findings",
+      "text": "Can Northstar ship to production if its security review is approved and no critical findings remain?",
+      "expected_conclusion": "ANSWERED",
+      "expected_evidence": [
+        {
+          "source_id": "northstar-security",
+          "quote": "The security review for Northstar is approved."
+        },
+        {
+          "source_id": "northstar-security",
+          "quote": "Approval allows Northstar to ship to production."
+        },
+        {
+          "source_id": "northstar-security",
+          "quote": "No critical findings remain after review NS-44."
+        }
+      ]
+    },
+    {
+      "question_id": "conflicting_orbit_budget",
+      "category": "contradictory_evidence",
+      "text": "What is the ORBIT-7 budget?",
+      "expected_conclusion": "CONTRADICTED",
+      "expected_evidence": [
+        {
+          "source_id": "orbit-approval",
+          "quote": "The ORBIT-7 programme budget is 1200000 SEK."
+        },
+        {
+          "source_id": "orbit-audit",
+          "quote": "The audited ORBIT-7 programme budget is 1500000 SEK."
+        }
+      ]
+    },
+    {
+      "question_id": "missing_helios_retention",
+      "category": "missing_evidence",
+      "text": "What is the Helios-9 retention period?",
+      "expected_conclusion": "INSUFFICIENT_EVIDENCE",
+      "expected_evidence": []
+    }
+  ]
+}

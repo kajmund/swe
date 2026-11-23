@@ -1,0 +1,158 @@
+{
+  "schema_version": "hy4-research-policy-v1",
+  "status": "OFFLINE_PREPARED_NOT_LIVE",
+  "swe_baseline": "eff1c7e8943dd64827fb4916719ced5515bf3db5",
+  "frozen": {
+    "questions": "frozen/gym/questions.json",
+    "corpus_dir": "frozen/corpus",
+    "questions_sha256": "142d8d8c3f2fdf1057e8bc3ce03fc81d764f82ce89270a87162d825888603df2",
+    "corpus_directory_sha256": "ff85a3965836524fc4a9e08fad6d146051444c6ebed493413582b6b3be299bfe",
+    "question_ids": [
+      "direct_effective_date",
+      "multi_document_orbit",
+      "dependent_northstar_release",
+      "conflicting_orbit_budget",
+      "missing_helios_retention"
+    ]
+  },
+  "tools": [
+    {
+      "id": "retrieve",
+      "tariff_milli": 1000,
+      "policy_version": "lexical-bm25-v1",
+      "network": false
+    },
+    {
+      "id": "read_passage",
+      "tariff_milli": 500,
+      "policy_version": "research-jev-assessment-job-v1",
+      "network": false
+    }
+  ],
+  "decisions": [
+    {
+      "kind": "decompose",
+      "tariff_milli": 500,
+      "policy_version": "ordinary-decompose-2026-11-17"
+    },
+    {
+      "kind": "select_next",
+      "tariff_milli": 0,
+      "policy_version": "hy4-research-policy-v1"
+    },
+    {
+      "kind": "stop",
+      "tariff_milli": 2250,
+      "policy_version": "research-synthesis-v1",
+      "includes_milli": {
+        "synthesize": 2000,
+        "persist_trace": 250
+      }
+    }
+  ],
+  "budget": {
+    "per_question_allocated_milli": 50000,
+    "question_count": 5,
+    "suite_allocated_milli": 250000,
+    "usd_cap": "25.0",
+    "usd_cap_source": "research_engine.provider_usage.EXPERIMENT_USD_CAP",
+    "lexical_baseline_spent_milli": 29250,
+    "lexical_baseline_source": "benchmarks/results/baseline.json",
+    "same_for_every_arm": true
+  },
+  "evaluator": {
+    "role": "independent_fixed",
+    "live_model": "jev-1.13.0",
+    "offline_method": "exact-quote-v1",
+    "confidence_threshold": "0.6",
+    "usd_per_million_input": "0.042",
+    "output_usd_per_million": "0",
+    "endpoint": "https://api.typesafe.ai/v1/systemone",
+    "models_endpoint": "https://api.typesafe.ai/v1/models",
+    "pricing_url": "https://docs.typesafe.ai/models",
+    "credential_env": "TYPESAFE_API_KEY",
+    "alias_note": "GET /v1/models on 2026-11-23 listed jev-latest and jev-preview only. The versioned id is the configured Research pin. No System One call was made."
+  },
+  "arms": [
+    {
+      "id": "hy4",
+      "model": "hy4",
+      "provider": "tencent-tokenhub",
+      "endpoint": "https://tokenhub.tencentcloudmaas.com/v1/chat/completions",
+      "models_endpoint": "https://tokenhub.tencentcloudmaas.com/v1/models",
+      "pricing_url": "https://www.tencentcloud.com/document/product/1300/78937",
+      "verified_at": "2026-11-23",
+      "prices_usd_per_million": {
+        "input": "0.834",
+        "output": "2.501",
+        "cache_input": "0.042"
+      },
+      "temporary_discount_fraction": "0.5",
+      "temporary_discount_until": "2026-12-31T23:59:59+08:00",
+      "reasoning": {
+        "preference": "disabled",
+        "documented_control": "Open-weight card uses reasoning_effort=no_think. TokenHub field was not verified; no completion was sent."
+      },
+      "credential_env": "TOKENHUB_API_KEY"
+    },
+    {
+      "id": "hy4-flash",
+      "model": "hy4-flash",
+      "provider": "tencent-tokenhub",
+      "endpoint": "https://tokenhub.tencentcloudmaas.com/v1/chat/completions",
+      "models_endpoint": "https://tokenhub.tencentcloudmaas.com/v1/models",
+      "pricing_url": "https://www.tencentcloud.com/document/product/1300/78937",
+      "verified_at": "2026-11-23",
+      "prices_usd_per_million": {
+        "input": "0.070",
+        "output": "0.281",
+        "cache_input": "0.003"
+      },
+      "temporary_discount_fraction": "0.5",
+      "temporary_discount_until": "2026-11-30T12:00:00+08:00",
+      "reasoning": {
+        "preference": "disabled",
+        "documented_control": "Hugging Face Hy4 flash card uses reasoning_effort=no_think. TokenHub field was not verified; no completion was sent."
+      },
+      "credential_env": "TOKENHUB_API_KEY"
+    },
+    {
+      "id": "deepseek-flash",
+      "model": "deepseek-flash",
+      "model_version": "DeepSeek-V4.1-Flash-1017",
+      "provider": "deepseek",
+      "endpoint": "https://api.deepseek.com/chat/completions",
+      "models_endpoint": "https://api.deepseek.com/models",
+      "pricing_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "verified_at": "2026-11-23",
+      "prices_usd_per_million": {
+        "input": "0.30",
+        "output": "1.20",
+        "cache_input": "0.006",
+        "input_off_peak": "0.15",
+        "output_off_peak": "0.60",
+        "cache_input_off_peak": "0.003"
+      },
+      "price_basis": "peak cache miss; off-peak is half and is not the approval bound",
+      "temporary_discount_fraction": "1",
+      "reasoning": {
+        "preference": "disabled",
+        "request_field": {"thinking": {"type": "disabled"}},
+        "documented_control": "https://api-docs.deepseek.com/guides/thinking_mode"
+      },
+      "credential_env": "DEEPSEEK_API_KEY"
+    }
+  ],
+  "estimate": {
+    "policy_calls_per_question": 8,
+    "input_tokens": 8000,
+    "output_tokens_low": 4000,
+    "output_tokens_high": 16000,
+    "cache": "miss",
+    "tool_pairs_per_question": 6,
+    "jev_calls_per_question": 4,
+    "jev_input_tokens": 32000,
+    "jev_once_for_all_arms": true,
+    "use_temporary_discount_for_approval": false
+  }
+}

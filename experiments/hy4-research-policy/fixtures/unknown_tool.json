@@ -1,0 +1,29 @@
+{
+  "arm_id": "hy4",
+  "question_id": "direct_effective_date",
+  "steps": [
+    {
+      "type": "decompose",
+      "needs": [
+        {
+          "need_id": "effective-date",
+          "text": "effective date",
+          "target_quotes": [
+            {
+              "source_id": "policy-p17",
+              "quote": "The effective date of Policy P-17 is 2026-03-01."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "select_next",
+      "tool": "web_search",
+      "gap": {
+        "source_id": "policy-p17",
+        "quote": "The effective date of Policy P-17 is 2026-03-01."
+      }
+    }
+  ]
+}

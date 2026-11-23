@@ -1,0 +1,9 @@
+{
+  "research_repository": "https://github.com/kajmund/research",
+  "research_revision": "4a58d5a581a3820919db52617afb4c642c89e435",
+  "questions_path": "benchmarks/gym/questions.json",
+  "corpus_path": "benchmarks/corpus/documents.jsonl",
+  "questions_sha256": "142d8d8c3f2fdf1057e8bc3ce03fc81d764f82ce89270a87162d825888603df2",
+  "corpus_directory_sha256": "ff85a3965836524fc4a9e08fad6d146051444c6ebed493413582b6b3be299bfe",
+  "note": "Byte copy of the Research Gym questions and corpus at origin/main. The corpus digest is the Gym directory digest, which is the hash stored in MANIFEST.sha256."
+}
