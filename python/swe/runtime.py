@@ -269,9 +269,9 @@ class WorkflowRunner:
                 f"persisted run {run_id!r} was started from another definition",
                 kind="resume",
             )
+        if self.resources.budget is not None:
+            self.resources.budget.restore(run_id=run_id)
         if stored.status != "running":
-            if self.resources.budget is not None:
-                self.resources.budget.restore(run_id=run_id)
             return RunResult(
                 run_id=run_id,
                 status=stored.status,

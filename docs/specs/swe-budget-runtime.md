@@ -122,11 +122,12 @@ object returned by `reserve`.
    invalid amount, overrun, or ledger error) also marks the hold pending; it is
    never left as an invisible `RESERVED` hold.
 8. **Replay.** The host persists and replays the ledger event log alongside the
-   `RunStore`. `WorkflowRunner.resume` calls `budget.restore(run_id=...)` even
-   when the run is already terminal. Open reservations become `PENDING` and are
-   reconcilable; terminal reservations enter the bounded terminal window, so a
-   re-dispatch of a settled-but-unpersisted delivery fails closed before the
-   handler. Replayed invocations do not reserve or settle again.
+   `RunStore`. `WorkflowRunner.resume` calls `budget.restore(run_id=...)` for
+   both terminal and running resumes, before any early return, dispatch, or
+   cancel path. Open reservations become `PENDING` and are reconcilable;
+   terminal reservations enter the bounded terminal window, so a re-dispatch of
+   a settled-but-unpersisted delivery fails closed before the handler. Replayed
+   invocations do not reserve or settle again.
 
 ## Lifecycle
 

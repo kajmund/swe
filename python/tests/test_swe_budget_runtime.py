@@ -885,3 +885,54 @@ async def test_resume_of_terminal_run_restores_an_open_budget_hold() -> None:
     await asyncio.sleep(0)
     await _cancel_swe_tasks()
 
+
+@pytest.mark.asyncio
+async def test_running_resume_with_cancel_restores_holds_before_aborting() -> None:
+    ledger = NativeBudgetLedger()
+    ledger.allocate(run_id="resume-cancel", account="a", amount_milli=5, key="alloc")
+    ledger.reserve(
+        run_id="resume-cancel",
+        account="a",
+        amount_milli=1,
+        key="resume-cancel:inv-orphan:reserve",
+    )
+    replayed = NativeBudgetLedger.replay(ledger.events())
+    budget = RuntimeBudget(replayed, _FixedPolicy(), account="a")
+
+    compiled = _one_node_flow()
+    store = MemoryRunStore()
+    await store.record(
+        RunRecord(
+            run_id="resume-cancel",
+            definition_sha256=compiled.sha256,
+            status="running",
+            input={},
+            output=None,
+            error=None,
+            started_at_ms=0,
+            updated_at_ms=0,
+            finished_at_ms=None,
+            last_seq=0,
+        )
+    )
+    cancel = asyncio.Event()
+    cancel.set()
+    calls: list[str] = []
+
+    async def work(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        calls.append("ran")
+        return {"ok": True}
+
+    resumed = await WorkflowRunner(
+        compiled,
+        {"m.work": work},
+        resources=WorkflowResources(budget=budget, cancel_event=cancel),
+        run_store=store,
+    ).resume("resume-cancel")
+
+    assert resumed.status == "cancelled"
+    assert calls == []
+    assert len(budget.pending()) == 1
+    assert budget.pending()[0].request.invocation_id == "inv-orphan"
+    assert replayed.balance(account="a")["reserved"] == 1
+

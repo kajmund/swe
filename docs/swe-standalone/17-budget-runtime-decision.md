@@ -76,8 +76,9 @@ Kort:
    normalt.
 6. Replay anropar inte budget för redan persistrade invocations. Hosten
    persisterar och replayar ledgerhändelserna tillsammans med `RunStore`.
-   `resume` kallar `restore(run_id=...)` även när runen redan är terminal, så
-   öppna holds blir synliga och terminala holds kan vägra re-dispatch.
+   `resume` kallar `restore(run_id=...)` för både terminala och running runs,
+   före early-return, dispatch och cancel, så öppna holds blir synliga och
+   terminala holds kan vägra re-dispatch.
 7. Ingen generell retry införs. En host-retry återanvänder samma
    `run_id`/`invocation_id`; en `PENDING`-hold får en färsk `RESERVED`-objekt
    med samma ledger-id, medan en terminal delivery vägras före handlern.
