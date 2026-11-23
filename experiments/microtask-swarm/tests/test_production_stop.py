@@ -201,6 +201,36 @@ class SignalTests(unittest.TestCase):
         self.assertTrue(policy.evaluate(signals))
 
 
+class StrictPolicyTests(unittest.TestCase):
+    def test_strict_policy_rejects_invalid_outputs(self) -> None:
+        policy = ProductionStopPolicy(
+            name="strict",
+            min_items=1,
+            min_need_coverage=0.0,
+            min_evidence_coverage=0.0,
+            max_abstention=1.0,
+            min_confidence=0.0,
+            max_invalid_outputs=0,
+        )
+        signals = StopSignals(
+            attempted=5,
+            total_needs=5,
+            covered_needs=5,
+            need_coverage=1.0,
+            evidence_verified=1,
+            evidence_total=1,
+            evidence_coverage=1.0,
+            abstentions=0,
+            invalid_outputs=1,
+            abstention_rate=0.0,
+            average_confidence=1.0,
+            verified_count=5,
+            completed_items=1,
+            completed_item_ids=("bio-01",),
+        )
+        self.assertFalse(policy.evaluate(signals))
+
+
 class RunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_production_policy_stops_with_posthoc_quality(self) -> None:
         specs = _specs(items=2)
@@ -257,12 +287,23 @@ class FrozenAndMatrixTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(report["evidence_kind"], "offline_production_early_stop")
         self.assertEqual(report["frozen_baseline_sha256"], FROZEN_EXPECTED)
-        self.assertEqual(len(report["runs"]), 10)
+        self.assertEqual(len(report["runs"]), 18)
         conditions = {run["condition"] for run in report["runs"]}
         self.assertIn("full", conditions)
         self.assertIn("count_25", conditions)
-        for name in ("coverage", "confidence", "hybrid"):
+        self.assertIn("stress_full", conditions)
+        for name in ("coverage", "confidence", "hybrid", "strict"):
             self.assertIn(name, conditions)
+            self.assertIn(f"stress_{name}", conditions)
+        stress_full = [
+            run for run in report["runs"] if run["condition"] == "stress_full"
+        ][0]
+        self.assertGreater(
+            stress_full["production_signals_at_stop"]["abstention_rate"], 0.0
+        )
+        self.assertIn("confidence_calibration", report["analysis"])
+        self.assertIn("false_support_full_runs", report["analysis"])
+        self.assertIn("gate_proposal", report["analysis"])
         for run in report["runs"]:
             self.assertIn("production_signals_at_stop", run)
             self.assertIn("posthoc_stop_quality", run)

@@ -38,6 +38,23 @@
       "min_evidence_coverage": 0.7,
       "max_abstention": 0.1,
       "min_confidence": 0.8
+    },
+    "strict": {
+      "min_items": 6,
+      "min_need_coverage": 0.8,
+      "min_evidence_coverage": 0.8,
+      "max_abstention": 0.05,
+      "min_confidence": 0.8,
+      "max_invalid_outputs": 0
     }
+  },
+  "stress": {
+    "enabled": true,
+    "scheduler": "P",
+    "provider_limit": 3,
+    "concurrency": 8,
+    "abstain_fraction": 0.25,
+    "neutral_fraction": 0.25,
+    "seed": 99
   }
 }

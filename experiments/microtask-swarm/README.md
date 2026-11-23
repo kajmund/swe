@@ -390,59 +390,102 @@ baselines:
 - `reports/production-stop.json` / `.md`
 
 The stop decision uses only observable signals: verified exact-quote evidence,
-coverage of the 50 typed needs, abstention rate, and a deterministic verifier
-confidence. Gold is read only after the run for `posthoc_stop_quality` and the
-normal run score.
+coverage of the 50 typed needs, abstention rate, a deterministic verifier
+confidence, invalid outputs, and completed-item count. Gold is read only after
+the run for `posthoc_stop_quality` and the normal run score.
 
-Compared conditions on the same trace (provider limit 3, concurrency 8):
+Conditions: `full`, `count_25`, `coverage`, `confidence`, `hybrid`, and the
+stricter proposed `strict` gate. The stress case uses a deterministic wrapper
+that abstains on selected extraction tasks and returns `neutral` for selected
+entailment tasks; it still uses the normal D/P scheduler, verifier, trace, and
+budget.
 
-- `full` — no early stop;
-- `count_25` — frozen count-based control (25 verified);
-- `coverage` — need coverage ≥ 0.60, evidence coverage ≥ 0.60, abstention
-  ≤ 0.20, confidence ≥ 0.60, at least 5 complete items;
-- `confidence` — confidence ≥ 0.85 with the same coverage/abstention floors;
-- `hybrid` — need/evidence coverage ≥ 0.70, abstention ≤ 0.10, confidence
-  ≥ 0.80, at least 6 complete items.
+### Normal trace (provider limit 3, concurrency 8)
 
-| Scheduler | Condition | Stop | Wall | Calls | Complete items | Need cov. | Evidence cov. | Abstain | Confidence | Post-hoc acc. | Post-hoc cov. | Post-hoc false support | Pending/late |
-| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| D | full | — | 5.77 s | 50 | 10 | 1.00 | 1.00 | 0.00 | 0.957 | 0.90 | 0.80 | 0.20 | 0/0 |
-| D | count_25 | early | 2.60 s | 32 | **0** | 0.50 | 0.90 | 0.00 | 0.921 | **None** | **None** | **None** | 1250/1250 |
-| D | coverage | production | 4.35 s | 49 | 5 | 0.88 | 1.00 | 0.00 | 0.951 | 0.88 | 0.80 | 0.20 | 750/750 |
-| D | confidence | production | 4.35 s | 49 | 5 | 0.88 | 1.00 | 0.00 | 0.951 | 0.88 | 0.80 | 0.20 | 750/750 |
-| D | hybrid | production | 4.35 s | 49 | 6 | 0.90 | 1.00 | 0.00 | 0.952 | 0.90 | 0.833 | 0.167 | 750/750 |
-| P | full | — | 5.17 s | 50 | 10 | 1.00 | 1.00 | 0.00 | 0.957 | 0.90 | 0.80 | 0.20 | 0/0 |
-| P | count_25 | early | 3.84 s | 27 | 1 | 0.50 | 1.00 | 0.00 | 0.914 | 0.80 | **0.00** | **1.00** | 500/250 |
-| P | coverage | production | 5.05 s | 47 | 5 | 0.90 | 1.00 | 0.00 | 0.952 | **0.92** | 0.80 | 0.20 | 500/250 |
-| P | confidence | production | 5.05 s | 47 | 5 | 0.90 | 1.00 | 0.00 | 0.952 | **0.92** | 0.80 | 0.20 | 500/250 |
-| P | hybrid | production | 5.07 s | 48 | 6 | 0.92 | 1.00 | 0.00 | 0.953 | **0.933** | **0.833** | **0.167** | 250/0 |
+| Scheduler | Condition | Stop | Wall | Calls | Items | Need cov. | Evid. cov. | Abstain | Conf. | Post-hoc acc./cov./false | Pending/late |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| D | full | — | 5.76 s | 50 | 10 | 1.00 | 1.00 | 0.00 | 0.957 | 0.90 / 0.80 / 0.20 | 0/0 |
+| D | count_25 | early | 2.60 s | 32 | 0 | 0.50 | 0.90 | 0.00 | 0.921 | None | 1250/1250 |
+| D | coverage | production | 4.35 s | 49 | 5 | 0.88 | 1.00 | 0.00 | 0.951 | 0.92 / 0.80 / 0.20 | 750/750 |
+| D | hybrid | production | 4.35 s | 49 | 6 | 0.90 | 1.00 | 0.00 | 0.952 | 0.90 / 0.833 / 0.167 | 750/750 |
+| D | strict | production | 4.42 s | 49 | 6 | 0.90 | 1.00 | 0.00 | 0.952 | 0.90 / 0.833 / 0.167 | 750/750 |
+| P | full | — | 5.20 s | 50 | 10 | 1.00 | 1.00 | 0.00 | 0.957 | 0.90 / 0.80 / 0.20 | 0/0 |
+| P | count_25 | early | 3.84 s | 27 | 1 | 0.50 | 1.00 | 0.00 | 0.914 | 0.80 / 0.00 / 1.00 | 500/250 |
+| P | coverage | production | 5.06 s | 47 | 5 | 0.90 | 1.00 | 0.00 | 0.952 | 0.92 / 0.80 / 0.20 | 500/250 |
+| P | hybrid | production | 5.14 s | 48 | 6 | 0.92 | 1.00 | 0.00 | 0.953 | 0.90 / 0.833 / 0.167 | 500/0 |
+| P | strict | production | 5.08 s | 48 | 6 | 0.92 | 1.00 | 0.00 | 0.953 | 0.90 / 0.833 / 0.167 | 500/0 |
 
-Readings:
+Coverage and confidence stop at the same point on this trace because the
+confidence heuristic is high (~0.95); confidence adds no discrimination here.
+The count control is the cautionary case: D stopped before any complete item
+and P stopped on one complete item with zero extraction coverage.
 
-- Count-based stop is **not** a safe production proxy. On D it stopped before
-  any item had all five tasks, so post-hoc scoring had no complete item; on P
-  it stopped with one complete item whose extraction coverage was zero.
-- The gold-free policies stop at 5–6 complete items with high post-hoc quality
-  and much lower latency/call count than `full`. P coverage/confidence reach
-  0.92 post-hoc accuracy; P hybrid reaches 0.933 accuracy, 0.833 coverage,
-  0.167 false support, and no late-billed reservations.
-- P is slightly slower than D for the same stop policy because P caps workers
-  at the provider limit while D queues more work behind the provider
-  semaphore, but P leaves fewer pending/late milli and higher post-hoc accuracy.
-- Abstention is 0 in these offline heuristic runs. The signal is implemented
-  and unit-tested with empty extracts, invalid outputs, and unsupported quotes,
-  but this trace does not stress it. Verifier confidence is a deterministic
-  host heuristic, not a calibrated probability. Coverage and confidence stop at
-  the same point on this fixture because the confidence signal is high
-  (~0.95); it adds no discrimination here.
-- The count control is the cautionary case: it is cheapest in wall time but can
-  stop before any complete item (D) or on an item with zero extraction coverage
-  (P). The gold-free policies require complete items and evidence coverage, so
-  their post-hoc quality remains at or above the full-run level.
+### Stress case (P scheduler, deterministic abstention/neutral)
 
-Totals across the 10 runs: **448 calls**, **183,500 milli settled**, 5,250
-milli pending before reconciliation, 4,250 milli late-billed, 1,000 milli
-released, **$0.00346** calculated USD. `actual_usd` is N/A. The runtime budget
+| Condition | Stop | Wall | Calls | Items | Need cov. | Evid. cov. | Abstain | Conf. | Post-hoc acc./cov./false | Pending/late |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| stress_full | — | 5.17 s | 50 | 10 | 0.96 | 0.80 | 0.040 | 0.917 | 0.88 / 0.70 / 0.125 | 0/0 |
+| stress_count_25 | early | 3.84 s | 27 | 1 | 0.46 | 0.80 | 0.080 | 0.850 | 0.80 / 0.00 / 0.00 | 500/250 |
+| stress_coverage | production | 5.07 s | 47 | 5 | 0.86 | 0.80 | 0.044 | 0.908 | 0.88 / 0.60 / 0.00 | 500/250 |
+| stress_confidence | production | 5.06 s | 47 | 5 | 0.86 | 0.80 | 0.044 | 0.908 | 0.88 / 0.60 / 0.00 | 500/250 |
+| stress_hybrid | production | 5.08 s | 48 | 6 | 0.88 | 0.80 | 0.043 | 0.910 | 0.867 / 0.667 / 0.00 | 500/0 |
+| stress_strict | production | 5.08 s | 48 | 6 | 0.88 | 0.80 | 0.043 | 0.910 | 0.867 / 0.667 / 0.00 | 500/0 |
+
+The gold-free policies tolerate up to 5% abstention in the strict gate and
+still stop at six complete items. The count control again stops before a
+meaningful evidence set.
+
+### False support and confidence calibration
+
+Full-run extraction false support:
+
+- normal D/P full: 10 emitted, 8 matched gold, **2 unsupported**, 0 unverified,
+  false-support rate **0.20**. Examples: `bio-01:extraction` at confidence 0.70
+  and `finance-01:extraction` at confidence 0.8125;
+- stress full: 8 emitted, 7 matched, **1 unsupported**, 0 unverified, rate
+  **0.125**.
+
+These are exact passage substrings, so runtime verification accepts them; they
+are still not the gold span. **False support cannot be detected without gold**;
+the runtime gate can only enforce exactness and coverage, not correctness of
+the chosen span.
+
+Confidence calibration over the full runs (descriptive, not calibrated):
+
+| Confidence bin | Count | Accuracy | False-support rate |
+| --- | ---: | ---: | ---: |
+| [0.0, 0.5) | 2 | 0.000 | 0.000 |
+| [0.5, 0.8) | 18 | 0.778 | 0.167 |
+| [0.8, 0.95) | 11 | 0.818 | 0.182 |
+| [0.95, 1.0] | 119 | 0.933 | 0.000 |
+
+The relationship is not monotonic in the middle bins, and most samples sit in
+the top bin. Treat confidence as a weak secondary signal, not a calibrated
+probability or a standalone stop criterion.
+
+### Proposed verifier gate `verifier_gate_v1`
+
+- at least 6 complete items;
+- need coverage ≥ 0.80;
+- verified evidence coverage ≥ 0.80;
+- abstention ≤ 0.05;
+- average verifier confidence ≥ 0.80;
+- zero invalid outputs;
+- every emitted extraction quote is an exact passage substring;
+- at least one verified extract per complete item;
+- no unverified extraction remains in the completed set.
+
+The gate deliberately does **not** claim to detect false support. A verified
+but non-gold quote is invisible at runtime and is measured only post-hoc.
+
+The implemented `strict` policy enforces the numeric thresholds, including
+`max_invalid_outputs=0`. The three per-item hard rules are the proposed
+production contract; enforcing them directly needs a per-item evidence signal
+rather than the aggregate coverage ratio.
+
+Totals across all 18 runs: **812 calls**, **332,000 milli settled**, 9,250
+milli pending before reconciliation, 5,750 milli late-billed, 3,500 milli
+released, **$0.00630** calculated USD. `actual_usd` is N/A. The runtime budget
 remains the local pilot meter; PR #11 is still open, so no shared
 `RuntimeBudget` is attached.
 

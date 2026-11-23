@@ -44,6 +44,7 @@ from microtask_swarm.fixtures import (
     load_fixtures,
 )
 from microtask_swarm.offline import OfflineHeuristicProvider
+from microtask_swarm.executor import ProviderResponse
 from microtask_swarm.scoring import score_suite
 
 
@@ -228,6 +229,7 @@ class ProductionStopPolicy:
     min_evidence_coverage: float
     max_abstention: float
     min_confidence: float
+    max_invalid_outputs: int = 1_000_000
 
     def evaluate(self, signals: StopSignals) -> bool:
         return (
@@ -236,6 +238,7 @@ class ProductionStopPolicy:
             and signals.evidence_coverage >= self.min_evidence_coverage
             and signals.abstention_rate <= self.max_abstention
             and signals.average_confidence >= self.min_confidence
+            and signals.invalid_outputs <= self.max_invalid_outputs
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -246,6 +249,7 @@ class ProductionStopPolicy:
             "min_evidence_coverage": self.min_evidence_coverage,
             "max_abstention": self.max_abstention,
             "min_confidence": self.min_confidence,
+            "max_invalid_outputs": self.max_invalid_outputs,
         }
 
 
@@ -335,14 +339,87 @@ class ProductionStopRunner(ProviderAwareRunner):
         }
         quality = score_suite(subset_specs, subset_results)
         extraction = quality["extraction"]
+        spec_by_id = {spec.task_id: spec for spec in subset_specs}
+        samples: list[dict[str, Any]] = []
+        false_support_rows: list[dict[str, Any]] = []
+        for row in quality["rows"]:
+            spec = spec_by_id[row["task_id"]]
+            attempt = by_id[row["task_id"]]
+            extraction_row = row["extraction"]
+            false_support = (
+                extraction_row["unsupported_quotes"] + extraction_row["unverified_quotes"]
+            ) > 0
+            sample = {
+                "task_id": row["task_id"],
+                "item_id": row["item_id"],
+                "contract": row["contract"],
+                "confidence": verifier_confidence(spec, attempt),
+                "correct": row["correct"],
+                "false_support": false_support,
+                "emitted_quotes": extraction_row["emitted_quotes"],
+                "matched_quotes": extraction_row["matched_quotes"],
+                "unsupported_quotes": extraction_row["unsupported_quotes"],
+                "unverified_quotes": extraction_row["unverified_quotes"],
+            }
+            samples.append(sample)
+            if false_support:
+                false_support_rows.append(sample)
         return {
             "completed_items": len(completed),
             "scored_subtasks": quality["scored_subtasks"],
             "accuracy": quality["accuracy"],
             "coverage": extraction["coverage"],
             "false_support_rate": quality["false_support"]["false_support_rate"],
+            "false_support_count": len(false_support_rows),
             "verified_rate": quality["verified_rate"],
+            "samples": samples,
+            "false_support_rows": false_support_rows,
         }
+
+
+class StressTraceProvider:
+    """Deterministic gold-free stress case: abstain or answer neutral.
+
+    Extraction tasks selected by a stable hash return an empty quote list;
+    selected entailment tasks return ``neutral``. The wrapped provider still
+    supplies latency and token counts, so scheduling, budget, and verification
+    stay on the normal path.
+    """
+
+    def __init__(
+        self,
+        inner: TraceProvider,
+        *,
+        abstain_fraction: float = 0.25,
+        neutral_fraction: float = 0.25,
+        seed: int = 99,
+    ) -> None:
+        self.inner = inner
+        self.abstain_fraction = abstain_fraction
+        self.neutral_fraction = neutral_fraction
+        self.seed = seed
+
+    async def chat(self, request):
+        response = await self.inner.chat(request)
+        digest = hashlib.sha256(
+            f"{self.seed}:{request.task_id}:{request.model_id}".encode("utf-8")
+        ).hexdigest()
+        fraction = int(digest[:8], 16) / 0xFFFFFFFF
+        if request.kind is Kind.EXTRACTION and fraction < self.abstain_fraction:
+            return ProviderResponse(
+                content='{"quotes":[]}',
+                tokens=response.tokens,
+                billed_usd=response.billed_usd,
+                price_period=response.price_period,
+            )
+        if request.kind is Kind.ENTAILMENT and fraction < self.neutral_fraction:
+            return ProviderResponse(
+                content='{"label":"neutral"}',
+                tokens=response.tokens,
+                billed_usd=response.billed_usd,
+                price_period=response.price_period,
+            )
+        return response
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -433,6 +510,9 @@ async def run_production_stop_benchmark(
             min_evidence_coverage=float(cfg["min_evidence_coverage"]),
             max_abstention=float(cfg["max_abstention"]),
             min_confidence=float(cfg["min_confidence"]),
+            max_invalid_outputs=int(
+                cfg.get("max_invalid_outputs", 1_000_000)
+            ),
         )
         for name, cfg in production.get("policies", {}).items()
     }
@@ -481,6 +561,66 @@ async def run_production_stop_benchmark(
             result["scheduler"] = scheduler_id
             result["condition"] = condition
             result["stop_policy_name"] = None if policy is None else policy.name
+            result["stress"] = False
+            runs.append(result)
+    stress_cfg = production.get("stress", {})
+    if stress_cfg.get("enabled", False):
+        stress_provider = StressTraceProvider(
+            provider,
+            abstain_fraction=float(stress_cfg.get("abstain_fraction", 0.25)),
+            neutral_fraction=float(stress_cfg.get("neutral_fraction", 0.25)),
+            seed=int(stress_cfg.get("seed", 99)),
+        )
+        stress_scheduler_id = str(stress_cfg.get("scheduler", "P"))
+        stress_scheduler = next(
+            (
+                scheduler
+                for scheduler in schedulers
+                if str(scheduler.get("id")) == stress_scheduler_id
+            ),
+            {"id": stress_scheduler_id, "adaptive": True, "priority": True},
+        )
+        stress_adaptive = bool(stress_scheduler.get("adaptive", True))
+        stress_priority = bool(stress_scheduler.get("priority", True))
+        stress_limit = int(stress_cfg.get("provider_limit", provider_limit))
+        stress_concurrency = int(stress_cfg.get("concurrency", concurrency))
+        stress_conditions: list[
+            tuple[str, ProductionStopPolicy | None, int | None]
+        ] = [
+            ("full", None, None),
+            (f"count_{count_after}", None, count_after),
+        ]
+        stress_conditions.extend(
+            (name, policy, None) for name, policy in policies.items()
+        )
+        for condition, policy, early_after in stress_conditions:
+            runner = ProductionStopRunner(
+                provider=stress_provider,
+                models=models,
+                contracts=contracts,
+                trace=trace,
+                provider_limit=stress_limit,
+                allocated_milli=allocated,
+                late_billing_fraction=late_fraction,
+                adaptive=stress_adaptive,
+                priority=stress_priority,
+                quality_gate=None,
+                target_queue_ms=float(production.get("target_queue_ms", 400.0)),
+                stop_policy=policy,
+            )
+            result = await runner.run(
+                Strategy.D_EVENT_READY,
+                specs,
+                model_id=model_bcd,
+                concurrency=stress_concurrency,
+                dag=dag,
+                early_stop_after=early_after,
+                run_id=f"production:stress:{condition}",
+            )
+            result["scheduler"] = f"{stress_scheduler_id}_stress"
+            result["condition"] = f"stress_{condition}"
+            result["stop_policy_name"] = None if policy is None else policy.name
+            result["stress"] = True
             runs.append(result)
     return {
         "schema_version": 1,
@@ -493,6 +633,7 @@ async def run_production_stop_benchmark(
         "concurrency": concurrency,
         "count_stop_after_verified": count_after,
         "policies": {name: policy.to_dict() for name, policy in policies.items()},
+        "stress": stress_cfg,
         "trace": {
             "seed": trace.seed,
             "base_ms": trace.base_ms,
@@ -505,6 +646,7 @@ async def run_production_stop_benchmark(
         "frozen_baseline_sha256": _frozen_hashes(root),
         "runs": runs,
         "summary": _summarize(runs),
+        "analysis": _analysis(runs),
         "totals": _totals(runs),
         "notes": [
             "Gold is used only after the run for posthoc_stop_quality and run quality.",
@@ -512,6 +654,119 @@ async def run_production_stop_benchmark(
             "Offline deterministic trace; no model or network call.",
             "SWE PR #11 runtime budget is still unattached; t1bm/PR 13 is untouched.",
         ],
+    }
+
+
+def _analysis(runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    full_runs = [
+        run
+        for run in runs
+        if run["condition"] in {"full", "stress_full"}
+    ]
+    samples: list[Mapping[str, Any]] = []
+    false_support_runs: list[dict[str, Any]] = []
+    for run in full_runs:
+        posthoc = run["posthoc_stop_quality"] or {}
+        run_samples = list(posthoc.get("samples", []))
+        samples.extend(run_samples)
+        extraction = [
+            sample
+            for sample in run_samples
+            if sample["contract"] == "extraction"
+        ]
+        emitted = sum(int(sample["emitted_quotes"]) for sample in extraction)
+        matched = sum(int(sample["matched_quotes"]) for sample in extraction)
+        unsupported = sum(
+            int(sample["unsupported_quotes"]) for sample in extraction
+        )
+        unverified = sum(
+            int(sample["unverified_quotes"]) for sample in extraction
+        )
+        examples = [
+            {
+                "item_id": sample["item_id"],
+                "task_id": sample["task_id"],
+                "confidence": sample["confidence"],
+                "unsupported_quotes": sample["unsupported_quotes"],
+                "unverified_quotes": sample["unverified_quotes"],
+            }
+            for sample in extraction
+            if sample["false_support"]
+        ][:5]
+        false_support_runs.append(
+            {
+                "scheduler": run["scheduler"],
+                "condition": run["condition"],
+                "stress": run["stress"],
+                "completed_items": (run["posthoc_stop_quality"] or {}).get(
+                    "completed_items"
+                ),
+                "emitted_quotes": emitted,
+                "matched_quotes": matched,
+                "unsupported_quotes": unsupported,
+                "unverified_quotes": unverified,
+                "false_support_count": unsupported + unverified,
+                "false_support_rate": round(
+                    (unsupported + unverified) / emitted, 6
+                )
+                if emitted
+                else 0.0,
+                "examples": examples,
+            }
+        )
+    edges = ((0.0, 0.5), (0.5, 0.8), (0.8, 0.95), (0.95, 1.000001))
+    calibration: list[dict[str, Any]] = []
+    for low, high in edges:
+        bucket = [
+            sample
+            for sample in samples
+            if low <= float(sample["confidence"]) < high
+        ]
+        correct = sum(1 for sample in bucket if sample["correct"])
+        false_support = sum(
+            1 for sample in bucket if sample["false_support"]
+        )
+        calibration.append(
+            {
+                "confidence_low": low,
+                "confidence_high": high,
+                "count": len(bucket),
+                "accuracy": round(correct / len(bucket), 6)
+                if bucket
+                else 0.0,
+                "false_support_count": false_support,
+                "false_support_rate": round(
+                    false_support / len(bucket), 6
+                )
+                if bucket
+                else 0.0,
+            }
+        )
+    return {
+        "confidence_calibration": calibration,
+        "false_support_full_runs": false_support_runs,
+        "gate_proposal": {
+            "name": "verifier_gate_v1",
+            "min_complete_items": 6,
+            "min_need_coverage": 0.8,
+            "min_evidence_coverage": 0.8,
+            "max_abstention": 0.05,
+            "min_confidence": 0.8,
+            "max_invalid_outputs": 0,
+            "hard_rules": [
+                "every emitted extraction quote must be an exact passage substring",
+                "at least one verified extract per complete item",
+                "no unverified extraction may remain in the completed set",
+            ],
+            "limitation": (
+                "Runtime cannot see gold. A verified quote that is not the gold "
+                "span is false support and is only measurable post-hoc."
+            ),
+        },
+        "calibration_note": (
+            "Verifier confidence is a deterministic host heuristic, not a "
+            "calibrated probability. Bins are descriptive."
+        ),
     }
 
 
@@ -617,6 +872,7 @@ def render_production_markdown(report: Mapping[str, Any]) -> str:
             )
         )
     totals = report["totals"]
+    analysis = report["analysis"]
     lines.extend(
         [
             "",
@@ -631,8 +887,75 @@ def render_production_markdown(report: Mapping[str, Any]) -> str:
                 usd=totals["calculated_usd"],
             ),
             "",
-            "Verifier confidence is a deterministic host heuristic from "
-            "verification and answer support, not a calibrated probability.",
+            "## False support (full runs)",
+            "",
+            "| Scheduler | Condition | Items | Emitted | Matched | Unsupported | Unverified | False-support rate | Examples |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for row in analysis["false_support_full_runs"]:
+        examples = ", ".join(
+            f"{item['item_id']}:{item['task_id'].split(':')[-1]}"
+            for item in row["examples"]
+        )
+        lines.append(
+            "| {scheduler} | {condition} | {items} | {emitted} | {matched} | "
+            "{unsupported} | {unverified} | {rate} | {examples} |".format(
+                scheduler=row["scheduler"],
+                condition=row["condition"],
+                items=row["completed_items"],
+                emitted=row["emitted_quotes"],
+                matched=row["matched_quotes"],
+                unsupported=row["unsupported_quotes"],
+                unverified=row["unverified_quotes"],
+                rate=row["false_support_rate"],
+                examples=examples or "—",
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## Verifier confidence calibration (full runs)",
+            "",
+            "| Confidence bin | Count | Accuracy | False-support count | False-support rate |",
+            "| --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in analysis["confidence_calibration"]:
+        lines.append(
+            "| [{low}, {high}) | {count} | {acc} | {fs} | {rate} |".format(
+                low=row["confidence_low"],
+                high=row["confidence_high"],
+                count=row["count"],
+                acc=row["accuracy"],
+                fs=row["false_support_count"],
+                rate=row["false_support_rate"],
+            )
+        )
+    gate = analysis["gate_proposal"]
+    lines.extend(
+        [
+            "",
+            "## Proposed verifier-based gate",
+            "",
+            "`{name}` requires at least {items} complete items, need coverage "
+            "≥ {need}, evidence coverage ≥ {evidence}, abstention ≤ {abstain}, "
+            "confidence ≥ {conf}, and at most {invalid} invalid outputs. "
+            "Hard rules: {rules}.".format(
+                name=gate["name"],
+                items=gate["min_complete_items"],
+                need=gate["min_need_coverage"],
+                evidence=gate["min_evidence_coverage"],
+                abstain=gate["max_abstention"],
+                conf=gate["min_confidence"],
+                invalid=gate["max_invalid_outputs"],
+                rules="; ".join(gate["hard_rules"]),
+            ),
+            "",
+            gate["limitation"],
+            "",
+            analysis["calibration_note"],
+            "",
             "Frozen async and adaptive baseline hashes are included in the JSON.",
             "",
         ]
