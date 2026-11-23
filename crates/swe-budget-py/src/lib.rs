@@ -1,3 +1,5 @@
+#![cfg(feature = "python")]
+
 //! PyO3 surface for the workspace `swe-budget` ledger.
 //!
 //! This crate is a shell only: the ledger, its invariants and its event log

@@ -15,10 +15,12 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-extension-module = ["pyo3/extension-module"]
+python = ["dep:pyo3"]
+extension-module = ["python", "pyo3/extension-module"]
 
 [dependencies]
 budget_core = { path = "../swe-budget", version = "0.1.0", package = "swe-budget" }
 
 [dependencies.pyo3]
 version = "=0.24.2"
+optional = true
