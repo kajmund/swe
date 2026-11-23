@@ -1,0 +1,239 @@
+# SWE microtask-swarm pilot
+
+Status: `OFFLINE_PREPARED_NOT_LIVE`. This experiment is isolated on
+`experiment/microtask-swarm` from `origin/main` (`eff1c7e`). It does not modify
+SWE core, the frozen contracts, the Hy4 worktree, or `main`.
+
+No paid model call was made. The offline pilot uses deterministic lexical
+personas; its quality numbers are pipeline evidence, not results about any
+Ollama model.
+
+## What this asks
+
+Can the same small amount of work be done better as typed independent
+microtasks than as one model call, and does heterogeneous competition with an
+independent verifier help? The pilot compares three execution modes over the
+same frozen gold tasks:
+
+| Mode | Calls | What is measured |
+| --- | --- | --- |
+| `single_call` | One combined JSON call per item | End-to-end quality, latency, cost of a monolithic call |
+| `distributed_independent` | One call per typed microtask, no shared prose or state | Isolation effect, per-contract quality, bounded fan-out |
+| `heterogeneous_competition` | Every available model competes per microtask; a deterministic verifier that never sees model identity selects the first contract-valid answer and cancels the rest | Candidate diversity, early cancellation, verifier-inclusive cost |
+
+There is no agent-to-agent prose. A worker receives a JSON payload plus a JSON
+Schema and must return exactly one JSON object with the exact contract keys.
+Extra keys, markdown fences, and prose are contract violations.
+
+## Typed contracts
+
+| Contract | Output | Verification |
+| --- | --- | --- |
+| `relevance` | `{"relevant": bool}` | Strict bool and exact key set |
+| `entailment` | `{"label": "entailment" | "contradiction" | "neutral"}` | Closed enum and exact key set |
+| `atomicity` | `{"atomic": bool}` | Strict bool and exact key set |
+| `extraction` | `{"quotes": [string, ...]}` | Every quote must be a byte-for-byte passage substring; exact key set, max 3 quotes, min 10 chars, no duplicates |
+| `operation_selection` | `{"operation": enum}` | Closed operation menu and exact key set |
+| `combined` | All five children | Each child is validated independently |
+
+Exact quote verification uses `quote in passage` after JSON decoding. There is
+no case folding, whitespace normalisation, fuzzy match, or semantic shortcut.
+A quote that is a valid substring but not one of the gold spans is counted as
+unsupported; a quote that is not a substring is counted as unverified. Both are
+false support.
+
+## Frozen gold fixtures
+
+`fixtures/gold.json` is pinned by SHA-256 in `config/experiment.json`:
+
+- 10 items, 5 domains (`biology`, `engineering`, `finance`, `law`, `medicine`);
+- 5 microtasks per item, 50 scored microtasks;
+- every extraction gold quote is an exact passage substring;
+- prompts receive only task input fields; item ids, domains, gold objects,
+  gold labels, and other tasks' gold are never rendered;
+- any fixture drift fails the load.
+
+The fixture is small on purpose. It is a pilot gate, not a benchmark. It is
+not copied from the Hy4 Research Gym and does not reuse Hy4 questions, corpus,
+tool menu, or cost protocol.
+
+## Verified Ollama Cloud pins
+
+Verified on 2026-11-23 with free metadata reads only:
+`GET https://ollama.com/api/tags` and `POST https://ollama.com/api/show`.
+No chat completion was sent. Prices are the published peak rows on
+`https://ollama.com/pricing`.
+
+| Arm | Exact API tag | Digest | Capabilities | Context | Thinking | Input / cached / output USD per 1M |
+| --- | --- | --- | --- | ---: | --- | --- |
+| GPT-OSS 20B | `gpt-oss:20b` | `05afbac4bad6` | completion, tools, thinking | 131,072 | values `low/medium/high`, default `medium`; **no `false`** | 0.07 / 0.035 / 0.30 |
+| Nemotron 3 Super | `nemotron-3-super` | `da11955bb451` | completion, thinking, tools | 262,144 | `false/true`, default `true`; `false` supported | 0.015 / 0.015 / 0.60 |
+| MiMo V2.6 Flash | `mimo-v2.6-flash` | `8b2b3c0ae11a` | completion, thinking, tools, vision | 1,048,576 | `false/true`, default `true`; `false` supported | 0.14 / 0.0028 / 0.28 |
+| DeepSeek V4.1 Flash (baseline) | `deepseek-v4.1-flash` | `97308b916fc3` | completion, thinking, tools, vision | 1,048,576 | `false/low/high/max`, default `high`; `false` supported | peak 0.30 / 0.006 / 1.20; off-peak 0.15 / 0.003 / 0.60 |
+| Nemotron 3 Nano | `nemotron-3-nano:30b-cloud` | — | — | — | — | **unavailable** |
+
+Nemotron 3 Nano is a blocker, not an arm: `POST /api/show` returned HTTP 410
+("retired on November 9, 2026") and the tag is absent from `/api/tags`.
+
+GPT-OSS 20B is a blocker for a pure "reasoning off" stratum: `/api/show` lists
+`low`, `medium`, `high` and no `false`. The request builder uses `think: "low"`
+for that arm and reports `reasoning_off: false`. The other three arms use
+`think: false`.
+
+Every request uses `stream: false`, a JSON Schema in `format`, and strict
+`options: {"temperature": 0, "num_predict": <contract limit>, "num_ctx": 4096}`.
+Output bounds are 32 tokens for classifications, 192 for extraction, and 640 for
+the combined call.
+
+## What is measured
+
+Every run reports:
+
+- quality per contract (exact label accuracy; extraction exact match);
+- answered rate, verified-output rate, accuracy on verified outputs;
+- extraction coverage, quote precision, unverified quotes, unsupported quotes,
+  false-support count and rate;
+- per-call p50/p95 wall latency and end-to-end wall time;
+- scored-subtask and call throughput;
+- tokens: input, output, reasoning, cache-read, cache-write;
+- calculated USD (price-list equivalent) and actual USD (only when every call
+  reports `billed_usd`; otherwise `N/A`), separately, never substituted;
+- retries and verifier calls included in all-in cost;
+- Sweycoin milli charges per attempt and per verifier call;
+- requested vs effective concurrency, provider limit, peak in-flight, and
+  whether the request exceeded the assumed plan limit;
+- early-cancelled tasks and cancelled candidate calls.
+
+`calculated_usd_complete_calls` is reported when some cancelled candidates have
+unknown usage, so the all-in calculated total is `N/A` but the complete-call
+subset remains visible.
+
+For live Ollama calls, `prompt_eval_count` maps to input tokens,
+`prompt_eval_cached_count` maps to cache-read tokens, and `eval_count` maps to
+generated output tokens. Reasoning has no separate token field in the chat
+response, so it stays `N/A` rather than being invented. If a provider omits the
+cached-token count, calculated USD is `N/A` rather than assuming a cache miss.
+Ollama's chat response does not report a per-call charge, so `actual_usd` stays
+`N/A`; an account-level `/api/balance` delta would not be a per-call charge.
+
+## Run the offline pilot
+
+```sh
+cd experiments/microtask-swarm
+PYTHONPATH=. python3 -m microtask_swarm verify-fixtures --pretty
+PYTHONPATH=. python3 -m microtask_swarm offline --report reports/offline-pilot.json
+PYTHONPATH=. python3 -m microtask_swarm offline --full --report /tmp/offline-full.json
+PYTHONPATH=. python3 -m microtask_swarm estimate --pretty
+PYTHONPATH=. python3 -m unittest discover -s tests -t . -v
+```
+
+The committed report is compact (comparison fields only). `--full` adds
+per-run execution layers and every quality row; `--include-rows` adds per-task
+quality rows to a full report.
+
+The offline matrix runs 54 combinations: 6 concurrency levels for 4 models in
+single-call and distributed modes, plus 6 competition runs with all 4 models.
+It uses no network. Peak in-flight never exceeds the requested concurrency.
+
+With `jsonschema` and `pyyaml` available, the DAG compiler is reused from
+`swe.microtasks` rather than the local fallback:
+
+```sh
+PYTHONPATH=.:../../python uv run --with jsonschema --with pyyaml \
+  python3 -m unittest tests.test_integration_microtasks -v
+```
+
+## Reuse and intentional gaps
+
+| Concern | Reused | Gap |
+| --- | --- | --- |
+| Microtask DAG validation and topological layers | `swe.microtasks.compile_microtasks` when importable | `swe_native` is not built (no Rust toolchain here), so `MicrotaskBatch.run` was not executed; the pilot uses an equivalent bounded asyncio dispatcher and verifies `peak_in_flight <= concurrency` |
+| Invocation/cancellation semantics | Contract and event shape follow the existing runtime/journal vocabulary | The experiment does not claim journal replay or exactly-once external effects |
+| Sweycoin ledger | Integer milli, reserve/settle/release, idempotency keys, replay | `crates/swe-budget` is Rust-only and has no Python binding; the host meter is a pilot adapter, not a second core ledger |
+| Provider routing | Typed operation menu mirrors a closed decision choice set | The pilot does not add SWD nodes or a second workflow format |
+| Exact quote evidence | Existing evidence discipline: exact, fail-closed | No fuzzy or semantic fallback |
+
+No domain logic was added to `python/swe` or `crates/`.
+
+## Live gate and cost cap
+
+The live runner is implemented but hard-gated. It refuses when:
+
+- `--approve-usd-cap` is missing, zero, negative, or non-finite;
+- `OLLAMA_API_KEY` is absent and `--use-local-daemon` was not supplied;
+- any selected model is unavailable or a pinned tag/digest/capability differs;
+- the planned matrix estimate exceeds the approved cap.
+
+Before dispatch it performs only free metadata reads (`/api/tags`, `/api/show`).
+It then caps effective concurrency at the assumed plan limit (3 for pay-as-you-go
+or Pro; 10 for Max/Team) and reports requested vs effective concurrency.
+
+Conservative estimate for the full live matrix (4 available models, 10 items,
+50 microtasks, 6 concurrency levels, 10% retries, 1,000 input and 500 generated
+output tokens per call including reasoning, 50% cache-read, peak prices):
+
+- planned mixed matrix: **$1.08**;
+- extreme if every call used the DeepSeek baseline: **$2.19**;
+- Sweycoins: **1,551,000 milli (1,551 Sweycoins)** with retries and the
+  deterministic verifier included.
+
+Recommended cap: **$3.00**. This is an estimate, not an approval. No paid call is
+made until the user explicitly approves a cap.
+
+The exact live command is:
+
+```sh
+OLLAMA_API_KEY=... PYTHONPATH=. python3 -m microtask_swarm live \
+  --approve-usd-cap 3.00 \
+  --report reports/live.json
+```
+
+Add `--use-local-daemon` only if the signed-in local daemon exposes every
+selected exact tag; it currently does not expose `gpt-oss:20b`,
+`nemotron-3-super`, or `mimo-v2.6-flash`.
+
+## Exact blockers
+
+1. **No approved USD cap.** The live runner refuses; nothing paid has run.
+2. **No direct cloud credential.** `OLLAMA_API_KEY` is absent. The local daemon
+   is reachable and has 12 models, but not the three non-baseline candidate tags.
+3. **Nemotron 3 Nano is retired.** `nemotron-3-nano:30b-cloud` returns HTTP 410
+   and is absent from `/api/tags`; the Nano arm cannot run.
+4. **GPT-OSS 20B cannot disable reasoning.** Only `low/medium/high` are
+   supported, so it must be reported as a low-reasoning arm, not reasoning-off.
+5. **No Python binding for `swe-budget`.** True core-ledger reuse needs a PyO3
+   binding or a host adapter owned by the core package; the pilot meter is
+   explicitly a host accounting adapter.
+6. **No Rust toolchain / `swe_native`.** The DAG compiler is reused, but the
+   full `MicrotaskBatch.run` path and journal replay were not executed. CI with
+   Rust must run that integration before live dispatch.
+7. **DeepSeek `:1017` is a separate tag.** The baseline is pinned to
+   `deepseek-v4.1-flash` digest `97308b916fc3`. `deepseek-v4.1-flash:1017` has
+   digest `7f8e880bc207`; choosing it requires an explicit pin change.
+
+## Files
+
+| Path | Purpose |
+| --- | --- |
+| `config/experiment.json` | Pinned protocol, models, prices, capabilities, modes, limits, estimate |
+| `fixtures/gold.json` | Frozen domain-diverse gold fixtures, 50 microtasks |
+| `microtask_swarm/contracts.py` | Typed contracts, strict validation, exact quote verification, prompt rendering |
+| `microtask_swarm/fixtures.py` | Fixture loading, leakage checks, task construction |
+| `microtask_swarm/dag.py` | `swe.microtasks` reuse with identical fallback |
+| `microtask_swarm/executor.py` | Bounded dispatcher, retries, competition, early cancellation |
+| `microtask_swarm/offline.py` | Deterministic lexical personas for the offline pilot |
+| `microtask_swarm/scoring.py` | Quality, coverage, false support |
+| `microtask_swarm/cost.py` | Calculated vs actual USD, tokens, cache, retries, verifier |
+| `microtask_swarm/budget.py` | Host Sweycoin meter with core-ledger integer semantics |
+| `microtask_swarm/live.py` | Gated Ollama Cloud client and free preflight |
+| `microtask_swarm/runner.py` | Mode/model/concurrency matrix and report |
+| `microtask_swarm/cli.py` | `offline`, `estimate`, `verify-fixtures`, `live` |
+| `reports/offline-pilot.json` | Generated offline evidence, labelled `offline_heuristic` |
+
+## Hy4 boundary
+
+The Hy4 worktree is read-only. This experiment does not modify it, import it,
+or reuse its Research Gym fixtures. Hy4 compares policy models on a research
+Gym; this experiment compares typed microtask execution modes on a separate
+microtask gold set. The only shared ideas are generic: frozen fixtures, exact
+quote evidence, separate calculated/actual USD, and a pre-dispatch cost gate.

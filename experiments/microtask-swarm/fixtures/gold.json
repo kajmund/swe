@@ -1,0 +1,293 @@
+{
+  "schema_version": 1,
+  "contract_version": "microtask-swarm-gold-v1",
+  "operation_menu": [
+    "check_relevance",
+    "classify_entailment",
+    "check_atomicity",
+    "extract_quote",
+    "answer_question"
+  ],
+  "items": [
+    {
+      "item_id": "bio-01",
+      "domain": "biology",
+      "passage": "The northern leopard frog hibernates at the bottom of ponds during winter. It absorbs oxygen through its skin while submerged. In spring, adults migrate to shallow breeding pools. Tadpoles feed mainly on algae before metamorphosis.",
+      "question": "How does the northern leopard frog obtain oxygen while hibernating?",
+      "tasks": {
+        "relevance": {
+          "query": "How does the northern leopard frog obtain oxygen while hibernating?",
+          "gold": {"relevant": true}
+        },
+        "entailment": {
+          "hypothesis": "The northern leopard frog absorbs oxygen through its skin while submerged.",
+          "gold": {"label": "entailment"}
+        },
+        "atomicity": {
+          "claim": "The northern leopard frog hibernates in ponds and absorbs oxygen through its skin.",
+          "gold": {"atomic": false}
+        },
+        "extraction": {
+          "gold": {"quotes": ["It absorbs oxygen through its skin while submerged."]}
+        },
+        "operation_selection": {
+          "context": "The passage may contain one sentence that directly answers the question.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "extract_quote"}
+        }
+      }
+    },
+    {
+      "item_id": "bio-02",
+      "domain": "biology",
+      "passage": "Some bacteria transfer DNA to neighboring cells through a process called conjugation. A conjugative pilus connects the donor and recipient. The transferred DNA is often a plasmid that carries antibiotic-resistance genes.",
+      "question": "What structure connects the donor and recipient bacterium during conjugation?",
+      "tasks": {
+        "relevance": {
+          "query": "What structure connects the donor and recipient bacterium during conjugation?",
+          "gold": {"relevant": true}
+        },
+        "entailment": {
+          "hypothesis": "Conjugation always kills the recipient cell.",
+          "gold": {"label": "contradiction"}
+        },
+        "atomicity": {
+          "claim": "Conjugation transfers DNA.",
+          "gold": {"atomic": true}
+        },
+        "extraction": {
+          "gold": {"quotes": ["A conjugative pilus connects the donor and recipient."]}
+        },
+        "operation_selection": {
+          "context": "The task asks whether a stated hypothesis follows from the passage.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "classify_entailment"}
+        }
+      }
+    },
+    {
+      "item_id": "law-01",
+      "domain": "law",
+      "passage": "Under the agreement, a party may terminate for convenience only after giving thirty days' written notice. Termination for cause requires a material breach that remains uncured for fifteen days after notice. The limitation of liability excludes indirect damages.",
+      "question": "How much written notice is required to terminate for convenience?",
+      "tasks": {
+        "relevance": {
+          "query": "How much written notice is required to terminate for convenience?",
+          "gold": {"relevant": true}
+        },
+        "entailment": {
+          "hypothesis": "A party may terminate for convenience after thirty days' written notice.",
+          "gold": {"label": "entailment"}
+        },
+        "atomicity": {
+          "claim": "A party may terminate for convenience and for cause.",
+          "gold": {"atomic": false}
+        },
+        "extraction": {
+          "gold": {"quotes": ["Under the agreement, a party may terminate for convenience only after giving thirty days' written notice."]}
+        },
+        "operation_selection": {
+          "context": "The contract question requires the exact sentence that states a notice period.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "extract_quote"}
+        }
+      }
+    },
+    {
+      "item_id": "law-02",
+      "domain": "law",
+      "passage": "The tribunal held that the arbitration clause survived termination of the underlying contract. It reasoned that the clause was separable from the obligations it governed. The dissenting judge would have remanded for a fresh determination of intent.",
+      "question": "Did the arbitration clause survive termination?",
+      "tasks": {
+        "relevance": {
+          "query": "What were the dissenting judge's policy preferences?",
+          "gold": {"relevant": false}
+        },
+        "entailment": {
+          "hypothesis": "The arbitration clause did not survive termination.",
+          "gold": {"label": "contradiction"}
+        },
+        "atomicity": {
+          "claim": "The arbitration clause survived termination.",
+          "gold": {"atomic": true}
+        },
+        "extraction": {
+          "gold": {"quotes": ["The tribunal held that the arbitration clause survived termination of the underlying contract."]}
+        },
+        "operation_selection": {
+          "context": "The task asks whether a stated hypothesis follows from the passage.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "classify_entailment"}
+        }
+      }
+    },
+    {
+      "item_id": "finance-01",
+      "domain": "finance",
+      "passage": "The fund's expense ratio fell to 0.12 percent after the advisor waived its management fee for six months. The waiver does not apply to shareholder servicing costs. Performance figures assume reinvestment of distributions.",
+      "question": "What caused the fund's expense ratio to fall?",
+      "tasks": {
+        "relevance": {
+          "query": "What is the fund's benchmark index?",
+          "gold": {"relevant": false}
+        },
+        "entailment": {
+          "hypothesis": "The advisor waived its management fee for six months.",
+          "gold": {"label": "entailment"}
+        },
+        "atomicity": {
+          "claim": "The fund's expense ratio fell to 0.12 percent.",
+          "gold": {"atomic": true}
+        },
+        "extraction": {
+          "gold": {"quotes": ["The fund's expense ratio fell to 0.12 percent after the advisor waived its management fee for six months."]}
+        },
+        "operation_selection": {
+          "context": "The passage contains a sentence that directly states a cause.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "extract_quote"}
+        }
+      }
+    },
+    {
+      "item_id": "finance-02",
+      "domain": "finance",
+      "passage": "Bond yields rise when prices fall. The central bank purchased long-dated government bonds in March. Analysts disagreed about whether the purchases lowered ten-year yields.",
+      "question": "Did the central bank purchases lower ten-year yields?",
+      "tasks": {
+        "relevance": {
+          "query": "Did the central bank purchases lower ten-year yields?",
+          "gold": {"relevant": true}
+        },
+        "entailment": {
+          "hypothesis": "The purchases definitively lowered ten-year yields.",
+          "gold": {"label": "neutral"}
+        },
+        "atomicity": {
+          "claim": "The central bank purchased long-dated government bonds in March.",
+          "gold": {"atomic": true}
+        },
+        "extraction": {
+          "gold": {"quotes": ["Analysts disagreed about whether the purchases lowered ten-year yields."]}
+        },
+        "operation_selection": {
+          "context": "The task asks whether a claim is a single verifiable proposition.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "check_atomicity"}
+        }
+      }
+    },
+    {
+      "item_id": "medicine-01",
+      "domain": "medicine",
+      "passage": "Patients in the trial received either the vaccine or a saline placebo. The vaccine reduced symptomatic infection by 62 percent over twelve months. Local injection-site pain was the most common adverse event. Severe allergic reactions occurred in two participants.",
+      "question": "By how much did the vaccine reduce symptomatic infection?",
+      "tasks": {
+        "relevance": {
+          "query": "By how much did the vaccine reduce symptomatic infection?",
+          "gold": {"relevant": true}
+        },
+        "entailment": {
+          "hypothesis": "The vaccine had no effect on symptomatic infection.",
+          "gold": {"label": "contradiction"}
+        },
+        "atomicity": {
+          "claim": "The vaccine reduced symptomatic infection by 62 percent over twelve months.",
+          "gold": {"atomic": true}
+        },
+        "extraction": {
+          "gold": {"quotes": ["The vaccine reduced symptomatic infection by 62 percent over twelve months."]}
+        },
+        "operation_selection": {
+          "context": "The question asks for a quantitative result stated in the passage.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "extract_quote"}
+        }
+      }
+    },
+    {
+      "item_id": "medicine-02",
+      "domain": "medicine",
+      "passage": "The guideline recommends screening adults aged 45 to 75 with average risk. Screening may stop after age 75 when life expectancy is less than ten years. Patients with a family history may begin earlier.",
+      "question": "At what age may average-risk adults stop screening when life expectancy is under ten years?",
+      "tasks": {
+        "relevance": {
+          "query": "What is the cost of screening?",
+          "gold": {"relevant": false}
+        },
+        "entailment": {
+          "hypothesis": "Average-risk adults should never stop screening.",
+          "gold": {"label": "contradiction"}
+        },
+        "atomicity": {
+          "claim": "The guideline recommends screening adults aged 45 to 75 with average risk.",
+          "gold": {"atomic": true}
+        },
+        "extraction": {
+          "gold": {"quotes": ["Screening may stop after age 75 when life expectancy is less than ten years."]}
+        },
+        "operation_selection": {
+          "context": "The task asks whether a document sentence answers a specific question.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "check_relevance"}
+        }
+      }
+    },
+    {
+      "item_id": "engineering-01",
+      "domain": "engineering",
+      "passage": "The bridge's deck expansion joints accommodate thermal movement of up to 120 millimeters. Bearings transfer vertical loads to the piers. Inspectors found corrosion on two bearings during the 2025 survey.",
+      "question": "What is the maximum thermal movement accommodated by the expansion joints?",
+      "tasks": {
+        "relevance": {
+          "query": "What is the maximum thermal movement accommodated by the expansion joints?",
+          "gold": {"relevant": true}
+        },
+        "entailment": {
+          "hypothesis": "The expansion joints accommodate up to 120 millimeters of thermal movement.",
+          "gold": {"label": "entailment"}
+        },
+        "atomicity": {
+          "claim": "Inspectors found corrosion and the bearings transfer vertical loads.",
+          "gold": {"atomic": false}
+        },
+        "extraction": {
+          "gold": {"quotes": ["The bridge's deck expansion joints accommodate thermal movement of up to 120 millimeters."]}
+        },
+        "operation_selection": {
+          "context": "The question asks for a numeric limit stated in the passage.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "extract_quote"}
+        }
+      }
+    },
+    {
+      "item_id": "engineering-02",
+      "domain": "engineering",
+      "passage": "The pump's controller shuts down the motor if discharge pressure exceeds 8 bar. A redundant pressure sensor provides a second signal. The maintenance manual requires calibration every six months.",
+      "question": "What happens if discharge pressure exceeds 8 bar?",
+      "tasks": {
+        "relevance": {
+          "query": "What is the pump's maximum flow rate?",
+          "gold": {"relevant": false}
+        },
+        "entailment": {
+          "hypothesis": "The controller shuts down the motor when discharge pressure exceeds 8 bar.",
+          "gold": {"label": "entailment"}
+        },
+        "atomicity": {
+          "claim": "The controller shuts down the motor if pressure exceeds 8 bar.",
+          "gold": {"atomic": true}
+        },
+        "extraction": {
+          "gold": {"quotes": ["The pump's controller shuts down the motor if discharge pressure exceeds 8 bar."]}
+        },
+        "operation_selection": {
+          "context": "No typed microtask isolates a direct answer; the host should answer the user directly.",
+          "operations": ["check_relevance", "classify_entailment", "check_atomicity", "extract_quote", "answer_question"],
+          "gold": {"operation": "answer_question"}
+        }
+      }
+    }
+  ]
+}

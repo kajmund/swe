@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "experiment_id": "swe-microtask-swarm",
+  "status": "OFFLINE_PREPARED_NOT_LIVE",
+  "base_commit": "eff1c7e8943dd64827fb4916719ced5515bf3db5",
+  "created_at": "2026-11-23",
+  "fixtures": {
+    "gold": "fixtures/gold.json",
+    "sha256": "be95745f8bed6981536c8c1592304be8afd02dfc4d78776eb4495f3138f0ad06",
+    "contract_version": "microtask-swarm-gold-v1",
+    "item_count": 10,
+    "microtask_count_per_item": 5,
+    "domains": ["biology", "engineering", "finance", "law", "medicine"],
+    "leakage_rule": "Prompts contain task input fields only. Gold labels, gold quotes, item ids, domains, and other tasks' gold are never rendered."
+  },
+  "contracts": {
+    "relevance": {
+      "max_output_tokens": 32,
+      "sweycoins_milli": 250
+    },
+    "entailment": {
+      "max_output_tokens": 32,
+      "sweycoins_milli": 250
+    },
+    "atomicity": {
+      "max_output_tokens": 32,
+      "sweycoins_milli": 250
+    },
+    "extraction": {
+      "max_output_tokens": 192,
+      "max_quotes": 3,
+      "min_quote_chars": 10,
+      "sweycoins_milli": 1000
+    },
+    "operation_selection": {
+      "max_output_tokens": 32,
+      "sweycoins_milli": 250
+    },
+    "combined": {
+      "max_output_tokens": 640,
+      "sweycoins_milli": 1250
+    },
+    "verifier": {
+      "kind": "deterministic",
+      "model_id": null,
+      "sweycoins_milli": 500
+    }
+  },
+  "modes": {
+    "single_call": {
+      "description": "One combined call per item. All five typed answers are returned in one JSON object.",
+      "models": "all_available",
+      "max_attempts": 2,
+      "early_cancel": false
+    },
+    "distributed_independent": {
+      "description": "One independent call per typed microtask. Tasks share no prose and no intermediate state.",
+      "models": "all_available",
+      "max_attempts": 2,
+      "early_cancel": false
+    },
+    "heterogeneous_competition": {
+      "description": "All available models compete per microtask. A deterministic verifier that never sees candidate identity selects the first contract-valid answer; remaining candidates are cancelled.",
+      "models": "all_available",
+      "max_attempts": 2,
+      "early_cancel": true,
+      "selection": "first_verified",
+      "verifier": "deterministic"
+    }
+  },
+  "concurrency_levels": [1, 2, 4, 8, 16, 32],
+  "provider": {
+    "id": "ollama-cloud",
+    "chat_endpoint": "https://ollama.com/api/chat",
+    "tags_endpoint": "https://ollama.com/api/tags",
+    "show_endpoint": "https://ollama.com/api/show",
+    "pricing_url": "https://ollama.com/pricing",
+    "docs_url": "https://docs.ollama.com/api/chat",
+    "verified_at": "2026-11-23",
+    "meter": "usage credits per published model row",
+    "configured_plan": null,
+    "assumed_plan": "pay_as_you_go",
+    "plans": {
+      "pay_as_you_go": {"concurrency": 3, "included_credits_usd_per_month": "0"},
+      "pro": {"concurrency": 3, "included_credits_usd_per_month": "60"},
+      "max": {"concurrency": 10, "included_credits_usd_per_month": "300"},
+      "team": {"concurrency": 10, "included_credits_usd_per_month": "1000"}
+    },
+    "assumed_concurrency_limit": 3,
+    "queue_note": "Ollama queues requests beyond the plan concurrency limit. The live runner caps effective concurrency at the assumed limit and reports requested versus effective concurrency."
+  },
+  "models": [
+    {
+      "id": "gpt-oss-20b",
+      "provider": "ollama-cloud",
+      "api_model": "gpt-oss:20b",
+      "cli_model": "gpt-oss:20b",
+      "catalog_digest": "05afbac4bad6",
+      "catalog_modified_at": "2025-08-05T00:00:00Z",
+      "available": true,
+      "capabilities": ["completion", "tools", "thinking"],
+      "context_window": 131072,
+      "thinking": {
+        "values": ["low", "medium", "high"],
+        "default": "medium",
+        "off_supported": false,
+        "selected": "low",
+        "reasoning_off": false,
+        "note": "POST /api/show lists low/medium/high and no false value. Reasoning cannot be switched off; low is the minimum."
+      },
+      "prices_usd_per_million": {
+        "input": "0.07",
+        "output": "0.30",
+        "cache_input": "0.035"
+      },
+      "price_period_required": false,
+      "credential_env": "OLLAMA_API_KEY",
+      "verified_at": "2026-11-23",
+      "evidence": "GET /api/tags digest 05afbac4bad6; POST /api/show capabilities and context_length 131072; pricing row gpt-oss:20b."
+    },
+    {
+      "id": "nemotron-3-super",
+      "provider": "ollama-cloud",
+      "api_model": "nemotron-3-super",
+      "cli_model": "nemotron-3-super:cloud",
+      "catalog_digest": "da11955bb451",
+      "catalog_modified_at": "2026-03-11T00:00:00Z",
+      "available": true,
+      "capabilities": ["completion", "thinking", "tools"],
+      "context_window": 262144,
+      "thinking": {
+        "values": [false, true],
+        "default": true,
+        "off_supported": true,
+        "selected": false,
+        "reasoning_off": true,
+        "note": "POST /api/show lists false and true. think=false is supported."
+      },
+      "prices_usd_per_million": {
+        "input": "0.015",
+        "output": "0.60",
+        "cache_input": "0.015"
+      },
+      "price_period_required": false,
+      "credential_env": "OLLAMA_API_KEY",
+      "verified_at": "2026-11-23",
+      "evidence": "GET /api/tags digest da11955bb451; POST /api/show capabilities, context_length 262144, thinking values false/true; pricing row nemotron-3-super."
+    },
+    {
+      "id": "nemotron-3-nano",
+      "provider": "ollama-cloud",
+      "api_model": "nemotron-3-nano:30b-cloud",
+      "cli_model": "nemotron-3-nano:30b-cloud",
+      "catalog_digest": null,
+      "available": false,
+      "reason": "POST /api/show returned HTTP 410: nemotron-3-nano:30b was retired on 2026-11-09. The tag is absent from GET /api/tags. No price row exists.",
+      "verified_at": "2026-11-23",
+      "evidence": "GET /api/tags has no nano entry; POST /api/show HTTP 410 retirement notice."
+    },
+    {
+      "id": "mimo-v2.6-flash",
+      "provider": "ollama-cloud",
+      "api_model": "mimo-v2.6-flash",
+      "cli_model": "mimo-v2.6-flash:cloud",
+      "catalog_digest": "8b2b3c0ae11a",
+      "catalog_modified_at": "2026-09-22T09:00:00-07:00",
+      "available": true,
+      "capabilities": ["completion", "thinking", "tools", "vision"],
+      "context_window": 1048576,
+      "thinking": {
+        "values": [false, true],
+        "default": true,
+        "off_supported": true,
+        "selected": false,
+        "reasoning_off": true,
+        "note": "POST /api/show lists false and true. think=false is supported."
+      },
+      "prices_usd_per_million": {
+        "input": "0.14",
+        "output": "0.28",
+        "cache_input": "0.0028"
+      },
+      "price_period_required": false,
+      "credential_env": "OLLAMA_API_KEY",
+      "verified_at": "2026-11-23",
+      "evidence": "GET /api/tags digest 8b2b3c0ae11a; POST /api/show capabilities, context_length 1048576, thinking values false/true; pricing row mimo-v2.6-flash."
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "provider": "ollama-cloud",
+      "api_model": "deepseek-v4.1-flash",
+      "cli_model": "deepseek-v4.1-flash:cloud",
+      "catalog_digest": "97308b916fc3",
+      "catalog_modified_at": "2026-09-10T03:00:00Z",
+      "available": true,
+      "capabilities": ["completion", "thinking", "tools", "vision"],
+      "context_window": 1048576,
+      "thinking": {
+        "values": [false, "low", "high", "max"],
+        "default": "high",
+        "off_supported": true,
+        "selected": false,
+        "reasoning_off": true,
+        "note": "POST /api/show lists false, low, high, max. think=false is supported."
+      },
+      "prices_usd_per_million": {
+        "input": "0.30",
+        "output": "1.20",
+        "cache_input": "0.006",
+        "input_off_peak": "0.15",
+        "output_off_peak": "0.60",
+        "cache_input_off_peak": "0.003"
+      },
+      "price_period_required": true,
+      "credential_env": "OLLAMA_API_KEY",
+      "verified_at": "2026-11-23",
+      "evidence": "GET /api/tags digest 97308b916fc3; POST /api/show capabilities, context_length 1048576, thinking values false/low/high/max; pricing rows for peak and off-peak. The separate :1017 tag has digest 7f8e880bc207 and is not this arm."
+    }
+  ],
+  "baseline_model": "deepseek-v4.1-flash",
+  "cost_control": {
+    "approval": null,
+    "recommended_cap_usd": "3.00",
+    "no_paid_dispatch": true,
+    "reason": "No paid dispatch is approved. The live runner refuses without an explicit positive --approve-usd-cap and a credential. Offline runs never construct a network request.",
+    "estimate": {
+      "available_model_count": 4,
+      "items": 10,
+      "microtasks_per_item": 5,
+      "concurrency_levels": 6,
+      "single_call_calls_per_model_per_sweep": 10,
+      "distributed_calls_per_model_per_sweep": 50,
+      "competition_candidate_calls_per_sweep": 200,
+      "deterministic_verifier_calls_per_sweep": 0,
+      "retry_rate": "0.10",
+      "input_tokens_per_call": 1000,
+      "output_tokens_per_call": 500,
+      "reasoning_tokens_per_call": 200,
+      "cache_read_fraction": "0.5",
+      "price_period": "peak",
+      "note": "Reasoning tokens are recorded separately and are not independently priced. Output_tokens_per_call includes the provider-reported generated tokens used for billing. The sweep repeats the suite at each concurrency level; the estimate multiplies by concurrency_levels."
+    }
+  },
+  "sweycoins": {
+    "run_allocated_milli": 250000,
+    "retries_charged": true,
+    "verifier_charged": true,
+    "note": "Host meter uses integer milli-Sweycoins with reserve/settle/release semantics. SWE core swe-budget is Rust-only and has no Python binding in this environment; that binding is a tracked blocker, not something this experiment reimplements as core."
+  },
+  "measurement": {
+    "simulated_latency_ms": 1.0,
+    "timeout_seconds": 5,
+    "retry_backoff_ms": 0,
+    "latency_method": "Nearest-rank p50/p95 over per-call wall latency; end-to-end wall includes verifier and retries.",
+    "quality_method": "Per-contract exact label accuracy; extraction exact match plus quote recall/precision.",
+    "coverage_method": "Answered tasks divided by all tasks; extraction coverage is gold quotes covered by a verified matching candidate quote divided by gold quotes.",
+    "false_support_method": "Extraction quotes that are not exact substrings (unverified) plus exact substrings that do not overlap a gold quote (unsupported), divided by all emitted quotes.",
+    "actual_vs_calculated": "actual_usd is reported only when every call reports billed_usd. calculated_usd is the published price-list equivalent. They are never substituted for each other.",
+    "sweycoins_method": "Integer milli-Sweycoins charged per attempt and per verifier call; retries are separate charges."
+  }
+}
