@@ -6,7 +6,14 @@ existing Gym values. SWE core is not modified.
 
 Status: schema diagnosis `runs/20261123T213131Z` is a separate $2 pool.
 `refuse_live_dispatch` still refuses an uncapped dispatch. Pydantic AI is used
-only inside this experiment and does not schedule SWE work.
+only inside this experiment and does not schedule SWE work. The semantic
+contract in `semantic_contract.py` is an offline mock: strict output, a
+source-text check, then one explicit JEV call. Official docs fetched
+2026-11-23 (https://pydantic.dev/docs/ai/models/typesafe/) describe
+`TypeSafeModel` for Jev. Installed 2.54.0 contains that module, but importing
+it requires `typesafe-sdk`, which is not installed. Installed 1.63.0 has
+neither `typesafe` nor `system_one`. `SystemOneModel` in 2.54 is the generic
+`/v1/systemone` client and is not called by this PoC.
 
 ## Frozen inputs
 
