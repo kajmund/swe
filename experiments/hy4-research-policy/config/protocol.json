@@ -60,6 +60,20 @@
     "lexical_baseline_source": "benchmarks/results/baseline.json",
     "same_for_every_arm": true
   },
+  "quality_threshold": {
+    "same_for_every_arm": true,
+    "min_evidence_recall": "1",
+    "min_evidence_precision": "1",
+    "max_unsupported_claims": 0,
+    "require_stop_correct": true,
+    "allow_false_completeness": false
+  },
+  "cost_comparison": {
+    "baseline_arm": "deepseek-flash",
+    "cache_reported_separately": true,
+    "actual_usd_requires_provider_charge": true,
+    "subscription_is_not_marginal_cost": true
+  },
   "evaluator": {
     "role": "independent_fixed",
     "live_model": "jev-1.13.0",

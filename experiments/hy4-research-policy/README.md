@@ -91,6 +91,25 @@ Sweycoin worst case inside those assumptions is 11 750 milli per question and
 250 000 milli arm allocation. The existing USD cap is 25. The estimate fitting
 under that cap is not approval to dispatch.
 
+## Cost comparison against DeepSeek Flash
+
+Every scored trace carries a cost record. Input, output, reasoning, cache-read
+and cache-write tokens are logged only when the provider field is present.
+Cache is a separate calculated line: cached input is removed from the uncached
+input line before either price is applied. Reasoning tokens are logged and are
+not given a price, because neither verified price list has a reasoning row.
+
+`calculated_usd` is the price-list equivalent. It is `N/A` when a token count
+needed for that total is missing, and for DeepSeek Flash also when the call
+does not say `peak` or `off_peak`. `actual_usd` is the provider charge. It is
+`N/A` unless every call in the question reports `billed_usd`. Ollama plan name
+and request quota stay in `quota` and are not divided into a dollar cost.
+`usd_per_question` and `usd_per_verified_evidence` use `actual_usd` only. The
+second is `N/A` when no facit quote was verified. Both arms use the same
+Sweycoin allocation, the same USD cap, and the quality threshold in
+`quality_threshold`. A delta against DeepSeek Flash is `N/A` when either side
+lacks the corresponding amount.
+
 ## Run the offline tests
 
 ```sh

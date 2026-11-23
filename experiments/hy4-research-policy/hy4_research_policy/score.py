@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from hy4_research_policy.cost import account_question
+
 Pair = tuple[str, str]
 
 
@@ -133,7 +135,7 @@ def score_trace(
         or (answer_complete and conclusion != "ANSWERED")
     )
     allocated = int(protocol["budget"]["per_question_allocated_milli"])
-    return {
+    scored = {
         "question_id": question["question_id"],
         "arm_id": trace["arm_id"],
         "evidence_recall": recall,
@@ -152,3 +154,5 @@ def score_trace(
         "over_sweycoin_budget": spent > allocated,
         "latency_ms": latency,
     }
+    scored["cost"] = account_question(trace, scored, protocol)
+    return scored
