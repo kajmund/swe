@@ -148,6 +148,67 @@ PYTHONPATH=.:../../python uv run --with jsonschema --with pyyaml \
   python3 -m unittest tests.test_integration_microtasks -v
 ```
 
+## Live Ollama Cloud results (2026-11-23)
+
+Run under the approved **$3.00** cap against `https://ollama.com/api/chat`.
+Live concurrency was 1/2/3 because the Ollama plan allows 3 concurrent
+requests; requested 4/8/16/32 are covered by the offline sweep and reported as
+provider-capped. The matrix produced 27 runs, 1,333 calls, 13 retries, and 449
+early-cancelled candidates. The compact evidence is
+[`reports/live-pilot.json`](reports/live-pilot.json).
+
+### Best run per mode
+
+| Mode | Model | Conc. | Accuracy | Coverage | False support | p95 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `single_call` | GPT-OSS 20B | 1 | 0.80 | 1.00 | 0.23 | 20.7 s |
+| `distributed_independent` | Nemotron 3 Super | 2 | **0.92** | 0.90 | 0.10 | 14.9 s |
+| `heterogeneous_competition` | all four | 3 | 0.90 | 0.90 | 0.10 | 53.4 s |
+
+### Per-model comparison (best run per model/mode)
+
+| Model | Single acc. | Distributed acc. | Single cov. | Distributed cov. | Single false support | Distributed false support |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| DeepSeek V4.1 Flash | 0.72 | 0.90 | 0.90 | 0.90 | 0.10 | 0.10 |
+| GPT-OSS 20B | 0.80 | 0.86 | 1.00 | 0.90 | 0.23 | 0.10 |
+| MiMo V2.6 Flash | 0.76 | **0.92** | 1.00 | 0.90 | 0.09 | 0.10 |
+| Nemotron 3 Super | 0.68 | **0.92** | 0.70 | 0.90 | 0.30 | 0.10 |
+
+Distributed typed microtasks beat the single combined call for every model.
+The largest difference is `operation_selection`: DeepSeek moved from 0.10
+single-call to 0.70 distributed, Nemotron from 0.10 to 0.90, MiMo from 0.40 to
+0.80, and GPT-OSS from 0.40 to 0.60. Extraction was already strong in both
+modes (0.8–0.9), and relevance was 1.00 for every best run.
+
+Heterogeneous competition reached 0.90 at concurrency 3, slightly below the
+best distributed arm (0.92), while using more calls and much more wall time
+(p95 53.4 s versus 14.9 s). It selected one verified candidate per task and
+cancelled the rest; on this small fixture it did not produce a quality win over
+the best single-model distributed arm. It remains useful as a fail-closed
+diversity experiment, not as a default.
+
+Cost and accounting:
+
+- calculated price-list equivalent across all live runs: **~$0.017**
+  (complete-usage subset ~$0.022);
+- `actual_usd`: **N/A**; Ollama's chat response does not report a per-call
+  charge;
+- Sweycoins across the matrix: **637,750 milli (637.75)** including retries,
+  verifier logic, and pending/cancelled calls;
+- the approved $3.00 cap was not approached.
+
+The GPT-OSS output-headroom fix was measured directly: before it, distributed
+GPT-OSS scored 0.18 with 40 retries; after it, a targeted distributed run
+scored 0.86 with 0 retries. The full matrix then produced only 13 retries in
+1,333 calls.
+
+Caveats: 10 items / 50 microtasks, one run per configuration, so this is a
+pilot rather than a statistically powered benchmark. Temperature is 0, but the
+provider still showed run-to-run variation. GPT-OSS is low-reasoning, not
+reasoning-off, so its arm is not strictly comparable on reasoning cost.
+Reasoning tokens are not separately reported by Ollama, and live 4/8/16/32
+were not dispatched because of the plan's 3-request limit.
+
 ## Reuse and intentional gaps
 
 | Concern | Reused | Gap |
