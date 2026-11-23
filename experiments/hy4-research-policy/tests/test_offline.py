@@ -42,8 +42,17 @@ def test_frozen_questions_and_corpus_match_the_gym_manifests() -> None:
 
 def test_arms_share_one_budget_and_the_frozen_tool_menu() -> None:
     protocol = load_protocol()
+    raw = (EXPERIMENT / "config" / "protocol.json").read_text(encoding="utf-8").lower()
+    assert "tencent" not in raw
+    assert "tokenhub" not in raw
     assert [arm["id"] for arm in protocol["arms"]] == ["hy4", "hy4-flash", "deepseek-flash"]
-    assert [arm["model"] for arm in protocol["arms"]] == ["hy4", "hy4-flash", "deepseek-flash"]
+    hy4 = protocol["arms"][0]
+    assert hy4["provider"] == "ollama-cloud"
+    assert hy4["api_model"] == "hy4"
+    assert hy4["cli_model"] == "hy4:cloud"
+    assert hy4["available"] is True
+    assert protocol["arms"][1]["available"] is False
+    assert protocol["arms"][1]["model"] is None
     assert protocol["budget"]["same_for_every_arm"] is True
     assert protocol["budget"]["per_question_allocated_milli"] == 50_000
     assert protocol["budget"]["suite_allocated_milli"] == 250_000
@@ -57,9 +66,10 @@ def test_arms_share_one_budget_and_the_frozen_tool_menu() -> None:
 
 def test_estimate_is_deterministic_and_below_the_existing_usd_cap() -> None:
     estimate = estimate_matrix(load_protocol())
-    assert estimate["approval_usd"] == "2.96064"
-    assert estimate["low_usd"] == "1.04928"
-    assert estimate["discounted_high_usd"] == "1.92576"
+    assert estimate["billable_arms"] == ["hy4", "deepseek-flash"]
+    assert estimate["unavailable_arms"] == ["hy4-flash"]
+    assert estimate["approval_usd"] == "2.7584"
+    assert estimate["low_usd"] == "0.98192"
     assert estimate["jev_usd"] == "0.02688"
     assert estimate["sweycoins_milli_per_question"] == 11_750
     assert estimate["sweycoins_milli_per_arm"] == 58_750
@@ -157,11 +167,11 @@ def test_live_dispatch_and_secret_values_stay_closed() -> None:
         refuse_live_dispatch()
     status = credential_status(
         load_protocol(),
-        {"DEEPSEEK_API_KEY": "secret-value", "TOKENHUB_API_KEY": "  ", "TYPESAFE_API_KEY": "x"},
+        {"DEEPSEEK_API_KEY": "secret-value", "OLLAMA_API_KEY": "  ", "TYPESAFE_API_KEY": "x"},
     )
     assert status == {
         "DEEPSEEK_API_KEY": "present",
-        "TOKENHUB_API_KEY": "absent",
+        "OLLAMA_API_KEY": "absent",
         "TYPESAFE_API_KEY": "present",
     }
     assert "secret-value" not in json.dumps(status)

@@ -19,7 +19,11 @@ def refuse_live_dispatch() -> None:
 def credential_status(protocol: dict[str, Any], environ: dict[str, str]) -> dict[str, str]:
     """Report whether named credentials are non-empty. Values are not returned."""
 
-    names = {str(arm["credential_env"]) for arm in protocol["arms"]}
+    names = {
+        str(arm["credential_env"])
+        for arm in protocol["arms"]
+        if arm.get("credential_env")
+    }
     names.add(str(protocol["evaluator"]["credential_env"]))
     return {
         name: "present" if environ.get(name, "").strip() else "absent" for name in sorted(names)

@@ -73,57 +73,67 @@
     "credential_env": "TYPESAFE_API_KEY",
     "alias_note": "GET /v1/models on 2026-11-23 listed jev-latest and jev-preview only. The versioned id is the configured Research pin. No System One call was made."
   },
+  "ollama_cloud": {
+    "catalog": "https://ollama.com/api/tags",
+    "chat": "https://ollama.com/api/chat",
+    "docs": "https://docs.ollama.com/cloud/models",
+    "pricing_url": "https://ollama.com/pricing",
+    "verified_at": "2026-11-23",
+    "meter": "usage credits per million tokens at the published model row",
+    "off_peak_window": "outside 12:00-18:00 UTC on weekdays, and all day on weekends, only where the pricing table has an explicit off-peak row",
+    "concurrency": {"payg": 3, "pro": 3, "max": 10, "team": 10},
+    "included_credits_usd_per_month": {"payg": "0", "pro": "60", "max": "300", "team": "1000"},
+    "account_plan": "not present in the local daemon GET /api/usage response"
+  },
   "arms": [
     {
       "id": "hy4",
+      "available": true,
+      "provider": "ollama-cloud",
+      "api_model": "hy4",
+      "cli_model": "hy4:cloud",
       "model": "hy4",
-      "provider": "tencent-tokenhub",
-      "endpoint": "https://tokenhub.tencentcloudmaas.com/v1/chat/completions",
-      "models_endpoint": "https://tokenhub.tencentcloudmaas.com/v1/models",
-      "pricing_url": "https://www.tencentcloud.com/document/product/1300/78937",
+      "endpoint": "https://ollama.com/api/chat",
+      "models_endpoint": "https://ollama.com/api/tags",
+      "library_url": "https://ollama.com/library/hy4:cloud",
+      "pricing_url": "https://ollama.com/pricing",
       "verified_at": "2026-11-23",
+      "catalog_digest": "1de429535565",
+      "catalog_modified_at": "2026-11-19T15:00:00-08:00",
       "prices_usd_per_million": {
         "input": "0.834",
         "output": "2.501",
         "cache_input": "0.042"
       },
-      "temporary_discount_fraction": "0.5",
-      "temporary_discount_until": "2026-12-31T23:59:59+08:00",
+      "price_basis": "Ollama pricing table, single row, no separate off-peak row",
       "reasoning": {
+        "library_marks_thinking": true,
         "preference": "disabled",
-        "documented_control": "Open-weight card uses reasoning_effort=no_think. TokenHub field was not verified; no completion was sent."
+        "documented_control": "No chat completion was sent, so the Ollama request field that disables thinking is unverified."
       },
-      "credential_env": "TOKENHUB_API_KEY"
+      "credential_env": "OLLAMA_API_KEY"
     },
     {
       "id": "hy4-flash",
-      "model": "hy4-flash",
-      "provider": "tencent-tokenhub",
-      "endpoint": "https://tokenhub.tencentcloudmaas.com/v1/chat/completions",
-      "models_endpoint": "https://tokenhub.tencentcloudmaas.com/v1/models",
-      "pricing_url": "https://www.tencentcloud.com/document/product/1300/78937",
+      "available": false,
+      "provider": "ollama-cloud",
+      "model": null,
+      "api_model": null,
+      "cli_model": null,
       "verified_at": "2026-11-23",
-      "prices_usd_per_million": {
-        "input": "0.070",
-        "output": "0.281",
-        "cache_input": "0.003"
-      },
-      "temporary_discount_fraction": "0.5",
-      "temporary_discount_until": "2026-11-30T12:00:00+08:00",
-      "reasoning": {
-        "preference": "disabled",
-        "documented_control": "Hugging Face Hy4 flash card uses reasoning_effort=no_think. TokenHub field was not verified; no completion was sent."
-      },
-      "credential_env": "TOKENHUB_API_KEY"
+      "reason": "GET https://ollama.com/api/tags listed 25 cloud models and no Hy4 Flash tag. https://ollama.com/library/hy4-flash returned 404. Ollama search shows dhiltgen/hy4-flash as a local weight, which was not pulled."
     },
     {
       "id": "deepseek-flash",
+      "available": true,
       "model": "deepseek-flash",
       "model_version": "DeepSeek-V4.1-Flash-1017",
       "provider": "deepseek",
       "endpoint": "https://api.deepseek.com/chat/completions",
       "models_endpoint": "https://api.deepseek.com/models",
       "pricing_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "ollama_cli_model": "deepseek-v4.1-flash:cloud",
+      "ollama_api_model": "deepseek-v4.1-flash:1017",
       "verified_at": "2026-11-23",
       "prices_usd_per_million": {
         "input": "0.30",
@@ -133,8 +143,7 @@
         "output_off_peak": "0.60",
         "cache_input_off_peak": "0.003"
       },
-      "price_basis": "peak cache miss; off-peak is half and is not the approval bound",
-      "temporary_discount_fraction": "1",
+      "price_basis": "peak cache miss; off-peak is half and is not the approval bound. The same two rows are on ollama.com/pricing.",
       "reasoning": {
         "preference": "disabled",
         "request_field": {"thinking": {"type": "disabled"}},
@@ -152,7 +161,6 @@
     "tool_pairs_per_question": 6,
     "jev_calls_per_question": 4,
     "jev_input_tokens": 32000,
-    "jev_once_for_all_arms": true,
-    "use_temporary_discount_for_approval": false
+    "jev_once_for_all_arms": true
   }
 }
