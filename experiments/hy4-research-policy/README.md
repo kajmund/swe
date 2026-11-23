@@ -166,3 +166,8 @@ that mode before HTTP. Its prompted call returned 2 264 tokens after
 `max_tokens` 1 024 and still included thinking. Isolated tasks then used native
 tools, where `num_predict` held. Exact-quote scores and the 26 JEV relation
 calls are stored separately. No provider charge field was returned.
+`runs/20261123T213131Z/summary.json` is rebuilt from that saved report by
+`hy4_research_policy.report` with no provider call. Diagnosis output cost stays
+`N/A` because the Pydantic tool probe has no output token count. JEV input is
+priced only as a calculated line at $0.042 per million; its output tokens are
+logged and not priced. `actual_usd` stays `N/A`.
