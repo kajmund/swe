@@ -268,16 +268,18 @@ class OllamaCloudClient:
             raise LiveDispatchRefused("Ollama response is missing message.content")
         prompt_tokens = raw.get("prompt_eval_count")
         output_tokens = raw.get("eval_count")
-        cache_read = raw.get("prompt_eval_cached_count")
+        cached = raw.get("prompt_eval_cached_count")
+        cache_read = cached if isinstance(cached, int) else 0
         return ProviderResponse(
             content=str(message["content"]),
             tokens={
                 "input": prompt_tokens if isinstance(prompt_tokens, int) else None,
                 "output": output_tokens if isinstance(output_tokens, int) else None,
                 "reasoning": None,
-                "cache_read": cache_read if isinstance(cache_read, int) else None,
+                "cache_read": cache_read,
                 "cache_write": None,
                 "source": "provider",
+                "cache_read_assumed_miss": not isinstance(cached, int),
             },
             billed_usd=raw.get("billed_usd") if isinstance(raw.get("billed_usd"), str) else None,
             price_period=self.gate.price_period

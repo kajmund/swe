@@ -104,6 +104,7 @@ def _empty_tokens() -> dict[str, Any]:
         "cache_read": None,
         "cache_write": None,
         "source": "provider",
+        "cache_read_assumed_miss": False,
     }
 
 
@@ -113,6 +114,9 @@ def _normalize_tokens(raw: Mapping[str, Any] | None) -> dict[str, Any]:
         for key in ("input", "output", "reasoning", "cache_read", "cache_write"):
             tokens[key] = raw.get(key)
         tokens["source"] = str(raw.get("source", "provider"))
+        tokens["cache_read_assumed_miss"] = bool(
+            raw.get("cache_read_assumed_miss", False)
+        )
     return tokens
 
 
@@ -349,7 +353,7 @@ class SwarmExecutor:
                     system=system,
                     user=user,
                     schema=self._schema(spec.kind),
-                    max_output_tokens=self._max_tokens(spec.kind),
+                    max_output_tokens=self._max_tokens(spec.kind, model_id),
                     passage=spec.passage,
                     input_data=spec.input_data,
                     attempt=attempt,
@@ -517,8 +521,11 @@ class SwarmExecutor:
     def _tariff(self, kind: Kind) -> int:
         return int(self._contract(kind).get("sweycoins_milli", 0))
 
-    def _max_tokens(self, kind: Kind) -> int:
-        return int(self._contract(kind).get("max_output_tokens", 64))
+    def _max_tokens(self, kind: Kind, model_id: str) -> int:
+        base = int(self._contract(kind).get("max_output_tokens", 64))
+        model = self.models.get(model_id, {})
+        headroom = int(model.get("output_token_headroom", 0))
+        return base + max(0, headroom)
 
     def _schema(self, kind: Kind) -> Mapping[str, Any]:
         from microtask_swarm.contracts import output_schema

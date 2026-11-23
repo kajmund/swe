@@ -66,7 +66,7 @@ No chat completion was sent. Prices are the published peak rows on
 
 | Arm | Exact API tag | Digest | Capabilities | Context | Thinking | Input / cached / output USD per 1M |
 | --- | --- | --- | --- | ---: | --- | --- |
-| GPT-OSS 20B | `gpt-oss:20b` | `05afbac4bad6` | completion, tools, thinking | 131,072 | values `low/medium/high`, default `medium`; **no `false`** | 0.07 / 0.035 / 0.30 |
+| GPT-OSS 20B | `gpt-oss:20b` | `05afbac4bad6` | completion, tools, thinking | 131,072 | values `low/medium/high`, default `medium`; **no `false`**; +128 output-token headroom | 0.07 / 0.035 / 0.30 |
 | Nemotron 3 Super | `nemotron-3-super` | `da11955bb451` | completion, thinking, tools | 262,144 | `false/true`, default `true`; `false` supported | 0.015 / 0.015 / 0.60 |
 | MiMo V2.6 Flash | `mimo-v2.6-flash` | `8b2b3c0ae11a` | completion, thinking, tools, vision | 1,048,576 | `false/true`, default `true`; `false` supported | 0.14 / 0.0028 / 0.28 |
 | DeepSeek V4.1 Flash (baseline) | `deepseek-v4.1-flash` | `97308b916fc3` | completion, thinking, tools, vision | 1,048,576 | `false/low/high/max`, default `high`; `false` supported | peak 0.30 / 0.006 / 1.20; off-peak 0.15 / 0.003 / 0.60 |
@@ -83,7 +83,10 @@ for that arm and reports `reasoning_off: false`. The other three arms use
 Every request uses `stream: false`, a JSON Schema in `format`, and strict
 `options: {"temperature": 0, "num_predict": <contract limit>, "num_ctx": 4096}`.
 Output bounds are 32 tokens for classifications, 192 for extraction, and 640 for
-the combined call.
+the combined call. GPT-OSS 20B adds a 128-token headroom because `think: "low"`
+is its minimum and consumed the entire 32-token classification budget in the
+first live run, returning empty content; the same request returned valid JSON
+at 128 tokens. The headroom is capability-driven, not a general relaxation.
 
 ## What is measured
 
@@ -112,9 +115,11 @@ For live Ollama calls, `prompt_eval_count` maps to input tokens,
 `prompt_eval_cached_count` maps to cache-read tokens, and `eval_count` maps to
 generated output tokens. Reasoning has no separate token field in the chat
 response, so it stays `N/A` rather than being invented. If a provider omits the
-cached-token count, calculated USD is `N/A` rather than assuming a cache miss.
-Ollama's chat response does not report a per-call charge, so `actual_usd` stays
-`N/A`; an account-level `/api/balance` delta would not be a per-call charge.
+cached-token count, the client records 0 cached tokens, sets
+`cache_read_assumed_miss: true`, and the report labels the price-list result as
+a cache-miss equivalent. Ollama's chat response does not report a per-call
+charge, so `actual_usd` stays `N/A`; an account-level `/api/balance` delta would
+not be a per-call charge.
 
 ## Run the offline pilot
 
@@ -154,6 +159,17 @@ PYTHONPATH=.:../../python uv run --with jsonschema --with pyyaml \
 | Exact quote evidence | Existing evidence discipline: exact, fail-closed | No fuzzy or semantic fallback |
 
 No domain logic was added to `python/swe` or `crates/`.
+
+### Budget migration
+
+The local `SweycoinMeter` is temporary. The migration to the shared Rust/PyO3
+runtime budget in [PR #11](https://github.com/kajmund/swe/pull/11) is planned
+read-only in [`docs/budget-migration-plan.md`](docs/budget-migration-plan.md).
+It is **not integrated**: PR #11 is open, has no independent approval, and its
+packaging check is currently red. The plan deletes the local meter rather than
+wrapping it, and defines the retry/cancel/replay compatibility decisions.
+`tests/test_budget_migration_contract.py` is a skipped contract probe until the
+landed `swe.budget` module is importable.
 
 ## Live gate and cost cap
 
@@ -200,7 +216,9 @@ selected exact tag; it currently does not expose `gpt-oss:20b`,
 3. **Nemotron 3 Nano is retired.** `nemotron-3-nano:30b-cloud` returns HTTP 410
    and is absent from `/api/tags`; the Nano arm cannot run.
 4. **GPT-OSS 20B cannot disable reasoning.** Only `low/medium/high` are
-   supported, so it must be reported as a low-reasoning arm, not reasoning-off.
+   supported, so it is a low-reasoning arm, not reasoning-off. It needs a
+   128-token output headroom; without it, `think: "low"` consumed the entire
+   classification budget and returned empty content.
 5. **No Python binding for `swe-budget`.** True core-ledger reuse needs a PyO3
    binding or a host adapter owned by the core package; the pilot meter is
    explicitly a host accounting adapter.

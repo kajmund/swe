@@ -220,6 +220,7 @@ async def run_matrix(
                 "available": model.get("available", False),
                 "reason": model.get("reason"),
                 "thinking": model.get("thinking"),
+                "output_token_headroom": model.get("output_token_headroom", 0),
                 "prices_usd_per_million": model.get("prices_usd_per_million"),
             }
             for model in config["models"]

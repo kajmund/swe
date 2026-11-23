@@ -1,3 +1,3 @@
 __pycache__/
 *.py[cod]
-reports/live.json
+reports/live*.json

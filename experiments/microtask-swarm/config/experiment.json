@@ -10,7 +10,13 @@
     "contract_version": "microtask-swarm-gold-v1",
     "item_count": 10,
     "microtask_count_per_item": 5,
-    "domains": ["biology", "engineering", "finance", "law", "medicine"],
+    "domains": [
+      "biology",
+      "engineering",
+      "finance",
+      "law",
+      "medicine"
+    ],
     "leakage_rule": "Prompts contain task input fields only. Gold labels, gold quotes, item ids, domains, and other tasks' gold are never rendered."
   },
   "contracts": {
@@ -68,7 +74,14 @@
       "verifier": "deterministic"
     }
   },
-  "concurrency_levels": [1, 2, 4, 8, 16, 32],
+  "concurrency_levels": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32
+  ],
   "provider": {
     "id": "ollama-cloud",
     "chat_endpoint": "https://ollama.com/api/chat",
@@ -81,10 +94,22 @@
     "configured_plan": null,
     "assumed_plan": "pay_as_you_go",
     "plans": {
-      "pay_as_you_go": {"concurrency": 3, "included_credits_usd_per_month": "0"},
-      "pro": {"concurrency": 3, "included_credits_usd_per_month": "60"},
-      "max": {"concurrency": 10, "included_credits_usd_per_month": "300"},
-      "team": {"concurrency": 10, "included_credits_usd_per_month": "1000"}
+      "pay_as_you_go": {
+        "concurrency": 3,
+        "included_credits_usd_per_month": "0"
+      },
+      "pro": {
+        "concurrency": 3,
+        "included_credits_usd_per_month": "60"
+      },
+      "max": {
+        "concurrency": 10,
+        "included_credits_usd_per_month": "300"
+      },
+      "team": {
+        "concurrency": 10,
+        "included_credits_usd_per_month": "1000"
+      }
     },
     "assumed_concurrency_limit": 3,
     "queue_note": "Ollama queues requests beyond the plan concurrency limit. The live runner caps effective concurrency at the assumed limit and reports requested versus effective concurrency."
@@ -98,15 +123,23 @@
       "catalog_digest": "05afbac4bad6",
       "catalog_modified_at": "2025-08-05T00:00:00Z",
       "available": true,
-      "capabilities": ["completion", "tools", "thinking"],
+      "capabilities": [
+        "completion",
+        "tools",
+        "thinking"
+      ],
       "context_window": 131072,
       "thinking": {
-        "values": ["low", "medium", "high"],
+        "values": [
+          "low",
+          "medium",
+          "high"
+        ],
         "default": "medium",
         "off_supported": false,
         "selected": "low",
         "reasoning_off": false,
-        "note": "POST /api/show lists low/medium/high and no false value. Reasoning cannot be switched off; low is the minimum."
+        "note": "POST /api/show lists low/medium/high and no false value. Reasoning cannot be switched off; low is the minimum. A 128-token output headroom is added because think=low consumed all 32 output tokens in the first live run."
       },
       "prices_usd_per_million": {
         "input": "0.07",
@@ -116,7 +149,8 @@
       "price_period_required": false,
       "credential_env": "OLLAMA_API_KEY",
       "verified_at": "2026-11-23",
-      "evidence": "GET /api/tags digest 05afbac4bad6; POST /api/show capabilities and context_length 131072; pricing row gpt-oss:20b."
+      "evidence": "GET /api/tags digest 05afbac4bad6; POST /api/show capabilities and context_length 131072; pricing row gpt-oss:20b.",
+      "output_token_headroom": 128
     },
     {
       "id": "nemotron-3-super",
@@ -126,10 +160,17 @@
       "catalog_digest": "da11955bb451",
       "catalog_modified_at": "2026-03-11T00:00:00Z",
       "available": true,
-      "capabilities": ["completion", "thinking", "tools"],
+      "capabilities": [
+        "completion",
+        "thinking",
+        "tools"
+      ],
       "context_window": 262144,
       "thinking": {
-        "values": [false, true],
+        "values": [
+          false,
+          true
+        ],
         "default": true,
         "off_supported": true,
         "selected": false,
@@ -144,7 +185,8 @@
       "price_period_required": false,
       "credential_env": "OLLAMA_API_KEY",
       "verified_at": "2026-11-23",
-      "evidence": "GET /api/tags digest da11955bb451; POST /api/show capabilities, context_length 262144, thinking values false/true; pricing row nemotron-3-super."
+      "evidence": "GET /api/tags digest da11955bb451; POST /api/show capabilities, context_length 262144, thinking values false/true; pricing row nemotron-3-super.",
+      "output_token_headroom": 0
     },
     {
       "id": "nemotron-3-nano",
@@ -165,10 +207,18 @@
       "catalog_digest": "8b2b3c0ae11a",
       "catalog_modified_at": "2026-09-22T09:00:00-07:00",
       "available": true,
-      "capabilities": ["completion", "thinking", "tools", "vision"],
+      "capabilities": [
+        "completion",
+        "thinking",
+        "tools",
+        "vision"
+      ],
       "context_window": 1048576,
       "thinking": {
-        "values": [false, true],
+        "values": [
+          false,
+          true
+        ],
         "default": true,
         "off_supported": true,
         "selected": false,
@@ -183,7 +233,8 @@
       "price_period_required": false,
       "credential_env": "OLLAMA_API_KEY",
       "verified_at": "2026-11-23",
-      "evidence": "GET /api/tags digest 8b2b3c0ae11a; POST /api/show capabilities, context_length 1048576, thinking values false/true; pricing row mimo-v2.6-flash."
+      "evidence": "GET /api/tags digest 8b2b3c0ae11a; POST /api/show capabilities, context_length 1048576, thinking values false/true; pricing row mimo-v2.6-flash.",
+      "output_token_headroom": 0
     },
     {
       "id": "deepseek-v4.1-flash",
@@ -193,10 +244,20 @@
       "catalog_digest": "97308b916fc3",
       "catalog_modified_at": "2026-09-10T03:00:00Z",
       "available": true,
-      "capabilities": ["completion", "thinking", "tools", "vision"],
+      "capabilities": [
+        "completion",
+        "thinking",
+        "tools",
+        "vision"
+      ],
       "context_window": 1048576,
       "thinking": {
-        "values": [false, "low", "high", "max"],
+        "values": [
+          false,
+          "low",
+          "high",
+          "max"
+        ],
         "default": "high",
         "off_supported": true,
         "selected": false,
@@ -214,12 +275,18 @@
       "price_period_required": true,
       "credential_env": "OLLAMA_API_KEY",
       "verified_at": "2026-11-23",
-      "evidence": "GET /api/tags digest 97308b916fc3; POST /api/show capabilities, context_length 1048576, thinking values false/low/high/max; pricing rows for peak and off-peak. The separate :1017 tag has digest 7f8e880bc207 and is not this arm."
+      "evidence": "GET /api/tags digest 97308b916fc3; POST /api/show capabilities, context_length 1048576, thinking values false/low/high/max; pricing rows for peak and off-peak. The separate :1017 tag has digest 7f8e880bc207 and is not this arm.",
+      "output_token_headroom": 0
     }
   ],
   "baseline_model": "deepseek-v4.1-flash",
   "cost_control": {
-    "approval": null,
+    "approval": {
+      "approved_by": "user",
+      "approved_at": "2026-11-23",
+      "cap_usd": "3.00",
+      "scope": "Ollama Cloud live matrix: gpt-oss:20b, nemotron-3-super, mimo-v2.6-flash, deepseek-v4.1-flash; live concurrency 1/2/3, offline sweep 1/2/4/8/16/32"
+    },
     "recommended_cap_usd": "3.00",
     "no_paid_dispatch": true,
     "reason": "No paid dispatch is approved. The live runner refuses without an explicit positive --approve-usd-cap and a credential. Offline runs never construct a network request.",

@@ -33,6 +33,7 @@ class TokenUsage:
     cache_read: int | None = None
     cache_write: int | None = None
     source: str = "provider"
+    cache_read_assumed_miss: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -42,6 +43,7 @@ class TokenUsage:
             "cache_read": _count(self.cache_read),
             "cache_write": _count(self.cache_write),
             "source": self.source,
+            "cache_read_assumed_miss": self.cache_read_assumed_miss,
         }
 
 
@@ -223,6 +225,9 @@ def normalize_call(raw: Mapping[str, Any], model: Mapping[str, Any]) -> CallCost
         cache_read=_optional_count(raw_tokens, "cache_read"),
         cache_write=_optional_count(raw_tokens, "cache_write"),
         source=str(raw_tokens.get("source", "provider")),
+        cache_read_assumed_miss=bool(
+            raw_tokens.get("cache_read_assumed_miss", False)
+        ),
     )
     priced = price_call(model, tokens, period=period if isinstance(period, str) else None)
     billed_known = "billed_usd" in raw and raw.get("billed_usd") is not None
@@ -302,6 +307,9 @@ def account_calls(
             "calls": len(items),
             "calls_with_complete_usage": len(complete),
             "calls_with_unknown_usage": len(items) - len(complete),
+            "cache_read_assumed_miss_calls": sum(
+                1 for item in items if item.tokens.cache_read_assumed_miss
+            ),
             "retries": retries if retries is not None else NA,
             "latency_ms": None if latency is None else round(latency, 3),
             "tokens": {key: _count(value) for key, value in tokens.items()},

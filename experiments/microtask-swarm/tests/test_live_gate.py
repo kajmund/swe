@@ -184,9 +184,45 @@ class LiveGateTests(unittest.TestCase):
         self.assertEqual(payload["options"]["temperature"], 0)
         self.assertEqual(payload["options"]["num_predict"], 32)
         self.assertEqual(response.tokens["cache_read"], 250)
+        self.assertFalse(response.tokens["cache_read_assumed_miss"])
         self.assertEqual(response.tokens["input"], 1000)
         self.assertEqual(response.tokens["output"], 12)
         self.assertIsNone(response.billed_usd)
+
+    def test_missing_cache_count_is_an_explicit_cache_miss(self) -> None:
+        gate = check_live_gate(
+            self.config,
+            approved_cap_usd="3.00",
+            environ={"OLLAMA_API_KEY": "secret"},
+        )
+        models = {model["id"]: model for model in self.config["models"]}
+        client = OllamaCloudClient(gate=gate, models=models)
+
+        def fake_http(url, *, payload, api_key, timeout=30.0):
+            return {
+                "message": {"content": '{"relevant":true}'},
+                "prompt_eval_count": 100,
+                "eval_count": 5,
+            }
+
+        request = ChatRequest(
+            request_id="r3",
+            task_id="t3",
+            kind=Kind.RELEVANCE,
+            model_id="mimo-v2.6-flash",
+            system="system",
+            user="{}",
+            schema=output_schema(Kind.RELEVANCE),
+            max_output_tokens=32,
+            passage="passage",
+            input_data={"passage": "passage", "query": "q"},
+            attempt=1,
+            timeout_seconds=10.0,
+        )
+        with mock.patch("microtask_swarm.live._http_json", side_effect=fake_http):
+            response = client._chat_sync(request)
+        self.assertEqual(response.tokens["cache_read"], 0)
+        self.assertTrue(response.tokens["cache_read_assumed_miss"])
 
     def test_reasoning_off_is_sent_when_supported(self) -> None:
         gate = check_live_gate(

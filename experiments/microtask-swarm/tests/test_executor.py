@@ -177,6 +177,26 @@ class ExecutorTests(unittest.IsolatedAsyncioTestCase):
                 [task], mode="distributed_independent", model_ids=["nemotron-3-nano"]
             )
 
+    async def test_reasoning_headroom_is_applied_per_model(self) -> None:
+        config = _config()
+        task = _relevance_specs(1)[0]
+        provider = ScriptedProvider({}, default={"relevant": True})
+        executor = _executor(config, provider, concurrency=1)
+        await executor.run(
+            [task], mode="distributed_independent", model_ids=["gpt-oss-20b"]
+        )
+        base = config["contracts"]["relevance"]["max_output_tokens"]
+        gpt = next(m for m in config["models"] if m["id"] == "gpt-oss-20b")
+        self.assertEqual(
+            provider.calls[0].max_output_tokens,
+            base + gpt["output_token_headroom"],
+        )
+        provider.calls.clear()
+        await executor.run(
+            [task], mode="distributed_independent", model_ids=["nemotron-3-super"]
+        )
+        self.assertEqual(provider.calls[0].max_output_tokens, base)
+
     async def test_dag_layers_are_deterministic(self) -> None:
         plan = compile_layers(
             [

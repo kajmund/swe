@@ -166,6 +166,20 @@ class CostTests(unittest.TestCase):
         with self.assertRaises(CostError):
             price_call(self.gpt, usage, period=None)
 
+    def test_missing_cache_count_can_be_an_explicit_cache_miss(self) -> None:
+        calls = [
+            {
+                "model_id": "mimo-v2.6-flash",
+                "role": "candidate",
+                "attempt": 1,
+                "latency_ms": 10,
+                "tokens": _tokens(cache_read=0, cache_read_assumed_miss=True),
+            }
+        ]
+        cost = account_calls(calls, models=self.models)
+        self.assertNotEqual(cost["all_in"]["calculated_usd"], "N/A")
+        self.assertEqual(cost["all_in"]["cache_read_assumed_miss_calls"], 1)
+
     def test_unknown_model_is_rejected(self) -> None:
         calls = [
             {
