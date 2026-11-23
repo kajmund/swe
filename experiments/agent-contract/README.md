@@ -1,14 +1,27 @@
 # Agent contract join
 
-Owner: t1bm (`experiment/agent-microtask-contract`).
+Owner: t1bm (`experiment/agent-microtask-contract`, PR 13).
 
 t1bp owns `experiment/microtask-swarm` and does not edit this directory.
-The join is offline. It selects the generation provider from configuration,
-runs microtasks with `asyncio.gather` per dependency layer, and checks
-relevance, extraction, entailment, atomicity, and operation in explicit
-functions. Those functions do not retry a call.
 
-`swe.budget.RuntimeBudget` from PR #11 is not imported successfully on this
-branch because that PR is still open. A run without a caller-supplied ledger
-stops before any provider call. The supplied object must implement `reserve`,
-`settle`, and `release`. It is not a second production ledger.
+## Dispatch gap
+
+SWE does not have event-ready scheduling. `compile_microtasks` turns a DAG
+into SWD map layers, and a later layer waits until every task in the previous
+layer has finished (`docs/specs/swe-microtasks.md`). The dispatch boundary is
+`WorkflowRunner`, which needs `swe_native`. That module is not installed here,
+so this package does not run the plan and does not contain another scheduler.
+
+Cancellation and replay belong to that same machine: `WorkflowResources.cancel_event`
+and `RunStore` replay of `InvocationRecord`. The offline test drives one
+invocation at a time only to show those rules. It is not a production runner.
+
+## Invocations
+
+Each semantic kind is two invocations, `kind.generate` and `kind.validate`.
+The provider and model come from the generation and decision configurations.
+A validator does not call the model again.
+
+## Budget
+
+PR #11 is open. `RuntimeBudget` is not attached. t1bq owns that wait.

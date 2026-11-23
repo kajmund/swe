@@ -1,39 +1,28 @@
 import ast
-import asyncio
 from pathlib import Path
 
 import pytest
 
-from agent_contract.join import LAYERS, BudgetPending, run_join, runtime_budget_status, validate
+from agent_contract.join import (
+    DispatchGap,
+    dispatch_gap,
+    plan_invocations,
+    require_swe_dispatch,
+    runtime_budget_status,
+    validate,
+)
 from hy4_research_policy.agent_adapter import (
     DECISION_PROFILE,
     AgentConfig,
+    AgentHost,
     Completion,
+    DecisionRequest,
+    GenerationRequest,
     Usage,
 )
 
 PACKAGE = Path(__file__).resolve().parents[1] / "agent_contract" / "join.py"
-
-
-class Ledger:
-    def __init__(self, remaining: int = 10) -> None:
-        self.remaining = remaining
-        self.next_id = 1
-        self.settled: list[tuple[int, int, str]] = []
-
-    def reserve(self, *, run_id: str, account: str, amount_milli: int, key: str) -> int:
-        if amount_milli > self.remaining:
-            raise RuntimeError("refused")
-        self.remaining -= amount_milli
-        reservation_id = self.next_id
-        self.next_id += 1
-        return reservation_id
-
-    def settle(self, *, reservation_id: int, spent_milli: int, key: str) -> None:
-        self.settled.append((reservation_id, spent_milli, key))
-
-    def release(self, *, reservation_id: int, key: str) -> None:
-        raise AssertionError("release is for PR 11 reconciliation, not this run")
+SPEC = Path(__file__).resolve().parents[3] / "docs" / "specs" / "swe-microtasks.md"
 
 
 class Journal:
@@ -44,23 +33,24 @@ class Journal:
         self.records.append(record)
 
 
+class Allow:
+    def reserve(self, key: str, amount: object) -> bool:
+        return True
+
+
 class Generation:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, relevant: object = True) -> None:
         self.name = name
+        self.relevant = relevant
         self.calls: list[str] = []
 
     def profile(self) -> dict[str, bool]:
-        return {
-            "supports_text_output": True,
-            "supports_tools": False,
-            "supports_json_schema_output": False,
-            "supports_json_object_output": False,
-        }
+        return {"supports_text_output": True, "supports_tools": False, "supports_json_schema_output": False}
 
     def complete(self, instruction: str, payload: dict[str, str]) -> Completion:
         self.calls.append(instruction)
         if instruction == "relevance":
-            output = {"relevant": True}
+            output = {"relevant": self.relevant}
         elif instruction == "extraction":
             output = {"quotes": ["quoted text."]}
         else:
@@ -69,19 +59,18 @@ class Generation:
 
 
 class Decision:
+    name = "system-one"
+    calls: list[str]
+
     def __init__(self) -> None:
-        self.name = "system-one"
-        self.calls: list[str] = []
+        self.calls = []
 
     def profile(self) -> dict[str, bool]:
         return dict(DECISION_PROFILE)
 
     def decide(self, question: str, options: list[str], state: dict[str, str]) -> Completion:
         self.calls.append(question)
-        if question == "atomicity":
-            output = {"atomic": True}
-        else:
-            output = {"choice": "entailment"}
+        output = {"atomic": True} if question == "atomicity" else {"choice": "entailment"}
         return Completion(output=output, usage=Usage())
 
 
@@ -92,105 +81,135 @@ def _configs(provider: str = "alpha") -> tuple[AgentConfig, AgentConfig]:
     )
 
 
-def test_pr11_budget_is_not_attached() -> None:
-    status = runtime_budget_status()
-    assert status["attached"] is False
+def _invoke(
+    item: dict,
+    generation_provider: Generation,
+    decision_provider: Decision,
+    journal: Journal,
+    store: dict[str, dict],
+) -> dict:
+    """One explicit call. The test lists the calls; this is not a scheduler."""
+
+    if item["role"] == "validator":
+        source = store[f"{item['kind']}.generate"]["output"]
+        return {"task_id": item["task_id"], "role": "validator", "error": validate(item["kind"], source)}
+    host = AgentHost(budget=Allow(), journal=journal, retries=0)
+    if item["role"] == "decision":
+        result = host.decide(
+            AgentConfig(kind="decision", provider=item["provider"], model=item["model"]),
+            DecisionRequest(
+                invocation_id=item["task_id"],
+                node_id=item["task_id"],
+                question=item["kind"],
+                options=["entailment", "contradiction", "neutral"],
+            ),
+            decision_provider,
+            amount=1,
+        )
+    else:
+        result = host.generate(
+            AgentConfig(kind="generation", provider=item["provider"], model=item["model"]),
+            GenerationRequest(
+                invocation_id=item["task_id"],
+                node_id=item["task_id"],
+                instruction=item["kind"],
+                output_mode="text",
+            ),
+            generation_provider,
+            amount=1,
+        )
+    return {"task_id": item["task_id"], "ok": result.ok, "output": result.output}
+
+
+def test_swe_has_no_event_ready_dispatch_here() -> None:
+    gap = dispatch_gap()
+    assert gap["event_ready"] is False
+    assert gap["swe_dispatch"] == "layer_map"
+    assert gap["swe_native"] is False
+    assert gap["runtime_budget"]["attached"] is False
+    spec = SPEC.read_text(encoding="utf-8")
+    assert "A later layer cannot start until every" in spec
+    with pytest.raises(DispatchGap):
+        require_swe_dispatch()
+    assert runtime_budget_status()["attached"] is False
+
+
+def test_generation_and_validators_are_separate_invocations() -> None:
     generation, decision = _configs()
-    with pytest.raises(BudgetPending):
-        asyncio.run(
-            run_join(
-                run_id="run-1",
-                generation=generation,
-                decision=decision,
-                generation_provider=Generation("alpha"),
-                decision_provider=Decision(),
-                ledger=None,
-                journal=Journal(),
-            )
-        )
+    plan = plan_invocations(generation, decision)
+    assert [row["task_id"] for row in plan] == [
+        "relevance.generate",
+        "relevance.validate",
+        "extraction.generate",
+        "extraction.validate",
+        "entailment.generate",
+        "entailment.validate",
+        "atomicity.generate",
+        "atomicity.validate",
+        "operation.generate",
+        "operation.validate",
+    ]
+    assert plan[5]["depends_on"] == ["entailment.generate"]
+    assert plan[8]["depends_on"] == ["entailment.validate", "atomicity.validate"]
+    roles = {row["role"] for row in plan}
+    assert roles == {"generation", "decision", "validator"}
 
 
-def test_config_swaps_the_generation_provider_without_a_retry() -> None:
-    for name in ("alpha", "beta"):
-        provider = Generation(name)
-        decision = Decision()
-        generation, decision_config = _configs(name)
-        journal = Journal()
-        report = asyncio.run(
-            run_join(
-                run_id="run-1",
-                generation=generation,
-                decision=decision_config,
-                generation_provider=provider,
-                decision_provider=decision,
-                ledger=Ledger(),
-                journal=journal,
-            )
-        )
-        assert report["retries"] == 0
-        assert [row["ok"] for row in journal.records].count(True) == 5
-        assert provider.calls == ["relevance", "extraction", "operation"]
-        assert decision.calls == ["entailment", "atomicity"]
-        assert report["results"]["operation"]["ok"] is True
+def test_config_changes_the_provider_and_not_the_graph() -> None:
+    alpha = plan_invocations(*_configs("alpha"))
+    beta = plan_invocations(*_configs("beta"))
+    assert [row["task_id"] for row in alpha] == [row["task_id"] for row in beta]
+    assert alpha[0]["provider"] == "alpha"
+    assert beta[0]["provider"] == "beta"
+    assert alpha[4]["provider"] == "system-one"
 
 
-def test_semantic_rejection_does_not_call_the_provider_again() -> None:
-    class BadGeneration(Generation):
-        def complete(self, instruction: str, payload: dict[str, str]) -> Completion:
-            self.calls.append(instruction)
-            return Completion(output={"relevant": "yes"}, usage=Usage())
+def test_offline_invocations_cancel_and_replay() -> None:
+    generation_provider = Generation("alpha")
+    decision_provider = Decision()
+    journal = Journal()
+    plan = plan_invocations(*_configs())
+    store: dict[str, dict] = {}
+    cancelled = False
+    for item in plan:
+        if cancelled:
+            break
+        if item["task_id"] in store:
+            continue
+        outcome = _invoke(item, generation_provider, decision_provider, journal, store)
+        if item["role"] == "validator":
+            assert outcome["error"] is None
+        store[item["task_id"]] = outcome
+        if item["task_id"] == "relevance.validate":
+            cancelled = True
+    assert "extraction.generate" not in store
+    assert generation_provider.calls == ["relevance"]
 
-    provider = BadGeneration("alpha")
-    generation, decision_config = _configs()
-    report = asyncio.run(
-        run_join(
-            run_id="run-1",
-            generation=generation,
-            decision=decision_config,
-            generation_provider=provider,
-            decision_provider=Decision(),
-            ledger=Ledger(),
-            journal=Journal(),
-        )
-    )
+    replayed = Generation("alpha")
+    again = Journal()
+    store["relevance.generate"] = store["relevance.generate"]
+    for item in plan[:1]:
+        if item["task_id"] in store:
+            continue
+        _invoke(item, replayed, decision_provider, again, store)
+    assert replayed.calls == []
+    assert again.records == []
+
+
+def test_semantic_failure_does_not_add_another_model_call() -> None:
+    provider = Generation("alpha", relevant="yes")
+    plan = plan_invocations(*_configs())
+    outcome = _invoke(plan[0], provider, Decision(), Journal(), {})
+    assert validate("relevance", outcome["output"]) == "relevant must be a boolean"
     assert provider.calls == ["relevance"]
-    assert report["results"]["relevance"]["error"] == "semantic"
-    assert report["results"]["operation"]["called"] is False
     assert validate("relevance", {"relevant": True}) is None
 
 
-def test_middle_layer_runs_concurrently() -> None:
-    entered: list[str] = []
-    release = asyncio.Event()
-
-    async def before_call(kind: str) -> None:
-        if kind not in {"entailment", "atomicity"}:
-            return
-        entered.append(kind)
-        if len(entered) == 2:
-            release.set()
-        await release.wait()
-
-    generation, decision_config = _configs()
-    asyncio.run(
-        run_join(
-            run_id="run-1",
-            generation=generation,
-            decision=decision_config,
-            generation_provider=Generation("alpha"),
-            decision_provider=Decision(),
-            ledger=Ledger(),
-            journal=Journal(),
-            before_call=before_call,
-        )
-    )
-    assert entered == ["entailment", "atomicity"] or set(entered) == {"entailment", "atomicity"}
-    assert LAYERS[2] == ("entailment", "atomicity")
-
-
-def test_join_has_no_hidden_retry_or_second_ledger() -> None:
-    tree = ast.parse(PACKAGE.read_text(encoding="utf-8"))
+def test_module_does_not_schedule_or_attach_budget() -> None:
+    text = PACKAGE.read_text(encoding="utf-8")
+    tree = ast.parse(text)
     names = [node.id for node in ast.walk(tree) if isinstance(node, ast.Name)]
+    assert "gather" not in names
     assert "ModelRetry" not in names
     assert "SweycoinMeter" not in names
-    assert "retries=0" in PACKAGE.read_text(encoding="utf-8")
+    assert "RuntimeBudget" not in names

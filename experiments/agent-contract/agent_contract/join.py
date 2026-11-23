@@ -1,49 +1,43 @@
-"""One host run: configured model, async microtask layers, explicit checks.
+"""Explicit invocations for the agent contract. Not a scheduler.
 
-The runner retries nothing. A validator rejection is a semantic error and does
-not call the provider again. The ledger methods match PR #11
-(``reserve`` / ``settle`` / ``release``). This module does not construct that
-ledger and does not keep a second one.
+SWE compiles a microtask DAG into SWD map layers. A later layer starts only
+after every task in the previous layer finishes. There is no event-ready
+mode, where a task would start as soon as its own dependencies finish.
+``WorkflowRunner`` is the dispatch boundary and it requires ``swe_native``.
+This module does not replace that machine.
+
+PR #11 is still open, so ``swe.budget.RuntimeBudget`` is not attached.
 """
 
 from __future__ import annotations
 
-import asyncio
-from decimal import Decimal
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any
 
-from hy4_research_policy.agent_adapter import (
-    AgentConfig,
-    AgentHost,
-    AgentResult,
-    DecisionRequest,
-    GenerationRequest,
-)
+from hy4_research_policy.agent_adapter import AgentConfig
 
-LAYERS: tuple[tuple[str, ...], ...] = (
-    ("relevance",),
-    ("extraction",),
-    ("entailment", "atomicity"),
-    ("operation",),
+KINDS: tuple[str, ...] = (
+    "relevance",
+    "extraction",
+    "entailment",
+    "atomicity",
+    "operation",
 )
 DECISION_TASKS = frozenset({"entailment", "atomicity"})
-MILLI = Decimal(1)
+_DEPENDENCIES = {
+    "relevance": (),
+    "extraction": ("relevance",),
+    "entailment": ("extraction",),
+    "atomicity": ("extraction",),
+    "operation": ("entailment", "atomicity"),
+}
+
+
+class DispatchGap(RuntimeError):
+    """SWE cannot run this plan on the invocation boundary from here."""
 
 
 class BudgetPending(RuntimeError):
-    """PR #11 is not merged, so no ledger is attached."""
-
-
-class Ledger(Protocol):
-    def reserve(self, *, run_id: str, account: str, amount_milli: int, key: str) -> int: ...
-
-    def settle(self, *, reservation_id: int, spent_milli: int, key: str) -> None: ...
-
-    def release(self, *, reservation_id: int, key: str) -> None: ...
-
-
-class Journal(Protocol):
-    def append(self, record: dict[str, Any]) -> None: ...
+    """PR #11 is not merged, so no runtime budget is attached."""
 
 
 def runtime_budget_status() -> dict[str, Any]:
@@ -56,28 +50,70 @@ def runtime_budget_status() -> dict[str, Any]:
     return {"attached": True, "reason": "swe.budget.RuntimeBudget"}
 
 
-class _HostBudget:
-    def __init__(self, ledger: Ledger, run_id: str) -> None:
-        self.ledger = ledger
-        self.run_id = run_id
-        self.ids: dict[str, int] = {}
+def dispatch_gap() -> dict[str, Any]:
+    native = True
+    try:
+        import swe_native  # noqa: F401
+    except ImportError:
+        native = False
+    return {
+        "event_ready": False,
+        "swe_dispatch": "layer_map",
+        "swe_native": native,
+        "spec": "docs/specs/swe-microtasks.md",
+        "reason": (
+            "compile_microtasks emits one map node per topological layer. "
+            "A task waits for the whole layer, not only for its own dependencies. "
+            "WorkflowRunner is the dispatch boundary and needs swe_native."
+        ),
+        "runtime_budget": runtime_budget_status(),
+    }
 
-    def reserve(self, key: str, amount: Decimal) -> bool:
-        try:
-            reservation_id = self.ledger.reserve(
-                run_id=self.run_id,
-                account="experiment",
-                amount_milli=int(amount),
-                key=key,
-            )
-        except Exception:
-            return False
-        self.ids[key] = reservation_id
-        return True
+
+def plan_invocations(generation: AgentConfig, decision: AgentConfig) -> list[dict[str, Any]]:
+    """One generation invocation and one validator invocation per semantic kind."""
+
+    if generation.kind != "generation" or decision.kind != "decision":
+        raise ValueError("model choice is the pair of configurations")
+    rows: list[dict[str, Any]] = []
+    for kind in KINDS:
+        config = decision if kind in DECISION_TASKS else generation
+        generate_id = f"{kind}.generate"
+        validate_id = f"{kind}.validate"
+        rows.append(
+            {
+                "task_id": generate_id,
+                "role": "decision" if kind in DECISION_TASKS else "generation",
+                "kind": kind,
+                "provider": config.provider,
+                "model": config.model,
+                "depends_on": [f"{name}.validate" for name in _DEPENDENCIES[kind]],
+            }
+        )
+        rows.append(
+            {
+                "task_id": validate_id,
+                "role": "validator",
+                "kind": kind,
+                "provider": config.provider,
+                "model": config.model,
+                "depends_on": [generate_id],
+            }
+        )
+    return rows
+
+
+def require_swe_dispatch() -> None:
+    """Refuse a local runner. SWE's machine is the only dispatcher."""
+
+    gap = dispatch_gap()
+    if gap["runtime_budget"]["attached"]:
+        raise BudgetPending("RuntimeBudget imported before PR 11 was recorded merged")
+    raise DispatchGap(gap["reason"])
 
 
 def validate(kind: str, output: dict[str, Any] | None) -> str | None:
-    """Return a semantic error message, or None when the output is acceptable."""
+    """Explicit semantic check. It does not call a model and does not retry."""
 
     if not isinstance(output, dict):
         return "output is not an object"
@@ -92,125 +128,3 @@ def validate(kind: str, output: dict[str, Any] | None) -> str | None:
     if kind == "operation" and not isinstance(output.get("operation"), str):
         return "operation must be a string"
     return None
-
-
-async def run_join(
-    *,
-    run_id: str,
-    generation: AgentConfig,
-    decision: AgentConfig,
-    generation_provider: Any,
-    decision_provider: Any,
-    ledger: Ledger | None,
-    journal: Journal,
-    before_call: Callable[[str], Awaitable[None]] | None = None,
-) -> dict[str, Any]:
-    if ledger is None:
-        raise BudgetPending(runtime_budget_status()["reason"])
-    host_budget = _HostBudget(ledger, run_id)
-    host = AgentHost(budget=host_budget, journal=journal, retries=0)
-    failed: set[str] = set()
-    results: dict[str, dict[str, Any]] = {}
-    for layer in LAYERS:
-        await asyncio.gather(
-            *[
-                _task(
-                    kind,
-                    host=host,
-                    host_budget=host_budget,
-                    ledger=ledger,
-                    generation=generation,
-                    decision=decision,
-                    generation_provider=generation_provider,
-                    decision_provider=decision_provider,
-                    failed=failed,
-                    results=results,
-                    before_call=before_call,
-                )
-                for kind in layer
-            ]
-        )
-    return {"results": results, "retries": 0}
-
-
-async def _task(
-    kind: str,
-    *,
-    host: AgentHost,
-    host_budget: _HostBudget,
-    ledger: Ledger,
-    generation: AgentConfig,
-    decision: AgentConfig,
-    generation_provider: Any,
-    decision_provider: Any,
-    failed: set[str],
-    results: dict[str, dict[str, Any]],
-    before_call: Callable[[str], Awaitable[None]] | None,
-) -> None:
-    dependencies = {
-        "relevance": (),
-        "extraction": ("relevance",),
-        "entailment": ("extraction",),
-        "atomicity": ("extraction",),
-        "operation": ("entailment", "atomicity"),
-    }[kind]
-    if any(name in failed for name in dependencies):
-        results[kind] = {"ok": False, "error": "dependency", "called": False}
-        failed.add(kind)
-        return
-    if before_call is not None:
-        await before_call(kind)
-    if kind in DECISION_TASKS:
-        result = host.decide(
-            decision,
-            DecisionRequest(
-                invocation_id=kind,
-                node_id=kind,
-                question=kind,
-                options=["entailment", "contradiction", "neutral"] if kind == "entailment" else ["yes", "no"],
-                state={},
-            ),
-            decision_provider,
-            amount=MILLI,
-        )
-    else:
-        result = host.generate(
-            generation,
-            GenerationRequest(
-                invocation_id=kind,
-                node_id=kind,
-                instruction=kind,
-                output_mode="text",
-            ),
-            generation_provider,
-            amount=MILLI,
-        )
-    _finish(kind, result, host_budget, ledger, failed, results)
-
-
-def _finish(
-    kind: str,
-    result: AgentResult,
-    host_budget: _HostBudget,
-    ledger: Ledger,
-    failed: set[str],
-    results: dict[str, dict[str, Any]],
-) -> None:
-    reservation_id = host_budget.ids.get(kind)
-    if reservation_id is None:
-        error = result.error.kind if result.error is not None else "budget"
-        results[kind] = {"ok": False, "error": error, "called": False}
-        failed.add(kind)
-        return
-    if not result.ok:
-        ledger.settle(reservation_id=reservation_id, spent_milli=0, key=kind)
-        results[kind] = {"ok": False, "error": result.error.kind if result.error else "provider", "called": True}
-        failed.add(kind)
-        return
-    message = validate(kind, result.output)
-    ledger.settle(reservation_id=reservation_id, spent_milli=1 if message is None else 0, key=kind)
-    if message is not None:
-        results[kind] = {"ok": False, "error": "semantic", "detail": message, "called": True}
-        failed.add(kind)
-        return
-    results[kind] = {"ok": True, "output": result.output, "called": True}
