@@ -78,6 +78,13 @@ holds. `reservation_for()` returns by invocation id, and
 `reconcile_invocation()` finishes a pending hold without the host retaining the
 object returned by `reserve`.
 
+`pending()`/`unresolved()` return the current in-process objects. When a retry
+adopts a `PENDING` hold, `reserve()` installs a fresh `RESERVED` object with the
+same ledger id; older snapshots are stale. `settle`, `release`, and `reconcile`
+reject a stale object with `BudgetStateError`. A host that kept a recovery-queue
+snapshot must use `reservation_for(invocation_id)` / `reconcile_invocation(...)`
+or take a fresh snapshot.
+
 ## Invariants
 
 1. **Reserve before dispatch.** The reservation happens immediately before the
@@ -108,7 +115,9 @@ object returned by `reserve`.
    when the bounded in-process terminal window has evicted it: `reserve()`
    consults the ledger's authoritative `lookup(reserve_key)`. A hold whose
    ledger account differs from `RuntimeBudget.account` is refused before
-   admission; it is never charged to the wrong account. If a settlement
+   admission; it is never charged to the wrong account. A retry adoption
+   replaces the `PENDING` object, so an older snapshot is stale and cannot be
+   settled, released, or reconciled. If a settlement
    already exists under the stable settle key, the ledger is authoritative: a
    different amount fails closed instead of silently repricing or
    double-charging. SWE does not introduce a general retry loop; a host that
@@ -144,7 +153,7 @@ object returned by `reserve`.
 | `policy.settle` raises, returns an invalid amount, or exceeds the ceiling | `mark_pending`; the hold stays reserved and visible |
 | Ledger `settle` fails | `mark_pending`; the hold stays reserved and visible. If the ledger already has a settlement for the key, it is authoritative and the in-process state becomes terminal |
 | Late handler returns after timeout | The dispatch boundary settles the actual cost; the machine still fails/cancels the invocation |
-| Host decides a pending charge | `reconcile_invocation(invocation_id, ...)`; `reconcile(...)` also works with the object |
+| Host decides a pending charge | `reconcile_invocation(invocation_id, ...)` or the **current** object from `reservation_for`/a fresh `pending()` snapshot; stale snapshots are rejected |
 | Resume of a persisted invocation | No budget call; the recorded outcome is replayed |
 | Resume with the same budget | `restore(run_id=...)` reattaches open holds and registers terminal holds before dispatch |
 | Crash between settle and persist | The terminal hold is restored; a re-dispatch fails closed before the handler |

@@ -85,7 +85,9 @@ Kort:
    Ledgerns `lookup` är auktoritativ även när den in-process terminala
    retentionen har evictat posten. En hold som tillhör ett annat ledger-konto
    än `RuntimeBudget.account` avvisas före admission och kan aldrig debitera
-   fel konto.
+   fel konto. När en retry adopterar en `PENDING`-hold ersätts objektet; en
+   äldre `pending()`-snapshot är stale och avvisas av settle/release/reconcile.
+   Använd `reservation_for` eller `reconcile_invocation` för aktuellt objekt.
 8. Budgeten är domänoberoende: heltal i milli-enheter, ingen valuta, inga
    modellnamn och ingen prissättning i SWE.
 

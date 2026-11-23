@@ -25,7 +25,10 @@ overlapping retry is refused. A terminal ``SETTLED``/``RELEASED`` delivery is
 refused before the handler, including when the terminal window has evicted it:
 ``reserve`` consults the ledger's authoritative ``lookup``. If the ledger
 already holds a settlement under the stable settle key, that settlement is
-authoritative and a different amount fails closed.
+authoritative and a different amount fails closed. A retry adoption replaces
+the pending object, so an older recovery-queue snapshot is stale;
+settle/release/reconcile reject it. Use ``reservation_for`` or
+``reconcile_invocation`` for the current object.
 """
 
 from __future__ import annotations
@@ -366,6 +369,7 @@ class RuntimeBudget:
         """
 
         self._require_open(reservation, "settle")
+        self._require_current(reservation, "settle")
         try:
             actual = self.policy.settle(reservation.request, outcome)
         except BudgetError:
@@ -413,6 +417,7 @@ class RuntimeBudget:
 
         if reservation.state in {ReservationState.SETTLED, ReservationState.RELEASED}:
             return
+        self._require_current(reservation, "release")
         try:
             self.ledger.release(
                 reservation_id=reservation.reservation_id,
@@ -461,6 +466,7 @@ class RuntimeBudget:
 
         if reservation.state in {ReservationState.SETTLED, ReservationState.RELEASED}:
             return
+        self._require_current(reservation, "reconcile")
         if reservation.state is not ReservationState.PENDING:
             raise BudgetStateError(
                 "reconcile requires a pending reservation; "
@@ -515,7 +521,11 @@ class RuntimeBudget:
         )
 
     def pending(self) -> tuple[BudgetReservation, ...]:
-        """Holds awaiting a host decision: cancel/timeout or failed settlement."""
+        """Holds awaiting a host decision: cancel/timeout or failed settlement.
+
+        The returned objects are current snapshots. A retry adoption installs a
+        fresh object for the same invocation, invalidating an older snapshot.
+        """
 
         return tuple(
             reservation
@@ -673,6 +683,17 @@ class RuntimeBudget:
 
         if reservation.state is ReservationState.RESERVED:
             reservation.state = ReservationState.PENDING
+
+    def _require_current(
+        self, reservation: BudgetReservation, action: str
+    ) -> None:
+        invocation_id = reservation.request.invocation_id
+        if self._by_invocation.get(invocation_id) is not reservation:
+            raise BudgetStateError(
+                f"stale reservation object for {invocation_id!r} during {action}; "
+                "use reservation_for/reconcile_invocation or the current object",
+                path=f"nodes.{reservation.request.node_id}",
+            )
 
     @staticmethod
     def _require_open(reservation: BudgetReservation, action: str) -> None:

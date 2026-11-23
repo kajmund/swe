@@ -963,3 +963,96 @@ def test_ledger_hold_from_another_account_is_not_adopted() -> None:
     assert replayed.balance(account="a")["reserved"] == 1
     assert replayed.balance(account="b")["reserved"] == 0
 
+
+def test_stale_pending_snapshot_cannot_release_the_inflight_retry() -> None:
+    budget, ledger = _budget(cap_milli=5)
+    request = _request("inv-stale")
+    old = budget.reserve(request)
+    assert old is not None
+    budget.mark_pending(old)
+    snapshot = budget.pending()[0]
+    assert snapshot is old
+
+    retry = budget.reserve(request)
+    assert retry is not None
+    assert retry is not old
+    assert retry.state is ReservationState.RESERVED
+    assert ledger.balance(account="a")["reserved"] == 1
+
+    for action in (
+        lambda: budget.reconcile(snapshot, release=True),
+        lambda: budget.reconcile(snapshot, spent_milli=0),
+        lambda: budget.release(snapshot),
+        lambda: budget.settle(snapshot, BudgetOutcome(ok=True)),
+    ):
+        with pytest.raises(BudgetStateError, match="stale reservation object"):
+            action()
+
+    assert ledger.balance(account="a")["reserved"] == 1
+    assert ledger.balance(account="a")["spent"] == 0
+
+    budget.settle(retry, BudgetOutcome(ok=True, value={"ok": True}))
+    assert ledger.balance(account="a")["spent"] == 1
+    assert ledger.balance(account="a")["reserved"] == 0
+
+
+@pytest.mark.asyncio
+async def test_runtime_stale_reconcile_rejects_and_retry_completes() -> None:
+    calls: list[int] = []
+    started1 = asyncio.Event()
+    release1 = asyncio.Event()
+    started2 = asyncio.Event()
+    go2 = asyncio.Event()
+
+    async def work(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        calls.append(len(calls))
+        if len(calls) == 1:
+            started1.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await release1.wait()
+            return {"ok": True}
+        started2.set()
+        await go2.wait()
+        return {"ok": True}
+
+    budget, ledger = _budget(cap_milli=5)
+    first = await WorkflowRunner(
+        _one_node_flow(),
+        {"m.work": work},
+        resources=WorkflowResources(
+            budget=budget, action_timeouts={"work": 1}
+        ),
+    ).run({}, run_id="race")
+    assert first.status == "failed"
+    assert started1.is_set()
+    snapshot = budget.pending()[0]
+
+    second_task = asyncio.create_task(
+        WorkflowRunner(
+            _one_node_flow(),
+            {"m.work": work},
+            resources=WorkflowResources(budget=budget),
+        ).run({}, run_id="race")
+    )
+    await asyncio.wait_for(started2.wait(), timeout=5)
+    current = budget.reservation_for(snapshot.request.invocation_id)
+    assert current is not None
+    assert current.state is ReservationState.RESERVED
+
+    with pytest.raises(BudgetStateError, match="stale reservation object"):
+        budget.reconcile(snapshot, release=True)
+    assert ledger.balance(account="a")["reserved"] == 1
+
+    go2.set()
+    retry = await asyncio.wait_for(second_task, timeout=5)
+    assert retry.status == "completed"
+    assert ledger.balance(account="a")["spent"] == 1
+    assert ledger.balance(account="a")["reserved"] == 0
+
+    release1.set()
+    await asyncio.sleep(0)
+    await _cancel_swe_tasks()
+    assert len(calls) == 2
+
