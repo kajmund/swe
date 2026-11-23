@@ -223,10 +223,9 @@ fn lookup_reports_open_settled_and_released_across_replay() {
     funded(&mut ledger, "root", 100_000);
 
     let open = ledger.reserve("run", "root", 10_000, "open-key").unwrap();
-    assert_eq!(
-        ledger.lookup("open-key").unwrap().status,
-        ReservationStatus::Open
-    );
+    let open_view = ledger.lookup("open-key").unwrap();
+    assert_eq!(open_view.status, ReservationStatus::Open);
+    assert_eq!(open_view.account, "root");
     ledger.settle(open, 4_000, "settle-open").unwrap();
     let settled = ledger.lookup("open-key").unwrap();
     assert_eq!(settled.status, ReservationStatus::Settled);

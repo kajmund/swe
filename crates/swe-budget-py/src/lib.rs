@@ -63,6 +63,7 @@ impl PyLedger {
                 dict.set_item("reservation_id", view.reservation_id)?;
                 dict.set_item("amount_milli", view.amount_milli)?;
                 dict.set_item("spent_milli", view.spent_milli)?;
+                dict.set_item("account", &view.account)?;
                 let status = match view.status {
                     ReservationStatus::Open => "open",
                     ReservationStatus::Settled => "settled",

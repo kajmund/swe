@@ -83,7 +83,9 @@ Kort:
    `run_id`/`invocation_id`; en `PENDING`-hold får en färsk `RESERVED`-objekt
    med samma ledger-id, medan en terminal delivery vägras före handlern.
    Ledgerns `lookup` är auktoritativ även när den in-process terminala
-   retentionen har evictat posten.
+   retentionen har evictat posten. En hold som tillhör ett annat ledger-konto
+   än `RuntimeBudget.account` avvisas före admission och kan aldrig debitera
+   fel konto.
 8. Budgeten är domänoberoende: heltal i milli-enheter, ingen valuta, inga
    modellnamn och ingen prissättning i SWE.
 

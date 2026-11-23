@@ -936,3 +936,30 @@ async def test_running_resume_with_cancel_restores_holds_before_aborting() -> No
     assert budget.pending()[0].request.invocation_id == "inv-orphan"
     assert replayed.balance(account="a")["reserved"] == 1
 
+
+def test_ledger_hold_from_another_account_is_not_adopted() -> None:
+    ledger = NativeBudgetLedger()
+    ledger.allocate(run_id="run-x", account="a", amount_milli=5, key="alloc")
+    ledger.reserve(
+        run_id="run-x",
+        account="a",
+        amount_milli=1,
+        key="run-x:inv-x:reserve",
+    )
+    replayed = NativeBudgetLedger.replay(ledger.events())
+    budget = RuntimeBudget(replayed, _FixedPolicy(), account="b")
+    request = BudgetRequest(
+        run_id="run-x",
+        invocation_id="inv-x",
+        node_id="work",
+        kind="handler",
+        name="m.work",
+        input={},
+    )
+
+    with pytest.raises(BudgetStateError, match="belongs to account"):
+        budget.reserve(request)
+    assert budget.pending() == ()
+    assert replayed.balance(account="a")["reserved"] == 1
+    assert replayed.balance(account="b")["reserved"] == 0
+

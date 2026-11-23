@@ -305,6 +305,13 @@ class RuntimeBudget:
         request: BudgetRequest,
         ledger_state: Mapping[str, Any],
     ) -> BudgetReservation:
+        ledger_account = str(ledger_state.get("account", ""))
+        if ledger_account != self.account:
+            raise BudgetStateError(
+                f"budget reservation for {request.invocation_id!r} belongs to "
+                f"account {ledger_account!r}, not {self.account!r}",
+                path=f"nodes.{request.node_id}",
+            )
         status = str(ledger_state.get("status", ""))
         if status not in {"open", "settled", "released"}:
             raise BudgetStateError(

@@ -84,11 +84,12 @@ pub enum ReservationStatus {
     Released,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReservationView {
     pub reservation_id: u64,
     pub amount_milli: Amount,
     pub spent_milli: Amount,
+    pub account: String,
     pub status: ReservationStatus,
 }
 
@@ -492,6 +493,7 @@ impl Ledger {
             reservation_id,
             amount_milli: reservation.amount,
             spent_milli: reservation.spent,
+            account: reservation.account.clone(),
             status,
         })
     }

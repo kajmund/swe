@@ -53,7 +53,7 @@ BudgetLedger:
     reserve(run_id, account, amount_milli, key) -> reservation_id
     settle(reservation_id, spent_milli, key) -> None
     release(reservation_id, key) -> None
-    lookup(key) -> {reservation_id, amount_milli, spent_milli, status} | None
+    lookup(key) -> {reservation_id, amount_milli, spent_milli, account, status} | None
     balance(account) -> {allocated, incoming, outgoing, spent, reserved, available}
     events() -> [...]
 
@@ -106,7 +106,9 @@ object returned by `reserve`.
    actual dispatch request; a second overlapping retry is refused. A terminal
    `SETTLED`/`RELEASED` delivery is refused before the handler runs, including
    when the bounded in-process terminal window has evicted it: `reserve()`
-   consults the ledger's authoritative `lookup(reserve_key)`. If a settlement
+   consults the ledger's authoritative `lookup(reserve_key)`. A hold whose
+   ledger account differs from `RuntimeBudget.account` is refused before
+   admission; it is never charged to the wrong account. If a settlement
    already exists under the stable settle key, the ledger is authoritative: a
    different amount fails closed instead of silently repricing or
    double-charging. SWE does not introduce a general retry loop; a host that
