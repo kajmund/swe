@@ -64,9 +64,14 @@ Kort:
 3. En reservation avslutas exakt en gång: settle eller release. Dubbel
    settle/release avvisas av `RuntimeBudget` och dedupliceras av ledgern.
 4. Settlement får aldrig överstiga reservationen. Overrun failar closed och
-   lämnar reservationen öppen för host-reconciliation.
-5. Cancel och timeout markerar reservationen `pending`; medel frigörs inte
-   tidigt. Sen debitering kan settle:as eller reconcileras av hosten.
+   lämnar reservationen `pending`, aldrig som en osynlig `reserved`-hold.
+5. Cancel, timeout och **misslyckad settlement** (policyfel, ogiltigt belopp,
+   overrun eller ledgerfel) markerar reservationen `pending`; medel frigörs
+   inte tidigt. Hosten hittar den via `pending()`/`unresolved()` och avslutar
+   den med `reconcile_invocation(invocation_id, ...)` utan att behöva
+   reservationsobjektet. En pågående `reserved`-hold visas i `unresolved()`
+   men får inte reconcileras förrän den är pending eller har settlement:ats
+   normalt.
 6. Replay anropar inte budget för redan persistrade invocations. Hosten
    persisterar och replayar ledgerhändelserna tillsammans med `RunStore`.
 7. Ingen generell retry införs. En host-retry måste återanvända samma

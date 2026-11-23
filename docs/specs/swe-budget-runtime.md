@@ -54,6 +54,10 @@ BudgetLedger:
     release(reservation_id, key) -> None
     balance(account) -> {allocated, incoming, outgoing, spent, reserved, available}
     events() -> [...]
+    pending() -> tuple[BudgetReservation, ...]
+    unresolved() -> tuple[BudgetReservation, ...]
+    reservation_for(invocation_id) -> BudgetReservation | None
+    reconcile_invocation(invocation_id, spent_milli=..., release=...)
 ```
 
 `RuntimeBudget` composes one ledger, one policy, and one account. The host
@@ -61,6 +65,12 @@ constructs it; the runtime only calls `reserve`, `settle`, `release`, and
 `mark_pending`. On a late return after cancel or timeout, `BudgetOutcome`
 carries `cancelled`/`timed_out` from the invocation handle; `ok` still reflects
 whether the call itself returned.
+
+`pending()` is the recovery queue: cancel/timeout holds **and failed
+settlements**. `unresolved()` additionally includes still-reserved in-flight
+holds. `reservation_for()` returns by invocation id, and
+`reconcile_invocation()` finishes a pending hold without the host retaining the
+object returned by `reserve`.
 
 ## Invariants
 
@@ -87,11 +97,13 @@ whether the call itself returned.
    `{run_id}:{invocation_id}:reserve`, `:settle`, and `:release`. A retry of the
    same logical invocation reuses the same reservation and cannot double-charge.
    SWE does not introduce a general retry loop.
-7. **Cancellation and timeout.** `mark_pending` keeps the reservation on the
-   ledger. Funds are not released early, because SWE cannot know whether the
-   provider billed the cancelled call. A later outcome may settle it; otherwise
-   the host calls `reconcile(..., spent_milli=...)` or
-   `reconcile(..., release=True)`.
+7. **Cancellation, timeout, and failed settlement.** `mark_pending` keeps the
+   reservation on the ledger. Funds are not released early, because SWE cannot
+   know whether the provider billed the cancelled call. A later outcome may
+   settle it; otherwise the host calls `reconcile_invocation(...)` or
+   `reconcile(..., release=True)`. A settlement failure (policy exception,
+   invalid amount, overrun, or ledger error) also marks the hold pending; it is
+   never left as an invisible `RESERVED` hold.
 8. **Replay.** The host persists and replays the ledger event log alongside the
    `RunStore`. Replayed invocations do not reserve or settle again. Open
    reservations from a crash are reused by the same stable key when the
@@ -106,8 +118,10 @@ whether the call itself returned.
 | Handler/provider raises | `settle` with the policy's failure cost (often 0) |
 | Provider exact-cache hit | `reserve` still happens; policy may settle 0 using `cache_state="hit"` |
 | `cancel_event` or action timeout cancels the call | `mark_pending`; no release |
+| `policy.settle` raises, returns an invalid amount, or exceeds the ceiling | `mark_pending`; the hold stays reserved and visible |
+| Ledger `settle` fails | `mark_pending`; the hold stays reserved and visible |
 | Late handler returns after timeout | The dispatch boundary settles the actual cost; the machine still fails/cancels the invocation |
-| Host decides a pending charge | `reconcile(spent_milli=...)` or `reconcile(release=True)` |
+| Host decides a pending charge | `reconcile_invocation(invocation_id, ...)`; `reconcile(...)` also works with the object |
 | Resume of a persisted invocation | No budget call; the recorded outcome is replayed |
 | Crash between reserve and persist | The replayed ledger keeps the reservation; the same key is reused |
 
@@ -125,6 +139,15 @@ therefore surfaces as the kernel `kind="handler"` with a message beginning
 `budget ...`. The persisted `InvocationRecord.error` keeps the host kind
 `"budget"`; hosts that need the distinction read the record, not the kernel
 error.
+
+A failed settlement is **not** left as an invisible `RESERVED` hold. The
+reservation is marked `PENDING`, `pending()` includes it, and the host can
+finish it with `reconcile_invocation(invocation_id, spent_milli=...)` or
+`reconcile_invocation(invocation_id, release=True)`. Repeating reconciliation
+is a no-op; a second `settle` is rejected. An in-flight `RESERVED` hold is
+visible through `unresolved()` but cannot be reconciled until it is marked
+pending or settles normally, so the host cannot race the runtime by settling a
+call that is still running.
 
 ## Concurrency and capacity
 

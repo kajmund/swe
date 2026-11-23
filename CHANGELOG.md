@@ -11,6 +11,9 @@ All notable changes to this project are documented here.
   once, and keeps cancel/timeout reservations pending so already-billed funds
   are not reused early. Unknown cost fails closed; no general retry is added.
   SWD 1.0, journal v1, `RunResult`, and the Rust machine are unchanged.
+  Failed settlements are marked pending and exposed through `pending()` /
+  `unresolved()`; `reconcile_invocation(invocation_id, ...)` finishes them
+  without releasing reserved funds early or allowing a double settlement.
 - Give cancelled siblings a cancel grace before they count as abandoned, and
   signal `InvocationHandle` from `reap_owned` when `run` / `resume` itself is
   cancelled so hosts still see `handle.cancel`.

@@ -15,6 +15,7 @@ from swe.budget import (
     BudgetExceeded,
     BudgetOutcome,
     BudgetRequest,
+    BudgetStateError,
     NativeBudgetLedger,
     RuntimeBudget,
 )
@@ -413,4 +414,116 @@ async def test_provider_and_cache_hit_use_the_same_budget_lifecycle() -> None:
     assert ledger.balance(account="a")["spent"] == 1
     assert ledger.balance(account="a")["reserved"] == 0
     assert ledger.balance(account="a")["available"] == 1
+
+
+class _RaisingSettlePolicy(_FixedPolicy):
+    def __init__(self) -> None:
+        super().__init__(reserve_milli=10, failure_milli=10)
+
+    def settle(self, request: BudgetRequest, outcome: BudgetOutcome) -> int:
+        raise RuntimeError("pricing broke")
+
+
+class _InvalidSettlePolicy(_FixedPolicy):
+    def __init__(self) -> None:
+        super().__init__(reserve_milli=10, failure_milli=10)
+
+    def settle(self, request: BudgetRequest, outcome: BudgetOutcome) -> int:
+        return -1
+
+
+class _OverrunSettlePolicy(_FixedPolicy):
+    def __init__(self) -> None:
+        super().__init__(reserve_milli=10, failure_milli=10)
+
+    def settle(self, request: BudgetRequest, outcome: BudgetOutcome) -> int:
+        return self.reserve_milli + 1
+
+
+def _one_task_batch():
+    return compile_microtasks(
+        [Microtask("only")],
+        handler="m.work",
+        concurrency=1,
+        timeout_seconds=30,
+    )
+
+
+@pytest.mark.parametrize(
+    ("policy_factory", "reconciled_milli"),
+    [
+        (_RaisingSettlePolicy, 7),
+        (_InvalidSettlePolicy, 5),
+        (_OverrunSettlePolicy, 10),
+    ],
+)
+@pytest.mark.asyncio
+async def test_failed_settlement_is_pending_and_reconcilable_by_invocation_id(
+    policy_factory: type[_FixedPolicy],
+    reconciled_milli: int,
+) -> None:
+    """A policy exception, invalid amount, and overrun keep the hold visible.
+
+    The host does not receive the reservation object from dispatch; it must be
+    able to find the hold through the public budget object and reconcile it by
+    invocation id without releasing the funds early or settling twice.
+    """
+
+    budget, ledger = _budget(cap_milli=10, policy=policy_factory())
+    batch = _one_task_batch()
+
+    async def work(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        return {"ok": True}
+
+    result = await batch.run(
+        work,
+        resources=WorkflowResources(budget=budget),
+        run_id="settle-failure",
+    )
+
+    assert result.status == "failed"
+    balance = ledger.balance(account="a")
+    assert balance["reserved"] == 10
+    assert balance["spent"] == 0
+    assert balance["available"] == 0
+
+    pending = budget.pending()
+    assert len(pending) == 1
+    reservation = pending[0]
+    invocation_id = reservation.request.invocation_id
+    assert budget.reservation_for(invocation_id) is reservation
+    assert budget.unresolved() == (reservation,)
+
+    budget.reconcile_invocation(invocation_id, spent_milli=reconciled_milli)
+    balance = ledger.balance(account="a")
+    assert balance["spent"] == reconciled_milli
+    assert balance["reserved"] == 0
+    assert balance["available"] == 10 - reconciled_milli
+    assert budget.pending() == ()
+    assert budget.unresolved() == ()
+
+    # Repeating reconciliation is a no-op, and a second settle is rejected.
+    budget.reconcile_invocation(invocation_id, spent_milli=reconciled_milli)
+    assert len([event for event in ledger.events() if event["kind"] == "spend"]) == 1
+    with pytest.raises(BudgetStateError):
+        budget.settle(reservation, BudgetOutcome(ok=True))
+
+
+def test_unresolved_exposes_a_reserved_hold_and_requires_pending_to_reconcile() -> None:
+    budget, ledger = _budget(cap_milli=10)
+    reservation = budget.reserve(_request("inv-direct"))
+    assert reservation is not None
+    assert budget.unresolved() == (reservation,)
+    assert budget.pending() == ()
+
+    # An in-flight hold cannot be reconciled behind the runtime's back.
+    with pytest.raises(BudgetStateError):
+        budget.reconcile_invocation("inv-direct", release=True)
+
+    budget.mark_pending(reservation)
+    assert budget.pending() == (reservation,)
+    budget.reconcile_invocation("inv-direct", release=True)
+    assert budget.unresolved() == ()
+    assert ledger.balance(account="a")["reserved"] == 0
+    assert ledger.balance(account="a")["available"] == 10
 

@@ -219,27 +219,44 @@ class RuntimeBudget:
         reservation: BudgetReservation,
         outcome: BudgetOutcome,
     ) -> None:
-        """Settle exactly once with the policy's actual cost."""
+        """Settle exactly once with the policy's actual cost.
+
+        Any failure leaves the reservation open and marks it pending. The host
+        can then find it through :meth:`pending` / :meth:`unresolved` and
+        finish it with :meth:`reconcile_invocation`; reserved funds are never
+        released by the failure path.
+        """
 
         self._require_open(reservation, "settle")
         try:
             actual = self.policy.settle(reservation.request, outcome)
         except BudgetError:
+            self._mark_unresolved(reservation)
             raise
         except Exception as exc:  # noqa: BLE001 - keep the reservation open
+            self._mark_unresolved(reservation)
             raise BudgetStateError(
                 f"budget policy could not settle {reservation.request.name!r}: {exc}",
                 path=f"nodes.{reservation.request.node_id}",
             ) from exc
-        actual = _require_amount(actual, path="policy.settle")
+        try:
+            actual = _require_amount(actual, path="policy.settle")
+        except BudgetError:
+            self._mark_unresolved(reservation)
+            raise
         if actual > reservation.reserved_milli:
+            self._mark_unresolved(reservation)
             raise BudgetOverrun(
                 f"actual cost {actual} exceeds reservation "
                 f"{reservation.reserved_milli} for {reservation.request.name!r}; "
                 "the reservation stays open for reconciliation",
                 path=f"nodes.{reservation.request.node_id}",
             )
-        self._settle_amount(reservation, actual)
+        try:
+            self._settle_amount(reservation, actual)
+        except BudgetError:
+            self._mark_unresolved(reservation)
+            raise
 
     def release(self, reservation: BudgetReservation) -> None:
         """Release an unsettled reservation. Idempotent after settle/release."""
@@ -264,7 +281,12 @@ class RuntimeBudget:
         reservation.state = ReservationState.RELEASED
 
     def mark_pending(self, reservation: BudgetReservation) -> None:
-        """Keep funds reserved after cancel/timeout; never release early."""
+        """Keep funds reserved after cancel/timeout or a failed settlement.
+
+        Marking pending never releases funds. It only makes the held
+        reservation visible to :meth:`pending` / :meth:`unresolved` so the host
+        can reconcile it later.
+        """
 
         if reservation.state is ReservationState.RESERVED:
             reservation.state = ReservationState.PENDING
@@ -280,11 +302,20 @@ class RuntimeBudget:
 
         ``release=True`` refunds the reservation. Otherwise ``spent_milli`` is
         settled, bounded by the original reservation. Exactly one of the two
-        outcomes is applied; repeated calls are idempotent.
+        outcomes is applied; repeated calls are idempotent. Only a pending
+        reservation can be reconciled: a still-running ``RESERVED`` hold must
+        first be marked pending (or be allowed to settle normally), so a host
+        cannot settle an in-flight call early and then race the runtime.
         """
 
         if reservation.state in {ReservationState.SETTLED, ReservationState.RELEASED}:
             return
+        if reservation.state is not ReservationState.PENDING:
+            raise BudgetStateError(
+                "reconcile requires a pending reservation; "
+                "a reserved hold must settle normally or be marked pending first",
+                path=f"nodes.{reservation.request.node_id}",
+            )
         if release:
             self.release(reservation)
             return
@@ -302,11 +333,51 @@ class RuntimeBudget:
             )
         self._settle_amount(reservation, amount)
 
+    def reconcile_invocation(
+        self,
+        invocation_id: str,
+        *,
+        spent_milli: int | None = None,
+        release: bool = False,
+    ) -> None:
+        """Reconcile by invocation id, without retaining the reservation object.
+
+        During workflow dispatch the host never sees the object returned by
+        :meth:`reserve`. This is the public recovery path for a pending hold:
+        it looks the reservation up by the invocation id exposed on
+        :class:`BudgetRequest`, then applies :meth:`reconcile` exactly once.
+        """
+
+        reservation = self._by_invocation.get(invocation_id)
+        if reservation is None:
+            raise BudgetStateError(
+                f"unknown budget reservation for invocation {invocation_id!r}",
+                path="budget",
+            )
+        self.reconcile(reservation, spent_milli=spent_milli, release=release)
+
+    def reservation_for(self, invocation_id: str) -> BudgetReservation | None:
+        """Return the known reservation for an invocation, including terminal ones."""
+
+        return self._by_invocation.get(invocation_id)
+
     def pending(self) -> tuple[BudgetReservation, ...]:
+        """Holds awaiting a host decision: cancel/timeout or failed settlement."""
+
         return tuple(
             reservation
             for reservation in self._by_invocation.values()
             if reservation.state is ReservationState.PENDING
+        )
+
+    def unresolved(self) -> tuple[BudgetReservation, ...]:
+        """Every non-terminal hold, including in-flight and pending settlements."""
+
+        return tuple(
+            reservation
+            for reservation in self._by_invocation.values()
+            if reservation.state
+            in {ReservationState.RESERVED, ReservationState.PENDING}
         )
 
     def balance(self) -> Mapping[str, int]:
@@ -334,6 +405,13 @@ class RuntimeBudget:
             ) from exc
         reservation.state = ReservationState.SETTLED
         reservation.spent_milli = spent_milli
+
+    @staticmethod
+    def _mark_unresolved(reservation: BudgetReservation) -> None:
+        """Expose a failed settlement without releasing its reserved funds."""
+
+        if reservation.state is ReservationState.RESERVED:
+            reservation.state = ReservationState.PENDING
 
     @staticmethod
     def _require_open(reservation: BudgetReservation, action: str) -> None:
