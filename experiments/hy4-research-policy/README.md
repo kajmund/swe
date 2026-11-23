@@ -8,12 +8,26 @@ Status: schema diagnosis `runs/20261123T213131Z` is a separate $2 pool.
 `refuse_live_dispatch` still refuses an uncapped dispatch. Pydantic AI is used
 only inside this experiment and does not schedule SWE work. The semantic
 contract in `semantic_contract.py` is an offline mock: strict output, a
-source-text check, then one explicit JEV call. Official docs fetched
-2026-11-23 (https://pydantic.dev/docs/ai/models/typesafe/) describe
-`TypeSafeModel` for Jev. Installed 2.54.0 contains that module, but importing
-it requires `typesafe-sdk`, which is not installed. Installed 1.63.0 has
-neither `typesafe` nor `system_one`. `SystemOneModel` in 2.54 is the generic
-`/v1/systemone` client and is not called by this PoC.
+source-text check, then one explicit decision call through `agent_adapter.py`.
+
+## Agent adapter
+
+`agent_adapter.py` is the model-independent host. It does not import Pydantic
+AI, the Rust runtime, or an agent loop. SWE supplies the provider, the budget,
+the journal, the tool, and the retry count. Each `generate`, `decide`, and
+`call_tool` writes one journal row per attempt.
+
+The model directory at https://pydantic.dev/docs/ai/models/overview/, read
+2026-11-23, lists `ollama:`, `typesafe:` (Jev), and `system-one:`. System One's
+installed 2.54.0 text names CLM and Laya. Clef is not listed and is refused.
+`ModelProfile` flags used for gating are `supports_tools`,
+`supports_text_output`, `supports_json_schema_output`, and
+`supports_json_object_output`. In 2.54.0, `OllamaModel` and `SystemOneModel`
+import. `TypeSafeModel` raises `ImportError` until `typesafe-sdk` is installed.
+Installed 1.63.0 has none of those model modules. The adapter never constructs
+the native classes. Two configured generation mocks share one request type,
+and the decision method is separate. Missing usage counts stay null. The USD
+cap in `config/protocol.json` stays 2.
 
 ## Frozen inputs
 

@@ -135,7 +135,7 @@ def test_jev_error_is_journaled_once() -> None:
     assert verdict.error == "jev"
     assert len(client.calls) == 1
     assert journal.records[0]["ok"] is False
-    assert journal.records[0]["error"]["kind"] == "jev"
+    assert journal.records[0]["error"]["kind"] == "provider"
 
 
 def test_budget_refusal_skips_jev() -> None:

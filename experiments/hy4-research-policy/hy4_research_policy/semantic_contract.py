@@ -111,6 +111,32 @@ def _from_judgement(judgement: Judgement) -> Verdict:
     )
 
 
+class _DecisionBinding:
+    """One configured decision provider. The host performs the invocation."""
+
+    name = "typesafe"
+
+    def __init__(self, client: JevClient) -> None:
+        self.client = client
+
+    def profile(self) -> dict[str, bool]:
+        from hy4_research_policy.agent_adapter import DECISION_PROFILE
+
+        return dict(DECISION_PROFILE)
+
+    def decide(self, question: str, options: list[str], state: dict[str, str]) -> Any:
+        from hy4_research_policy.agent_adapter import Completion
+
+        judgement = self.client.judge(
+            proposition=question,
+            evidence=state["evidence"],
+            source_id=state["source_id"],
+        )
+        if judgement.relation not in options:
+            raise ValueError("relation is outside the requested options")
+        return Completion(output=judgement.model_dump())
+
+
 def _invoke_jev(
     claim: Claim,
     *,
@@ -119,45 +145,27 @@ def _invoke_jev(
     journal: Journal,
     amount: Decimal,
 ) -> Verdict:
-    if not budget.reserve("jev", amount):
-        journal.append(
-            {
-                "invocation_id": "jev",
-                "node_id": "jev",
-                "ok": False,
-                "value": None,
-                "error": {"kind": "budget", "message": "reservation refused", "path": "jev"},
-            }
-        )
-        return _error("budget", "reservation refused", atomic=True)
-    try:
-        judgement = client.judge(
-            proposition=claim.proposition,
-            evidence=claim.quote,
-            source_id=claim.source_id,
-        )
-    except Exception as exc:
-        journal.append(
-            {
-                "invocation_id": "jev",
-                "node_id": "jev",
-                "ok": False,
-                "value": None,
-                "error": {"kind": "jev", "message": type(exc).__name__, "path": "jev"},
-            }
-        )
-        return _error("jev", type(exc).__name__, atomic=True)
-    verdict = _from_judgement(judgement)
-    journal.append(
-        {
-            "invocation_id": "jev",
-            "node_id": "jev",
-            "ok": True,
-            "value": verdict.model_dump(),
-            "error": None,
-        }
+    from hy4_research_policy.agent_adapter import AgentConfig, AgentHost, DecisionRequest
+
+    result = AgentHost(budget=budget, journal=journal, retries=0).decide(
+        AgentConfig(kind="decision", provider="typesafe", model="jev-1.13.0"),
+        DecisionRequest(
+            invocation_id="jev",
+            node_id="jev",
+            question=claim.proposition,
+            options=["SUPPORTS", "CONTRADICTS", "INSUFFICIENT"],
+            state={"evidence": claim.quote, "source_id": claim.source_id},
+        ),
+        _DecisionBinding(client),
+        amount=amount,
+        native=False,
     )
-    return verdict
+    if result.error is not None and result.error.kind == "budget":
+        return _error("budget", result.error.message, atomic=True)
+    if not result.ok or result.output is None:
+        detail = result.error.message if result.error is not None else "jev"
+        return _error("jev", detail, atomic=True)
+    return _from_judgement(Judgement.model_validate(result.output))
 
 
 def evaluate(
