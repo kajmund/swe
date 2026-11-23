@@ -77,11 +77,15 @@ uv run swe-microtasks-benchmark --tasks 10000 --concurrency 64
 
 `swe.budget.RuntimeBudget` makes spend a first-class run resource. It composes
 a host policy with the existing Rust `swe-budget` ledger, exposed as
-`swe_native.Ledger`; there is no second ledger. When
+`swe_budget.Ledger`; there is no second ledger. When
 `WorkflowResources(budget=...)` is present, dispatch reserves atomically before
-each handler/provider call, settles or releases exactly once, and keeps a
-cancelled or timed-out reservation pending so already-billed funds are not
-reused early.
+each handler/provider call, settles once, and keeps a cancelled, timed-out, or
+abandoned reservation pending so already-billed funds are not reused early.
+Host reconciliation may release a pending hold.
+
+The Python package needs both native wheels: `swe-native` (the kernel) and
+`swe-budget-native` (the ledger binding). `make python` and CI build/install
+both.
 
 ```python
 from swe.budget import NativeBudgetLedger, RuntimeBudget

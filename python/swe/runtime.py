@@ -31,9 +31,9 @@ Blocking I/O (`time.sleep`, blocking sockets, threads that ignore cancel)
 is not force-stopped and may continue after SWE has settled the timeout;
 the host must abort sockets from `InvocationHandle.cancel`. Retry stays
 unsupported. When `WorkflowResources.budget` is set, dispatch reserves
-before the handler/provider call and settles or releases exactly once;
-cancel and timeout keep the reservation pending so funds that may already
-be billed are not reused early.
+before the handler/provider call and settles once; host reconciliation may
+release a pending hold. Cancel and timeout keep the reservation pending so
+funds that may already be billed are not reused early.
 
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
@@ -253,6 +253,7 @@ class WorkflowRunner:
                 driver.interrupt_reason or "cancel",
             )
             _harvest_cache_orphans(driver)
+            _mark_abandoned_budget(driver)
             driver.cancel_task = None
 
     async def resume(self, run_id: str) -> RunResult:
@@ -308,6 +309,8 @@ class WorkflowRunner:
             persisted_events=len(events),
             last_seq=stored.last_seq,
         ))
+        if driver.budget is not None:
+            driver.budget.restore(run_id=run_id)
         try:
             return await self._execute(driver, outcome)
         finally:
@@ -320,6 +323,7 @@ class WorkflowRunner:
                 driver.interrupt_reason or "cancel",
             )
             _harvest_cache_orphans(driver)
+            _mark_abandoned_budget(driver)
             driver.cancel_task = None
 
     async def _execute(self, driver: _Driver, outcome: Mapping[str, Any]) -> RunResult:
@@ -628,8 +632,19 @@ def _abandon_pending(driver: _Driver) -> None:
                 )
         elif not task.done():
             task.cancel()
+        if driver.budget is not None:
+            driver.budget.mark_pending_invocation(invocation_id)
         driver.abandoned.register(invocation_id, node_id, task)
     _harvest_cache_orphans(driver)
+
+
+def _mark_abandoned_budget(driver: _Driver) -> None:
+    """Expose every abandoned handler's hold to the host for reconciliation."""
+
+    if driver.budget is None:
+        return
+    for invocation_id in driver.abandoned.invocation_ids():
+        driver.budget.mark_pending_invocation(invocation_id)
 
 
 def _harvest_cache_orphans(driver: _Driver) -> None:
@@ -700,7 +715,14 @@ def _validate_action_timeouts(action_timeouts: Mapping[str, int]) -> dict[str, i
 def _validate_budget(budget: object | None) -> None:
     if budget is None:
         return
-    for name in ("reserve", "settle", "release", "mark_pending"):
+    for name in (
+        "reserve",
+        "settle",
+        "release",
+        "mark_pending",
+        "mark_pending_invocation",
+        "restore",
+    ):
         if not callable(getattr(budget, name, None)):
             raise SwePreflightError(
                 f"budget is missing {name}()",

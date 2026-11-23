@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 pytest.importorskip("swe_native")
+pytest.importorskip("swe_budget")
 
 from swe.budget import (
     BudgetExceeded,
@@ -28,7 +29,8 @@ from swe.run_store import (
     RunRecord,
     WorkflowResources,
 )
-from swe.runtime import run_workflow
+from swe.runtime import WorkflowRunner, run_workflow
+from swe_runtime_helpers import swe_tasks
 
 pytestmark = pytest.mark.swe_runtime
 
@@ -132,6 +134,8 @@ async def test_ten_thousand_microtasks_with_budget_and_bounded_concurrency() -> 
     assert balance["spent"] == tasks
     assert balance["reserved"] == 0
     assert balance["available"] == 0
+    assert budget.open_count == 0
+    assert budget.retained_terminal_count <= budget.terminal_capacity
 
     kinds = [event["kind"] for event in ledger.events()]
     assert kinds.count("allocate") == 1
@@ -307,7 +311,7 @@ async def test_crash_and_resume_replays_ledger_without_double_charge() -> None:
         await asyncio.sleep(0)
         return {"task_id": payload["task_id"]}
 
-    store = _CrashOnceStore(crash_after=5)
+    store = _CrashOnceStore(crash_after=tasks)
     budget, ledger = _budget(cap_milli=tasks)
     with pytest.raises(RuntimeError, match="simulated crash"):
         await batch.run(
@@ -526,4 +530,222 @@ def test_unresolved_exposes_a_reserved_hold_and_requires_pending_to_reconcile() 
     assert budget.unresolved() == ()
     assert ledger.balance(account="a")["reserved"] == 0
     assert ledger.balance(account="a")["available"] == 10
+
+
+def _one_node_flow() -> object:
+    return compile_definition(
+        {
+            "version": "1.0",
+            "name": "budget_retry",
+            "entrypoint": "work",
+            "limits": {"max_steps": 8, "max_depth": 1, "timeout_seconds": 30},
+            "nodes": {
+                "work": {"type": "task", "handler": "m.work", "next": "done"},
+                "done": {"type": "end", "status": "completed"},
+            },
+        },
+        handlers=frozenset({"m.work"}),
+    )
+
+
+@pytest.mark.asyncio
+async def test_terminal_delivery_is_not_redispatched_on_host_retry() -> None:
+    calls: list[int] = []
+
+    async def work(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        calls.append(len(calls))
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+        return {"ok": True}
+
+    budget, ledger = _budget(cap_milli=5)
+    runner = WorkflowRunner(
+        _one_node_flow(),
+        {"m.work": work},
+        resources=WorkflowResources(budget=budget),
+        run_store=MemoryRunStore(),
+    )
+    first = await runner.run({}, run_id="retry-terminal")
+    assert first.status == "failed"
+    assert calls == [0]
+    assert budget.pending() == ()
+    assert budget.open_count == 0
+    assert budget.retained_terminal_count == 1
+
+    # Same run/invocation id = same logical delivery. It is already settled at 0
+    # (the failed attempt), so a second dispatch must fail closed before the
+    # handler runs, not conflict after the handler succeeds.
+    second = await runner.run({}, run_id="retry-terminal")
+    assert second.status == "failed"
+    assert second.error is not None
+    assert "already settled" in second.error["message"].lower()
+    assert calls == [0]
+    assert ledger.balance(account="a")["spent"] == 0
+    assert budget.pending() == ()
+
+
+class _CrashBeforePersistStore(MemoryRunStore):
+    """Persist the run start, then crash before the first invocation record."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.crashed = False
+
+    async def record(
+        self,
+        run: RunRecord,
+        *,
+        events: Sequence[Mapping[str, Any]] = (),
+        invocation: InvocationRecord | None = None,
+    ) -> None:
+        if invocation is not None and not self.crashed:
+            self.crashed = True
+            raise RuntimeError("simulated crash before persist")
+        await super().record(run, events=events, invocation=invocation)
+
+
+@pytest.mark.asyncio
+async def test_crash_between_settle_and_persist_restores_terminal_guard() -> None:
+    calls: list[int] = []
+
+    async def work(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        calls.append(len(calls))
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+        return {"ok": True}
+
+    budget, ledger = _budget(cap_milli=5)
+    store = _CrashBeforePersistStore()
+    runner = WorkflowRunner(
+        _one_node_flow(),
+        {"m.work": work},
+        resources=WorkflowResources(budget=budget),
+        run_store=store,
+    )
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        await runner.run({}, run_id="crash-terminal")
+    await _cancel_swe_tasks()
+    assert calls == [0]
+
+    replayed = NativeBudgetLedger.replay(ledger.events())
+    resumed_budget = RuntimeBudget(replayed, _FixedPolicy(), account="a")
+    resumed = await WorkflowRunner(
+        _one_node_flow(),
+        {"m.work": work},
+        resources=WorkflowResources(budget=resumed_budget),
+        run_store=store,
+    ).resume("crash-terminal")
+
+    assert resumed.status == "failed"
+    assert resumed.error is not None
+    assert "already settled" in resumed.error["message"].lower()
+    assert calls == [0]
+    assert replayed.balance(account="a")["spent"] == 0
+    assert resumed_budget.pending() == ()
+
+
+def test_restore_reattaches_an_open_ledger_reservation() -> None:
+    ledger = NativeBudgetLedger()
+    ledger.allocate(run_id="run-restore", account="a", amount_milli=5, key="alloc")
+    ledger.reserve(
+        run_id="run-restore",
+        account="a",
+        amount_milli=1,
+        key="run-restore:inv-restore:reserve",
+    )
+
+    replayed = NativeBudgetLedger.replay(ledger.events())
+    budget = RuntimeBudget(replayed, _FixedPolicy(), account="a")
+    assert budget.pending() == ()
+    assert budget.restore(run_id="run-restore") == 1
+
+    pending = budget.pending()
+    assert len(pending) == 1
+    assert pending[0].request.invocation_id == "inv-restore"
+    assert replayed.balance(account="a")["reserved"] == 1
+
+    budget.reconcile_invocation("inv-restore", spent_milli=1)
+    assert replayed.balance(account="a")["spent"] == 1
+    assert replayed.balance(account="a")["reserved"] == 0
+
+
+@pytest.mark.asyncio
+async def test_cancellation_resistant_abandon_marks_pending_for_recovery() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    finished = asyncio.Event()
+
+    async def stubborn(_payload: Mapping[str, Any]) -> Mapping[str, bool]:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await release.wait()
+            finished.set()
+            return {"ok": True}
+        return {"ok": False}
+
+    budget, ledger = _budget(cap_milli=1)
+    runner = WorkflowRunner(
+        _one_node_flow(),
+        {"m.work": stubborn},
+        resources=WorkflowResources(
+            budget=budget, action_timeouts={"work": 1}
+        ),
+    )
+    result = await asyncio.wait_for(
+        runner.run({}, run_id="abandon-budget"), timeout=5
+    )
+    assert result.status == "failed"
+    assert started.is_set()
+
+    pending = budget.pending()
+    assert len(pending) == 1
+    assert ledger.balance(account="a")["reserved"] == 1
+    invocation_id = pending[0].request.invocation_id
+
+    budget.reconcile_invocation(invocation_id, release=True)
+    assert ledger.balance(account="a")["reserved"] == 0
+
+    release.set()
+    await asyncio.wait_for(finished.wait(), timeout=2)
+    await asyncio.sleep(0)
+    # The late return tries to settle a released reservation; it is rejected
+    # inside the abandoned task and never charges a second time.
+    assert ledger.balance(account="a")["spent"] == 0
+    await _cancel_swe_tasks()
+    assert swe_tasks() == []
+
+
+def test_terminal_retention_is_bounded_and_drops_input() -> None:
+    ledger = NativeBudgetLedger()
+    ledger.allocate(run_id="r", account="a", amount_milli=10, key="alloc")
+    budget = RuntimeBudget(
+        ledger,
+        _FixedPolicy(),
+        account="a",
+        terminal_capacity=2,
+    )
+    reservations = []
+    for index in range(3):
+        reservation = budget.reserve(
+            BudgetRequest(
+                run_id="r",
+                invocation_id=f"inv-{index}",
+                node_id="work",
+                kind="handler",
+                name="m.work",
+                input={"secret": index},
+            )
+        )
+        assert reservation is not None
+        budget.settle(reservation, BudgetOutcome(ok=True, value={"i": index}))
+        reservations.append(reservation)
+
+    assert budget.open_count == 0
+    assert budget.retained_terminal_count == 2
+    assert budget.reservation_for("inv-0") is None
+    assert budget.reservation_for("inv-2") is reservations[2]
+    assert reservations[0].request.input == {}
+    assert ledger.balance(account="a")["spent"] == 3
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("swe_native")
+pytest.importorskip("swe_budget")
 
 from swe.budget import (
     BudgetOutcome,
@@ -100,19 +101,23 @@ def test_runtime_budget_reserves_before_and_settles_once() -> None:
     assert ledger.balance(account="a")["spent"] == 8
 
 
-def test_runtime_budget_retry_reuses_the_same_key_without_double_charge() -> None:
+def test_runtime_budget_retry_reuses_pending_but_refuses_terminal() -> None:
     ledger = _funded(100)
     budget = RuntimeBudget(ledger, _Policy(reserve_milli=10, settle_milli=10), account="a")
 
     first = budget.reserve(_request())
     assert first is not None
-    budget.settle(first, BudgetOutcome(ok=True, value={"attempt": 1}))
+    budget.mark_pending(first)
 
-    # A host-level retry of the same logical invocation: same key, no new charge.
+    # A retry may reuse an open/pending reservation; it must not create a second.
     retry = budget.reserve(_request())
-    assert retry is not None
+    assert retry is first
     assert retry.reservation_id == first.reservation_id
     budget.settle(retry, BudgetOutcome(ok=True, value={"attempt": 2}))
+
+    # Once terminal, the logical delivery is closed to a different retry.
+    with pytest.raises(BudgetStateError):
+        budget.reserve(_request())
 
     assert ledger.balance(account="a")["spent"] == 10
     assert ledger.balance(account="a")["reserved"] == 0

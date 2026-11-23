@@ -93,7 +93,7 @@ Budget settlement is opt-in on the Python runtime path. When
 handler/provider call, settles or releases exactly once, and keeps the
 reservation pending when cancel or timeout makes the external charge unknown.
 The ledger is the existing `swe-budget` crate, exposed to Python as
-`swe_native.Ledger`; SWE does not invent a second ledger. Without a budget
+`swe_budget.Ledger`; SWE does not invent a second ledger. Without a budget
 resource the previous behaviour is unchanged. Timeout and cancel must not call
 `complete` / `fail` twice on the machine, so a host that settles from those
 completions cannot double-settle. A timed-out or cancelled invocation that

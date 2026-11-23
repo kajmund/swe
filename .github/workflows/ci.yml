@@ -130,7 +130,7 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
-      - name: Build native wheel and run the standalone suite
+      - name: Build native wheels and run the standalone suite
         shell: bash
         run: |
           set -euo pipefail
@@ -138,11 +138,15 @@ jobs:
           uv sync --locked --group dev
           cd ..
           uvx maturin build \
+            --manifest-path crates/swe-budget-py/Cargo.toml \
+            --interpreter python/.venv/bin/python \
+            --out /tmp/swe-budget-wheel
+          uvx maturin build \
             --manifest-path crates/swe-native/Cargo.toml \
             --interpreter python/.venv/bin/python \
             --out /tmp/swe-native-wheel
           cd python
-          uv pip install --reinstall /tmp/swe-native-wheel/*.whl
+          uv pip install --reinstall /tmp/swe-budget-wheel/*.whl /tmp/swe-native-wheel/*.whl
           uv run --no-sync pytest -m "not smoke"
       - name: Prove the Python distribution installs outside the checkout
         shell: bash
@@ -218,6 +222,7 @@ jobs:
       - run: cargo package --locked -p swe-native
       - run: cd python && uv build
       - run: uvx maturin sdist --manifest-path crates/swe-native/Cargo.toml --out /tmp/swe-native-sdist
+      - run: uvx maturin sdist --manifest-path crates/swe-budget-py/Cargo.toml --out /tmp/swe-budget-sdist
 
   ci:
     name: CI

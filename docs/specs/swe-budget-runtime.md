@@ -9,7 +9,7 @@ journal v1 contracts are unchanged.
 When present, every handler and provider invocation is priced by a host
 policy, reserved atomically before the call, and settled or released exactly
 once. The ledger is the existing Rust `swe-budget` crate, exposed to Python
-as `swe_native.Ledger`; SWE does not implement a second ledger.
+as `swe_budget.Ledger`; SWE does not implement a second ledger.
 
 When the resource is absent, runtime behaviour is exactly the previous
 behaviour: no reservation, no settlement, no new event.
@@ -19,7 +19,7 @@ behaviour: no reservation, no settlement, no new event.
 | Concern | Owner | Contract |
 | --- | --- | --- |
 | Ledger invariants: reserve/settle/release/replay, idempotency, no negative balance | Rust `swe-budget` | `crates/swe-budget/src/lib.rs` |
-| PyO3 surface: `swe_native.Ledger` | Rust `swe-native` (`python` feature) | `crates/swe-native/src/python.rs` |
+| PyO3 surface: `swe_budget.Ledger` | `crates/swe-budget-py` (`publish = false`) | `crates/swe-budget-py/src/lib.rs` |
 | Lifecycle: when to reserve, settle, release, or keep pending | Python `swe.budget.RuntimeBudget` | this document |
 | Prices, provider identity, token/cost estimates | Host `BudgetPolicy` | this document |
 
@@ -84,7 +84,8 @@ object returned by `reserve`.
    If funds are insufficient, the handler is not called and the invocation
    fails closed with a budget error.
 3. **Exactly once.** A reservation reaches exactly one terminal transition:
-   settle or release. `RuntimeBudget` rejects a second settle/release with
+   settle from dispatch, or release from host reconciliation. Dispatch itself
+   never releases. `RuntimeBudget` rejects a second settle/release with
    `BudgetStateError`; the Rust ledger also deduplicates by key.
 4. **Conservative ceiling.** `policy.reserve` must return a ceiling at or above
    any actual cost. `policy.settle` may not exceed it. An overrun is a policy
@@ -93,21 +94,30 @@ object returned by `reserve`.
 5. **Unknown cost fails closed.** A policy that cannot price a call raises
    `BudgetUnknownCost` (or returns a non-integer/negative value). No handler is
    called and no ledger event is written.
-6. **Idempotency.** The ledger keys are stable:
-   `{run_id}:{invocation_id}:reserve`, `:settle`, and `:release`. A retry of the
-   same logical invocation reuses the same reservation and cannot double-charge.
-   SWE does not introduce a general retry loop.
-7. **Cancellation, timeout, and failed settlement.** `mark_pending` keeps the
-   reservation on the ledger. Funds are not released early, because SWE cannot
-   know whether the provider billed the cancelled call. A later outcome may
-   settle it; otherwise the host calls `reconcile_invocation(...)` or
-   `reconcile(..., release=True)`. A settlement failure (policy exception,
+6. **Idempotency and retries.** The ledger keys are stable:
+   `{run_id}:{invocation_id}:reserve`, `:settle`, and `:release`. A retry may
+   reuse a `PENDING` hold for the same logical delivery; a terminal
+   `SETTLED`/`RELEASED` delivery is refused before the handler runs. If a
+   settlement already exists under the stable settle key, the ledger is
+   authoritative: a different amount fails closed instead of silently
+   repricing or double-charging. SWE does not introduce a general retry loop;
+   a host that needs a new cost for a settled delivery must issue a new
+   run/invocation (a new logical delivery).
+7. **Cancellation, timeout, abandonment, and failed settlement.** `mark_pending`
+   keeps the reservation on the ledger. Funds are not released early, because
+   SWE cannot know whether the provider billed the cancelled call. A later
+   outcome may settle it; otherwise the host calls `reconcile_invocation(...)`
+   or `reconcile(..., release=True)`. When the runtime abandons a
+   cancellation-resistant handler, it marks that invocation's hold pending
+   before registering the orphan. A settlement failure (policy exception,
    invalid amount, overrun, or ledger error) also marks the hold pending; it is
    never left as an invisible `RESERVED` hold.
 8. **Replay.** The host persists and replays the ledger event log alongside the
-   `RunStore`. Replayed invocations do not reserve or settle again. Open
-   reservations from a crash are reused by the same stable key when the
-   invocation is re-dispatched.
+   `RunStore`. `WorkflowRunner.resume` calls `budget.restore(run_id=...)`:
+   open reservations become `PENDING` and are reconcilable; terminal
+   reservations enter the bounded terminal window, so a re-dispatch of a
+   settled-but-unpersisted delivery fails closed before the handler. Replayed
+   invocations do not reserve or settle again.
 
 ## Lifecycle
 
@@ -118,12 +128,14 @@ object returned by `reserve`.
 | Handler/provider raises | `settle` with the policy's failure cost (often 0) |
 | Provider exact-cache hit | `reserve` still happens; policy may settle 0 using `cache_state="hit"` |
 | `cancel_event` or action timeout cancels the call | `mark_pending`; no release |
+| Runtime abandons a cancellation-resistant handler | `mark_pending_invocation`; the hold is reconcilable, the orphan may still return |
 | `policy.settle` raises, returns an invalid amount, or exceeds the ceiling | `mark_pending`; the hold stays reserved and visible |
-| Ledger `settle` fails | `mark_pending`; the hold stays reserved and visible |
+| Ledger `settle` fails | `mark_pending`; the hold stays reserved and visible. If the ledger already has a settlement for the key, it is authoritative and the in-process state becomes terminal |
 | Late handler returns after timeout | The dispatch boundary settles the actual cost; the machine still fails/cancels the invocation |
 | Host decides a pending charge | `reconcile_invocation(invocation_id, ...)`; `reconcile(...)` also works with the object |
 | Resume of a persisted invocation | No budget call; the recorded outcome is replayed |
-| Crash between reserve and persist | The replayed ledger keeps the reservation; the same key is reused |
+| Resume with the same budget | `restore(run_id=...)` reattaches open holds and registers terminal holds before dispatch |
+| Crash between settle and persist | The terminal hold is restored; a re-dispatch fails closed before the handler |
 
 ## Failure mapping
 
@@ -145,9 +157,15 @@ reservation is marked `PENDING`, `pending()` includes it, and the host can
 finish it with `reconcile_invocation(invocation_id, spent_milli=...)` or
 `reconcile_invocation(invocation_id, release=True)`. Repeating reconciliation
 is a no-op; a second `settle` is rejected. An in-flight `RESERVED` hold is
-visible through `unresolved()` but cannot be reconciled until it is marked
-pending or settles normally, so the host cannot race the runtime by settling a
-call that is still running.
+visible through `unresolved()` but the public reconciliation path refuses it
+until it is marked pending or settles normally. A host that manually calls
+`mark_pending`/`release` on an in-flight hold accepts responsibility for racing
+the handler; the ledger still prevents a double charge.
+
+Terminal reservations are kept only in a bounded recent window
+(`terminal_capacity`, default 1024) and their `request.input` is dropped. The
+window exists for idempotent `reservation_for`/`reconcile_invocation` checks;
+the ledger remains the source of truth for older charges.
 
 ## Concurrency and capacity
 
@@ -155,8 +173,10 @@ For handlers the reservation is taken inside the runtime's capacity permit, so
 at most `concurrency` handler reservations are live for one runner. Provider
 reservations are taken before the exact-cache lookup; a cache miss still
 acquires capacity inside the provider call, while a coalesced waiter may hold
-its reservation until the cache owner completes. This makes a cap smaller than
-the total workload possible: completed calls settle and free their unspent
+its reservation until its own dispatch settles or the host reconciles it. The
+cache owner's completion does not settle a waiter for it. This makes a cap
+smaller than the total workload possible: completed calls settle and free their
+unspent
 remainder before the next queued call reserves. A cap that is smaller than the
 number of simultaneously live reservations fails closed rather than
 overspending.
@@ -190,9 +210,10 @@ See `docs/swe-standalone/17-budget-runtime-decision.md` for the decision record.
 - `python/tests/test_swe_budget_binding.py` – ledger binding, replay,
   idempotency, overrun and state transitions.
 - `python/tests/test_swe_budget_runtime.py` – 10,000 microtasks at concurrency
-  64 with a budget cap, fail-closed cap exhaustion, cancellation with a pending
-  reservation, failure settlement, provider exact-cache hits, and crash/resume
-  replay.
+  64 with a budget cap, fail-closed cap exhaustion, cancellation and
+  cancellation-resistant abandonment, failure settlement, provider exact-cache
+  hits, host-retry terminal refusal, crash-before-persist restoration, open-hold
+  restore, bounded terminal retention, and crash/resume replay.
 - `cargo test -p swe-budget --locked` – ledger acceptance tests.
 - `python -m pytest` – the complete host suite.
 

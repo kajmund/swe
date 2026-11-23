@@ -69,7 +69,7 @@ The microtask facade does not mint or reinterpret Sweycoins. A batch may pass
 `swe.budget.RuntimeBudget` in `WorkflowResources`; the runtime then reserves
 before each handler call, settles or releases exactly once, and keeps a
 cancelled/timed-out reservation pending. That path uses the existing Rust
-`swe-budget` ledger through `swe_native.Ledger`; it does not add a second
+`swe-budget` ledger through `swe_budget.Ledger`; it does not add a second
 ledger. Without a budget resource, a host that needs per-task cost accounting
 continues to use `swe-budget::Ledger` with stable invocation or host-operation
 keys. The batch result and event sequence remain the source for linking

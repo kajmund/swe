@@ -11,7 +11,7 @@ SWE:s Python-runtime ska kunna bära budget som en förstaklassresurs:
 - `WorkflowResources` får ett valfritt `budget`-fält av typen
   `swe.budget.RuntimeBudget`.
 - `RuntimeBudget` komponerar en host-policy med den **befintliga** Rust-ledgern
-  `swe-budget`, exponerad via PyO3 som `swe_native.Ledger`.
+  `swe-budget`, exponerad via PyO3 som `swe_budget.Ledger`.
 - Runtime reserverar atomärt före handler-/provideranropet, settle:ar eller
   release:ar exakt en gång och håller reservationen pending vid cancel/timeout.
 - Ingen duplicerad ledger, ingen ny SWD-nod, inget nytt journalfält och ingen
@@ -86,13 +86,15 @@ Kort:
   beteendet oförändrat.
 - SWD 1.0-schemat, journal v1, events, `RunResult` och Rust-maskinen ändras
   inte. Ingen wire-version behöver bumpas.
-- Den enda nya Rust-beroendekedjan är att `swe-native` med `python`-feature
-  beror på workspace-craten `swe-budget`.
-- Publiceringsordning: `swe-budget` måste publiceras före `swe-native`, eftersom
-  `swe-native`s `python`-feature har en versionssatt path-dependency. `cargo
-  package -p swe-budget` följt av registry-publicering ska ske först; därefter
-  kan `cargo package -p swe-native` verifiera mot crates.io. CI bygger
-  native-wheelen från källträdet och påverkas inte av den ordningen.
+- Den nya PyO3-ytan ligger i en separat, icke-publicerad crate
+  `crates/swe-budget-py` (`publish = false`, Python-modul `swe_budget`,
+  wheel `swe-budget-native`). `swe-native` har därför **ingen** dependency på
+  `swe-budget` och kan fortfarande `cargo package`-verifieras mot crates.io.
+- `cargo package -p swe-budget` och `cargo package -p swe-native` är fortsatt
+  de publicerade crate-grindarna. `swe-budget-py` byggs som Python-wheel/sdist
+  men publiceras inte som crate; CI bygger båda native-wheelen och installerar
+  dem tillsammans. Ingen extern publicering krävs för att package-jobbet ska
+  bli grönt.
 - Kernelns frysta `ErrorKind` saknar `budget`. Budgetfel blir därför
   `kind="handler"` i `RunResult.error` med ett meddelande som börjar
   `budget ...`; `InvocationRecord.error` behåller host-kind `"budget"`.

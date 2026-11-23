@@ -1,7 +1,7 @@
 """Generic runtime budget contract backed by the Rust ``swe-budget`` ledger.
 
 The runtime never invents a second ledger. ``RuntimeBudget`` composes a host
-``BudgetLedger`` (the PyO3 binding ``swe_native.Ledger`` in the reference
+``BudgetLedger`` (the PyO3 binding ``swe_budget.Ledger`` in the reference
 case) with a domain-neutral ``BudgetPolicy`` that supplies two integers:
 
 - ``reserve(request)``: a conservative ceiling for one invocation, or ``0``
@@ -19,13 +19,17 @@ billed a cancelled call.
 
 Retries are not introduced here. If a host retries an invocation, it must reuse
 the same ``run_id`` and ``invocation_id`` so the ledger's idempotency keys
-prevent a second reservation or charge.
+prevent a second reservation or charge. A retry may reuse a ``PENDING`` hold;
+a terminal ``SETTLED``/``RELEASED`` delivery is refused before the handler. If
+the ledger already holds a settlement under the stable settle key, that
+settlement is authoritative and a different amount fails closed.
 """
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -101,7 +105,7 @@ class BudgetReservation:
 class BudgetLedger(Protocol):
     """The subset of the Rust ledger the runtime needs.
 
-    ``swe_native.Ledger`` is wrapped by :class:`NativeBudgetLedger`; a host may
+    ``swe_budget.Ledger`` is wrapped by :class:`NativeBudgetLedger`; a host may
     provide its own durable adapter with the same integer semantics.
     """
 
@@ -141,6 +145,9 @@ def _key(request: BudgetRequest, suffix: str) -> str:
     return f"{request.run_id}:{request.invocation_id}:{suffix}"
 
 
+DEFAULT_TERMINAL_CAPACITY = 1_024
+
+
 class RuntimeBudget:
     """Compose a ledger and a policy; enforce the runtime reservation protocol."""
 
@@ -150,9 +157,19 @@ class RuntimeBudget:
         policy: BudgetPolicy,
         *,
         account: str = "default",
+        terminal_capacity: int = DEFAULT_TERMINAL_CAPACITY,
     ) -> None:
         if not isinstance(account, str) or not account.strip():
             raise BudgetError("account must be a non-empty string", path="account")
+        if (
+            isinstance(terminal_capacity, bool)
+            or not isinstance(terminal_capacity, int)
+            or terminal_capacity < 1
+        ):
+            raise BudgetError(
+                "terminal_capacity must be a positive integer",
+                path="terminal_capacity",
+            )
         for name in ("reserve", "settle", "release", "balance", "events"):
             if not callable(getattr(ledger, name, None)):
                 raise BudgetError(
@@ -166,14 +183,53 @@ class RuntimeBudget:
         self.ledger = ledger
         self.policy = policy
         self.account = account
+        self.terminal_capacity = terminal_capacity
+        # Open holds only: RESERVED or PENDING. Terminal holds move to the
+        # bounded _completed window and drop request.input.
         self._by_invocation: dict[str, BudgetReservation] = {}
+        self._completed: OrderedDict[str, BudgetReservation] = OrderedDict()
 
     @property
     def account_name(self) -> str:
         return self.account
 
+    @property
+    def open_count(self) -> int:
+        return len(self._by_invocation)
+
+    @property
+    def retained_terminal_count(self) -> int:
+        return len(self._completed)
+
     def reserve(self, request: BudgetRequest) -> BudgetReservation | None:
         """Reserve before dispatch. ``None`` means the policy declared it free."""
+
+        existing = self.reservation_for(request.invocation_id)
+        if existing is not None:
+            if existing.request.run_id != request.run_id:
+                raise BudgetStateError(
+                    f"invocation id {request.invocation_id!r} already belongs to "
+                    f"run {existing.request.run_id!r}",
+                    path=f"nodes.{request.node_id}",
+                )
+            if existing.state in {
+                ReservationState.SETTLED,
+                ReservationState.RELEASED,
+            }:
+                raise BudgetStateError(
+                    f"logical delivery {request.invocation_id!r} is already "
+                    f"{existing.state.value}; refusing to reserve it again",
+                    path=f"nodes.{request.node_id}",
+                )
+            if existing.state is ReservationState.PENDING:
+                # A prior attempt was cancelled, abandoned, or failed to settle.
+                # Reuse its ceiling; a retry must not create a second reservation.
+                return existing
+            raise BudgetStateError(
+                f"invocation {request.invocation_id!r} already has an active "
+                "reservation; concurrent duplicate dispatch is not allowed",
+                path=f"nodes.{request.node_id}",
+            )
 
         try:
             amount = self.policy.reserve(request)
@@ -254,7 +310,19 @@ class RuntimeBudget:
             )
         try:
             self._settle_amount(reservation, actual)
-        except BudgetError:
+        except BudgetError as exc:
+            recorded = self._recorded_settlement(reservation)
+            if recorded is not None:
+                state, recorded_milli = recorded
+                reservation.state = state
+                reservation.spent_milli = recorded_milli
+                self._finish_terminal(reservation)
+                raise BudgetStateError(
+                    f"logical delivery {reservation.request.invocation_id!r} is "
+                    f"already {state.value} at {recorded_milli} milli; refusing "
+                    f"a different settlement ({actual})",
+                    path=f"nodes.{reservation.request.node_id}",
+                ) from exc
             self._mark_unresolved(reservation)
             raise
 
@@ -279,6 +347,7 @@ class RuntimeBudget:
                 path=f"nodes.{reservation.request.node_id}",
             ) from exc
         reservation.state = ReservationState.RELEASED
+        self._finish_terminal(reservation)
 
     def mark_pending(self, reservation: BudgetReservation) -> None:
         """Keep funds reserved after cancel/timeout or a failed settlement.
@@ -348,7 +417,7 @@ class RuntimeBudget:
         :class:`BudgetRequest`, then applies :meth:`reconcile` exactly once.
         """
 
-        reservation = self._by_invocation.get(invocation_id)
+        reservation = self.reservation_for(invocation_id)
         if reservation is None:
             raise BudgetStateError(
                 f"unknown budget reservation for invocation {invocation_id!r}",
@@ -357,9 +426,11 @@ class RuntimeBudget:
         self.reconcile(reservation, spent_milli=spent_milli, release=release)
 
     def reservation_for(self, invocation_id: str) -> BudgetReservation | None:
-        """Return the known reservation for an invocation, including terminal ones."""
+        """Return the known reservation, including the bounded terminal window."""
 
-        return self._by_invocation.get(invocation_id)
+        return self._by_invocation.get(invocation_id) or self._completed.get(
+            invocation_id
+        )
 
     def pending(self) -> tuple[BudgetReservation, ...]:
         """Holds awaiting a host decision: cancel/timeout or failed settlement."""
@@ -380,11 +451,118 @@ class RuntimeBudget:
             in {ReservationState.RESERVED, ReservationState.PENDING}
         )
 
+    def mark_pending_invocation(self, invocation_id: str) -> None:
+        """Mark an open hold pending; used when the runtime abandons its task."""
+
+        reservation = self._by_invocation.get(invocation_id)
+        if reservation is not None:
+            self.mark_pending(reservation)
+
+    def restore(self, *, run_id: str | None = None) -> int:
+        """Rehydrate reservations from the ledger event log after replay.
+
+        Open reservations become ``PENDING`` so the host can reconcile them.
+        Terminal reservations are restored into the bounded terminal window so
+        a re-dispatch of a settled logical delivery fails closed before the
+        handler runs. Returns the number of open holds restored.
+        """
+
+        records: dict[int, dict[str, Any]] = {}
+        for event in self.ledger.events():
+            if str(event.get("account", "")) != self.account:
+                continue
+            event_run = str(event.get("run_id", ""))
+            if run_id is not None and event_run != run_id:
+                continue
+            kind = str(event.get("kind", ""))
+            reservation_id = event.get("reservation_id")
+            if not isinstance(reservation_id, int):
+                continue
+            if kind == "reserve":
+                key = str(event.get("key", ""))
+                prefix = f"{event_run}:"
+                suffix = ":reserve"
+                if not (key.startswith(prefix) and key.endswith(suffix)):
+                    continue
+                invocation_id = key[len(prefix) : -len(suffix)]
+                if not invocation_id:
+                    continue
+                records[reservation_id] = {
+                    "run_id": event_run,
+                    "invocation_id": invocation_id,
+                    "amount": int(event.get("amount_milli", 0)),
+                    "state": ReservationState.PENDING,
+                    "spent": 0,
+                }
+            elif kind == "spend" and reservation_id in records:
+                records[reservation_id]["state"] = ReservationState.SETTLED
+                records[reservation_id]["spent"] = int(
+                    event.get("amount_milli", 0)
+                )
+            elif kind == "release" and reservation_id in records:
+                if records[reservation_id]["state"] is not ReservationState.SETTLED:
+                    records[reservation_id]["state"] = ReservationState.RELEASED
+
+        restored = 0
+        for reservation_id, record in records.items():
+            invocation_id = record["invocation_id"]
+            if self.reservation_for(invocation_id) is not None:
+                continue
+            request = BudgetRequest(
+                run_id=record["run_id"],
+                invocation_id=invocation_id,
+                node_id="",
+                kind="restored",
+                name="ledger",
+                input={},
+            )
+            reservation = BudgetReservation(
+                request=request,
+                base_key=f"{record['run_id']}:{invocation_id}",
+                reservation_id=reservation_id,
+                reserved_milli=record["amount"],
+                state=record["state"],
+                spent_milli=record["spent"],
+            )
+            if record["state"] is ReservationState.PENDING:
+                self._by_invocation[invocation_id] = reservation
+                restored += 1
+            else:
+                self._remember_terminal(reservation)
+        return restored
+
     def balance(self) -> Mapping[str, int]:
         return self.ledger.balance(account=self.account)
 
     def events(self) -> Sequence[Mapping[str, Any]]:
         return self.ledger.events()
+
+    def _finish_terminal(self, reservation: BudgetReservation) -> None:
+        self._remember_terminal(reservation)
+
+    def _remember_terminal(self, reservation: BudgetReservation) -> None:
+        """Drop input and keep only a bounded recent terminal window."""
+
+        invocation_id = reservation.request.invocation_id
+        reservation.request = replace(reservation.request, input={})
+        self._by_invocation.pop(invocation_id, None)
+        self._completed[invocation_id] = reservation
+        self._completed.move_to_end(invocation_id)
+        while len(self._completed) > self.terminal_capacity:
+            self._completed.popitem(last=False)
+
+    def _recorded_settlement(
+        self, reservation: BudgetReservation
+    ) -> tuple[ReservationState, int] | None:
+        settle_key = _key(reservation.request, "settle")
+        for event in self.ledger.events():
+            if event.get("key") == settle_key and event.get("kind") == "spend":
+                return ReservationState.SETTLED, int(event.get("amount_milli", 0))
+        release_key = _key(reservation.request, "release")
+        for event in self.ledger.events():
+            if event.get("key") == release_key and event.get("kind") == "release":
+                return ReservationState.RELEASED, 0
+        return None
 
     def _settle_amount(self, reservation: BudgetReservation, spent_milli: int) -> None:
         try:
@@ -405,6 +583,7 @@ class RuntimeBudget:
             ) from exc
         reservation.state = ReservationState.SETTLED
         reservation.spent_milli = spent_milli
+        self._finish_terminal(reservation)
 
     @staticmethod
     def _mark_unresolved(reservation: BudgetReservation) -> None:
@@ -426,13 +605,13 @@ class RuntimeBudget:
 
 
 class NativeBudgetLedger:
-    """Adapter for ``swe_native.Ledger`` (the Rust ``swe-budget`` crate)."""
+    """Adapter for ``swe_budget.Ledger`` (the Rust ``swe-budget`` crate)."""
 
     def __init__(self, ledger: Any | None = None) -> None:
         if ledger is None:
-            import swe_native
+            import swe_budget
 
-            ledger = swe_native.Ledger()
+            ledger = swe_budget.Ledger()
         self._ledger = ledger
 
     def allocate(
@@ -476,9 +655,9 @@ class NativeBudgetLedger:
 
     @classmethod
     def replay(cls, events: Sequence[Mapping[str, Any]]) -> NativeBudgetLedger:
-        import swe_native
+        import swe_budget
 
-        return cls(swe_native.Ledger.replay(list(events)))
+        return cls(swe_budget.Ledger.replay(list(events)))
 
 
 __all__ = [

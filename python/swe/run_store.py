@@ -132,10 +132,11 @@ class WorkflowResources:
 
     ``budget`` is an optional :class:`swe.budget.RuntimeBudget`. When present,
     every handler and provider call is priced by its policy, reserved atomically
-    before dispatch, and settled or released exactly once. The ledger remains
-    the existing Rust ``swe-budget`` crate; this resource adds no second ledger.
-    Cancellation and action timeout keep the reservation pending rather than
-    releasing funds that may already have been billed.
+    before dispatch, and settled once by dispatch; host reconciliation may
+    release a pending hold. The ledger remains the existing Rust ``swe-budget``
+    crate; this resource adds no second ledger. Cancellation and action timeout
+    keep the reservation pending rather than releasing funds that may already
+    have been billed.
     """
 
     providers: Mapping[str, Callable[..., Awaitable[Any]]] = field(

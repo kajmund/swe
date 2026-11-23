@@ -6,14 +6,20 @@ All notable changes to this project are documented here.
 
 - Add an opt-in first-class runtime budget. `WorkflowResources.budget` accepts
   `swe.budget.RuntimeBudget`, which composes a host policy with the existing
-  Rust `swe-budget` ledger exposed as `swe_native.Ledger`. Dispatch reserves
-  atomically before the handler/provider call, settles or releases exactly
-  once, and keeps cancel/timeout reservations pending so already-billed funds
-  are not reused early. Unknown cost fails closed; no general retry is added.
-  SWD 1.0, journal v1, `RunResult`, and the Rust machine are unchanged.
-  Failed settlements are marked pending and exposed through `pending()` /
-  `unresolved()`; `reconcile_invocation(invocation_id, ...)` finishes them
-  without releasing reserved funds early or allowing a double settlement.
+  Rust `swe-budget` ledger exposed as `swe_budget.Ledger`. Dispatch reserves
+  atomically before the handler/provider call and settles once; host
+  reconciliation may release a pending hold. Cancel/timeout/abandonment keep
+  the reservation pending so already-billed funds are not reused early.
+  Unknown cost fails closed; no general retry is added. SWD 1.0, journal v1,
+  `RunResult`, and the Rust machine are unchanged. Failed settlements are
+  marked pending and exposed through `pending()` / `unresolved()`;
+  `reconcile_invocation(invocation_id, ...)` finishes them without releasing
+  reserved funds early or allowing a double settlement. `resume` restores open
+  and terminal holds from the ledger; a terminal delivery is refused before a
+  re-dispatch, and terminal in-process retention is bounded (input dropped).
+  The PyO3 shell lives in `crates/swe-budget-py` (wheel `swe-budget-native`),
+  so `swe-native` keeps no `swe-budget` dependency and its package dry run
+  passes.
 - Give cancelled siblings a cancel grace before they count as abandoned, and
   signal `InvocationHandle` from `reap_owned` when `run` / `resume` itself is
   cancelled so hosts still see `handle.cancel`.

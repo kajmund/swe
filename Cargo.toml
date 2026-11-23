@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/swe-budget",
+    "crates/swe-budget-py",
     "crates/swe-native",
     "crates/swe-reference",
 ]
