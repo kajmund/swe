@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: test offline async adaptive estimate verify integration
+.PHONY: test offline async adaptive production-stop estimate verify integration
 
 test:
 	PYTHONPATH=. $(PYTHON) -m unittest discover -s tests -t . -v
@@ -17,6 +17,11 @@ adaptive:
 	PYTHONPATH=. $(PYTHON) -m microtask_swarm adaptive \
 		--report reports/adaptive-benchmark.json \
 		--markdown reports/adaptive-benchmark.md
+
+production-stop:
+	PYTHONPATH=. $(PYTHON) -m microtask_swarm production-stop \
+		--report reports/production-stop.json \
+		--markdown reports/production-stop.md
 
 estimate:
 	PYTHONPATH=. $(PYTHON) -m microtask_swarm estimate --pretty

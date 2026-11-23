@@ -21,6 +21,11 @@ from microtask_swarm.adaptive_benchmark import (
     run_adaptive_benchmark,
     write_adaptive_report,
 )
+from microtask_swarm.production_stop import (
+    render_production_markdown,
+    run_production_stop_benchmark,
+    write_production_report,
+)
 from microtask_swarm.live import (
     LiveDispatchRefused,
     OllamaCloudClient,
@@ -104,6 +109,34 @@ def build_parser() -> argparse.ArgumentParser:
         "--scale", type=float, default=None, help="scale deterministic trace latencies"
     )
 
+    production = sub.add_parser(
+        "production-stop",
+        help="compare gold-free production early-stop policies offline",
+    )
+    production.add_argument(
+        "--async-config",
+        type=Path,
+        default=_ROOT / "config" / "async-benchmark.json",
+    )
+    production.add_argument(
+        "--production-config",
+        type=Path,
+        default=_ROOT / "config" / "production-stop.json",
+    )
+    production.add_argument(
+        "--report",
+        type=Path,
+        default=_ROOT / "reports" / "production-stop.json",
+    )
+    production.add_argument(
+        "--markdown",
+        type=Path,
+        default=_ROOT / "reports" / "production-stop.md",
+    )
+    production.add_argument(
+        "--scale", type=float, default=None, help="scale deterministic trace latencies"
+    )
+
     verify = sub.add_parser("verify-fixtures", help="validate the frozen gold fixtures")
     verify.add_argument("--pretty", action="store_true")
 
@@ -176,6 +209,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.markdown.parent.mkdir(parents=True, exist_ok=True)
             args.markdown.write_text(markdown, encoding="utf-8")
             _print_adaptive_summary(report, args.report, args.markdown)
+            return 0
+        if args.command == "production-stop":
+            report = asyncio.run(
+                run_production_stop_benchmark(
+                    args.config,
+                    args.async_config,
+                    args.production_config,
+                    scale=args.scale,
+                )
+            )
+            write_production_report(report, args.report)
+            markdown = render_production_markdown(report)
+            args.markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.markdown.write_text(markdown, encoding="utf-8")
+            _print_production_summary(report, args.report, args.markdown)
             return 0
         if args.command == "verify-fixtures":
             config = load_config(args.config)
@@ -309,6 +357,23 @@ def _print_adaptive_summary(report: dict, json_path: Path, md_path: Path) -> Non
             f"false_support={row['false_support_rate']} "
             f"calls={row['calls']} "
             f"settled_milli={row['settled_milli']}"
+        )
+
+
+def _print_production_summary(report: dict, json_path: Path, md_path: Path) -> None:
+    print(f"report: {json_path}")
+    print(f"markdown: {md_path}")
+    print(f"evidence: {report['evidence_kind']}  runs: {report['summary']['run_count']}")
+    for row in report["summary"]["rows"]:
+        print(
+            f"  {row['scheduler']}/{row['condition']}: "
+            f"stop={row['stop_reason']} wall={row['wall_ms']}ms "
+            f"calls={row['calls']} items={row['completed_items']} "
+            f"need_cov={row['need_coverage']} evid_cov={row['evidence_coverage']} "
+            f"abstain={row['abstention_rate']} conf={row['average_confidence']} "
+            f"posthoc_acc={row['posthoc_accuracy']} "
+            f"posthoc_cov={row['posthoc_coverage']} "
+            f"pending={row['pending_milli']} late={row['late_milli']}"
         )
 
 

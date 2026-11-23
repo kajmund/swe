@@ -379,6 +379,82 @@ PYTHONPATH=. python3 -m microtask_swarm adaptive \
 PYTHONPATH=. python3 -m unittest tests.test_adaptive_benchmark -v
 ```
 
+## Gold-free production early-stop comparison (offline)
+
+The production-stop comparison is a separate module on top of the frozen
+baselines:
+
+- `microtask_swarm/production_stop.py`
+- `config/production-stop.json`
+- `tests/test_production_stop.py`
+- `reports/production-stop.json` / `.md`
+
+The stop decision uses only observable signals: verified exact-quote evidence,
+coverage of the 50 typed needs, abstention rate, and a deterministic verifier
+confidence. Gold is read only after the run for `posthoc_stop_quality` and the
+normal run score.
+
+Compared conditions on the same trace (provider limit 3, concurrency 8):
+
+- `full` — no early stop;
+- `count_25` — frozen count-based control (25 verified);
+- `coverage` — need coverage ≥ 0.60, evidence coverage ≥ 0.60, abstention
+  ≤ 0.20, confidence ≥ 0.60, at least 5 complete items;
+- `confidence` — confidence ≥ 0.85 with the same coverage/abstention floors;
+- `hybrid` — need/evidence coverage ≥ 0.70, abstention ≤ 0.10, confidence
+  ≥ 0.80, at least 6 complete items.
+
+| Scheduler | Condition | Stop | Wall | Calls | Complete items | Need cov. | Evidence cov. | Abstain | Confidence | Post-hoc acc. | Post-hoc cov. | Post-hoc false support | Pending/late |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| D | full | — | 5.77 s | 50 | 10 | 1.00 | 1.00 | 0.00 | 0.957 | 0.90 | 0.80 | 0.20 | 0/0 |
+| D | count_25 | early | 2.60 s | 32 | **0** | 0.50 | 0.90 | 0.00 | 0.921 | **None** | **None** | **None** | 1250/1250 |
+| D | coverage | production | 4.35 s | 49 | 5 | 0.88 | 1.00 | 0.00 | 0.951 | 0.88 | 0.80 | 0.20 | 750/750 |
+| D | confidence | production | 4.35 s | 49 | 5 | 0.88 | 1.00 | 0.00 | 0.951 | 0.88 | 0.80 | 0.20 | 750/750 |
+| D | hybrid | production | 4.35 s | 49 | 6 | 0.90 | 1.00 | 0.00 | 0.952 | 0.90 | 0.833 | 0.167 | 750/750 |
+| P | full | — | 5.17 s | 50 | 10 | 1.00 | 1.00 | 0.00 | 0.957 | 0.90 | 0.80 | 0.20 | 0/0 |
+| P | count_25 | early | 3.84 s | 27 | 1 | 0.50 | 1.00 | 0.00 | 0.914 | 0.80 | **0.00** | **1.00** | 500/250 |
+| P | coverage | production | 5.05 s | 47 | 5 | 0.90 | 1.00 | 0.00 | 0.952 | **0.92** | 0.80 | 0.20 | 500/250 |
+| P | confidence | production | 5.05 s | 47 | 5 | 0.90 | 1.00 | 0.00 | 0.952 | **0.92** | 0.80 | 0.20 | 500/250 |
+| P | hybrid | production | 5.07 s | 48 | 6 | 0.92 | 1.00 | 0.00 | 0.953 | **0.933** | **0.833** | **0.167** | 250/0 |
+
+Readings:
+
+- Count-based stop is **not** a safe production proxy. On D it stopped before
+  any item had all five tasks, so post-hoc scoring had no complete item; on P
+  it stopped with one complete item whose extraction coverage was zero.
+- The gold-free policies stop at 5–6 complete items with high post-hoc quality
+  and much lower latency/call count than `full`. P coverage/confidence reach
+  0.92 post-hoc accuracy; P hybrid reaches 0.933 accuracy, 0.833 coverage,
+  0.167 false support, and no late-billed reservations.
+- P is slightly slower than D for the same stop policy because P caps workers
+  at the provider limit while D queues more work behind the provider
+  semaphore, but P leaves fewer pending/late milli and higher post-hoc accuracy.
+- Abstention is 0 in these offline heuristic runs. The signal is implemented
+  and unit-tested with empty extracts, invalid outputs, and unsupported quotes,
+  but this trace does not stress it. Verifier confidence is a deterministic
+  host heuristic, not a calibrated probability. Coverage and confidence stop at
+  the same point on this fixture because the confidence signal is high
+  (~0.95); it adds no discrimination here.
+- The count control is the cautionary case: it is cheapest in wall time but can
+  stop before any complete item (D) or on an item with zero extraction coverage
+  (P). The gold-free policies require complete items and evidence coverage, so
+  their post-hoc quality remains at or above the full-run level.
+
+Totals across the 10 runs: **448 calls**, **183,500 milli settled**, 5,250
+milli pending before reconciliation, 4,250 milli late-billed, 1,000 milli
+released, **$0.00346** calculated USD. `actual_usd` is N/A. The runtime budget
+remains the local pilot meter; PR #11 is still open, so no shared
+`RuntimeBudget` is attached.
+
+Run:
+
+```sh
+PYTHONPATH=. python3 -m microtask_swarm production-stop \
+  --report reports/production-stop.json \
+  --markdown reports/production-stop.md
+PYTHONPATH=. python3 -m unittest tests.test_production_stop -v
+```
+
 ## Reuse and intentional gaps
 
 | Concern | Reused | Gap |
