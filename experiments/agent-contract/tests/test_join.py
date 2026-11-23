@@ -125,7 +125,12 @@ def test_swe_has_no_event_ready_dispatch_here() -> None:
     gap = dispatch_gap()
     assert gap["event_ready"] is False
     assert gap["swe_dispatch"] == "layer_map"
-    assert gap["swe_native"] is False
+    try:
+        import swe_native  # noqa: F401
+    except ImportError:
+        assert gap["swe_native"] is False
+    else:
+        assert gap["swe_native"] is True
     assert gap["runtime_budget"]["attached"] is False
     spec = SPEC.read_text(encoding="utf-8")
     assert "A later layer cannot start until every" in spec

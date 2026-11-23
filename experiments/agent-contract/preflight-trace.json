@@ -1,0 +1,265 @@
+{
+  "checkout": {
+    "branch": "experiment/agent-microtask-contract",
+    "merge_base": "eff1c7e8943dd64827fb4916719ced5515bf3db5",
+    "python_and_crates_diff": ""
+  },
+  "contract": {
+    "alpha_generation_providers": [
+      "alpha"
+    ],
+    "alpha_trace": [
+      {
+        "model": "laya",
+        "model_called": true,
+        "node_id": "microtask_4",
+        "ok": true,
+        "provider": "system-one",
+        "role": "decision",
+        "semantic_check": "decision invocation",
+        "task_id": "atomicity.generate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "laya",
+        "model_called": false,
+        "node_id": "microtask_5",
+        "ok": true,
+        "provider": "system-one",
+        "role": "validator",
+        "semantic_check": "upstream output is not in the handler input",
+        "task_id": "atomicity.validate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "laya",
+        "model_called": true,
+        "node_id": "microtask_4",
+        "ok": true,
+        "provider": "system-one",
+        "role": "decision",
+        "semantic_check": "decision invocation",
+        "task_id": "entailment.generate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "laya",
+        "model_called": false,
+        "node_id": "microtask_5",
+        "ok": true,
+        "provider": "system-one",
+        "role": "validator",
+        "semantic_check": "upstream output is not in the handler input",
+        "task_id": "entailment.validate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "alpha-model",
+        "model_called": true,
+        "node_id": "microtask_2",
+        "ok": true,
+        "provider": "alpha",
+        "role": "generation",
+        "semantic_check": "generation invocation",
+        "task_id": "extraction.generate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "alpha-model",
+        "model_called": false,
+        "node_id": "microtask_3",
+        "ok": true,
+        "provider": "alpha",
+        "role": "validator",
+        "semantic_check": "upstream output is not in the handler input",
+        "task_id": "extraction.validate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "alpha-model",
+        "model_called": true,
+        "node_id": "microtask_6",
+        "ok": true,
+        "provider": "alpha",
+        "role": "generation",
+        "semantic_check": "generation invocation",
+        "task_id": "operation.generate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "alpha-model",
+        "model_called": false,
+        "node_id": "microtask_7",
+        "ok": true,
+        "provider": "alpha",
+        "role": "validator",
+        "semantic_check": "upstream output is not in the handler input",
+        "task_id": "operation.validate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "alpha-model",
+        "model_called": true,
+        "node_id": "microtask_0",
+        "ok": true,
+        "provider": "alpha",
+        "role": "generation",
+        "semantic_check": "generation invocation",
+        "task_id": "relevance.generate",
+        "upstream_output_present": false
+      },
+      {
+        "model": "alpha-model",
+        "model_called": false,
+        "node_id": "microtask_1",
+        "ok": true,
+        "provider": "alpha",
+        "role": "validator",
+        "semantic_check": "upstream output is not in the handler input",
+        "task_id": "relevance.validate",
+        "upstream_output_present": false
+      }
+    ],
+    "beta_generation_providers": [
+      "beta"
+    ],
+    "decision_calls": [
+      "entailment",
+      "atomicity"
+    ],
+    "decision_models": [
+      "laya"
+    ],
+    "decision_providers": [
+      "system-one"
+    ],
+    "definition_sha256": "dd86b2cc97d6d292af886d3bc0f929a0722b09768016dcbb8c0e6f29c054e591",
+    "generation_calls": [
+      "relevance",
+      "extraction",
+      "operation"
+    ],
+    "handler_input_keys": [
+      "depends_on",
+      "payload",
+      "task_id"
+    ],
+    "journal_nodes": [
+      "relevance.generate",
+      "extraction.generate",
+      "entailment.generate",
+      "atomicity.generate",
+      "operation.generate"
+    ],
+    "layers": [
+      [
+        "relevance.generate"
+      ],
+      [
+        "relevance.validate"
+      ],
+      [
+        "extraction.generate"
+      ],
+      [
+        "extraction.validate"
+      ],
+      [
+        "entailment.generate",
+        "atomicity.generate"
+      ],
+      [
+        "entailment.validate",
+        "atomicity.validate"
+      ],
+      [
+        "operation.generate"
+      ],
+      [
+        "operation.validate"
+      ]
+    ],
+    "map_nodes": [
+      "microtasks_0",
+      "microtasks_1",
+      "microtasks_2",
+      "microtasks_3",
+      "microtasks_4",
+      "microtasks_5",
+      "microtasks_6",
+      "microtasks_7"
+    ],
+    "same_definition": true,
+    "same_task_ids": true,
+    "status": "completed",
+    "upstream_output_present": false,
+    "validator_model_calls": 0
+  },
+  "layer_barrier": {
+    "after_fast_started_before_slow_released": false,
+    "final_start_order": [
+      "slow",
+      "fast",
+      "after_fast"
+    ],
+    "handler_input_keys": [
+      "depends_on",
+      "payload",
+      "task_id"
+    ],
+    "layers": [
+      [
+        "slow",
+        "fast"
+      ],
+      [
+        "after_fast"
+      ]
+    ],
+    "starts_while_slow_blocked": [
+      "slow",
+      "fast"
+    ],
+    "status": "completed"
+  },
+  "package_dispatch_gap": {
+    "event_ready": false,
+    "require_swe_dispatch_raises": true,
+    "swe_dispatch": "layer_map",
+    "swe_native": true
+  },
+  "package_runtime_budget": {
+    "attached": false,
+    "reason": "PR 11 is open and not merged"
+  },
+  "paid_calls": 0,
+  "replay": {
+    "crashed_after_first_persisted_invocation": true,
+    "executed_after_resume": [
+      "a",
+      "b"
+    ],
+    "executed_before_resume": [
+      "a"
+    ],
+    "replayed_task_executed_again": false,
+    "resume_status": "completed"
+  },
+  "runner_parameters": [
+    "compiled",
+    "handlers",
+    "resources",
+    "run_store",
+    "clock",
+    "concurrency"
+  ],
+  "runtime_budget": {
+    "attached": false,
+    "reason": "swe.budget is absent on this checkout"
+  },
+  "wheel": {
+    "built_from": "crates/swe-native",
+    "distribution": "swe_native-0.1.0-cp312-cp312-macosx_11_0_arm64.whl",
+    "extension": "swe_native.cpython-312-darwin.so"
+  }
+}
