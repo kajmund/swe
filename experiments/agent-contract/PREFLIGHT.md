@@ -39,46 +39,66 @@ interpreter unchanged.
 
 The invocation rows from that run are in
 `experiments/agent-contract/preflight-trace.json`. Local wheel paths are omitted.
+`paid_calls` is 0.
 
 `require_swe_dispatch` raises `DispatchGap` while `swe_native` imports. The
-package does not execute the plan.
+package does not execute the plan. Its recorded label stays
+`package_dispatch_gap.swe_dispatch` `layer_map` and `event_ready` false. The
+preflight script is the caller. It compiles each batch with `schedule="ready"`
+and runs that one SWD 1.1 map on `WorkflowRunner`. The map node is
+`microtasks`. Every persisted invocation in this trace has `node_id`
+`microtask`.
 
-The layer witness compiles `slow` and `fast` into one map layer and
-`after_fast`, which depends only on `fast`, into the next layer. With
-concurrency 2, the starts recorded while `slow` was blocked were `slow` and
-`fast`. `after_fast` started after `slow` was released. Final order: `slow`,
-`fast`, `after_fast`.
+The ready witness uses `slow`, `fast`, and `after_fast`. `after_fast` depends
+only on `fast`. The trace still lists the topological groups `["slow", "fast"]`
+and `["after_fast"]`. Those groups are the DAG shape. With concurrency 2, the
+starts recorded while `slow` was blocked were `slow`, `fast`, and `after_fast`.
+`after_fast_started_before_slow_released` is true, and
+`slow_still_blocked_when_after_fast_started` is true. Final order: `slow`,
+`fast`, `after_fast`. The witness budget is attached on account
+`agent-contract` with policy `injected-fixed-milli`: spent 3 milli, reserved
+0, 7 events.
 
-The agent plan compiles to eight map layers and definition
-`dd86b2cc97d6d292af886d3bc0f929a0722b09768016dcbb8c0e6f29c054e591`. Alpha and
-beta share that definition and the same task ids. Generation payloads use
-`alpha` / `alpha-model` or `beta` / `beta-model`. Decision payloads stay
-`system-one` / `laya`. Journal nodes, and only these, are the five model
-invocations: `relevance.generate`, `extraction.generate`, `entailment.generate`,
-`atomicity.generate`, `operation.generate`. All five validator rows have
-`model_called` false.
-
-Each `InvocationRecord` is one handler call. `entailment.generate` and
-`atomicity.generate` share `node_id` `microtask_4` because they are children of
-one layer map. The same pairing is `microtask_5` for their validators.
+The agent plan's topological list still has eight groups. Alpha and beta share
+definition `52dc0023e74135a02997107b4dc305a387d6b7d055ba18728a660da47cf451d8`
+and the same task ids. `map_nodes` is `["microtasks"]` and `schedule` is
+`ready`. Generation payloads use `alpha` / `alpha-model` or `beta` /
+`beta-model`. Decision payloads stay `system-one` / `laya`. Journal nodes, and
+only these, are the five model invocations: `relevance.generate`,
+`extraction.generate`, `entailment.generate`, `atomicity.generate`,
+`operation.generate`. All five validator rows have `model_called` false. The
+contract budget spends 10 milli, reserved 0, 21 events.
 
 A crash after the persisted invocation `a` resumes through `WorkflowRunner` to
-`completed`. The resumed execution is `a`, `b`, and `a` runs once.
+`completed`. `schedule` is `ready`. `executed_before_resume` is `a`.
+`executed_after_resume` is `a`, `b`. `replayed_task_executed_again` is false,
+so `a` runs once. The replay budget spends 2 milli, reserved 0, 5 events.
+
+## Historical ordered baseline
+
+Commit `fb97b6a` recorded the ordered compiler, before `schedule="ready"`.
+That trace compiled the eight topological groups into eight map nodes,
+`microtasks_0` through `microtasks_7`, definition
+`dd86b2cc97d6d292af886d3bc0f929a0722b09768016dcbb8c0e6f29c054e591`.
+`entailment.generate` and `atomicity.generate` shared `node_id` `microtask_4`,
+and their validators shared `microtask_5`. The witness starts while `slow` was
+blocked were `slow` and `fast`. `after_fast` started after `slow` was released.
+`docs/specs/swe-microtasks.md` describes that ordered layer compiler. The
+current trace above is the ready-map run.
 
 ## Gap
 
-`docs/specs/swe-microtasks.md` states both limits, and this run reproduces them:
+The ready map admits `after_fast` while `slow` is still blocked. The
+value-channel limit remains, and this run reproduces it:
 
-- A later layer waits until every task in the preceding layer has finished.
-  `after_fast` waited for `slow` even though its own dependency was `fast`.
 - The handler receives `task_id`, `payload`, and `depends_on`. Dependency
-  results are in the completed run output and are not injected into the next
-  handler. Every contract row has `upstream_output_present` false, so a
-  validator invocation cannot read the generation output through this dispatch.
+  results stay in the completed run output. Every contract row has
+  `upstream_output_present` false, so a validator invocation cannot read the
+  generation output through this dispatch. `item_depends_on` admits a task and
+  carries no generation output.
 
-Config selects the provider and model inside the static payload. It does not
-change the compiled definition. The semantic check of a generation result needs
-a value channel the map child input does not have. `VALUE_CHANNEL.md`
-proposes that bind as a host call. It does not change SWD. The contract run
-reserves and settles one milli-unit per handler invocation through the real
-`WorkflowRunner`.
+Config selects the provider and model inside the static payload. Alpha and beta
+share one compiled definition. The semantic check of a generation result needs
+the separate host bind in `VALUE_CHANNEL.md`. That bind leaves SWD unchanged.
+The contract run reserves and settles one milli-unit per handler invocation
+through the real `WorkflowRunner`.
