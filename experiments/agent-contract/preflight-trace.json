@@ -249,10 +249,12 @@
     ]
   },
   "package_dispatch_gap": {
-    "event_ready": false,
+    "fail_closed": true,
+    "package_dispatcher": false,
     "require_swe_dispatch_raises": true,
-    "swe_dispatch": "layer_map",
-    "swe_native": true
+    "swe_native": true,
+    "swe_ordered_default": "layer_map",
+    "swe_ready": true
   },
   "package_runtime_budget": {
     "attached": false,

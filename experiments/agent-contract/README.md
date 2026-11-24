@@ -9,8 +9,10 @@ t1bp owns `experiment/microtask-swarm` and does not edit this directory.
 `compile_microtasks(..., schedule="ready")` emits one SWD 1.1 map. The
 ordered default still waits for a whole layer (`docs/specs/swe-microtasks.md`).
 The dispatch boundary is `WorkflowRunner`, which needs `swe_native`. This
-package does not contain another scheduler. `require_swe_dispatch` still raises
-when the wheel is installed. The preflight is the caller that runs the map.
+package does not contain another scheduler. `dispatch_gap` records
+`package_dispatcher` false and `fail_closed` true, and `require_swe_dispatch`
+still raises when the wheel is installed. `swe_ready` records SWE's ready-map
+capability. The preflight is the caller that runs the map.
 
 `experiments/agent-contract/PREFLIGHT.md` builds that wheel from this checkout
 and records the machine trace. Dependency results stay in the completed run

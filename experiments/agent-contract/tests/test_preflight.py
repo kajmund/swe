@@ -15,8 +15,12 @@ def test_offline_machine_preflight() -> None:
     assert report["runtime_budget"]["reserved_milli"] == 0
     assert report["package_runtime_budget"]["attached"] is False
     assert "budget" not in report["runner_parameters"]
-    assert report["package_dispatch_gap"]["event_ready"] is False
-    assert report["package_dispatch_gap"]["require_swe_dispatch_raises"] is True
+    gap = report["package_dispatch_gap"]
+    assert gap["package_dispatcher"] is False
+    assert gap["fail_closed"] is True
+    assert gap["swe_ready"] is True
+    assert gap["swe_ordered_default"] == "layer_map"
+    assert gap["require_swe_dispatch_raises"] is True
     barrier = report["layer_barrier"]
     assert barrier["schedule"] == "ready"
     assert barrier["map_nodes"] == ["microtasks"]

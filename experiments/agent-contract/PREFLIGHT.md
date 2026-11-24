@@ -42,9 +42,11 @@ The invocation rows from that run are in
 `paid_calls` is 0.
 
 `require_swe_dispatch` raises `DispatchGap` while `swe_native` imports. The
-package does not execute the plan. Its recorded label stays
-`package_dispatch_gap.swe_dispatch` `layer_map` and `event_ready` false. The
-preflight script is the caller. It compiles each batch with `schedule="ready"`
+package records `package_dispatcher` false and `fail_closed` true. It does not
+execute the plan. `swe_ready` is true: SWE admits a ready task when its own
+dependencies finish. `swe_ordered_default` stays `layer_map` for the ordered
+compiler. The preflight script is the caller. It compiles each batch with
+`schedule="ready"`
 and runs that one SWD 1.1 map on `WorkflowRunner`. The map node is
 `microtasks`. Every persisted invocation in this trace has `node_id`
 `microtask`.

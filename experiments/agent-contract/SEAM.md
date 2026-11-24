@@ -19,7 +19,8 @@ map. The measured handler input is `task_id`, `payload`, and `depends_on`.
 Generation output is not in the next handler input.
 
 `require_swe_dispatch` raises `DispatchGap` when the wheel is present. This
-package has no second scheduler.
+package has no dispatcher of its own. SWE's ready schedule is the machine
+capability recorded as `swe_ready`.
 
 ## Ready map
 

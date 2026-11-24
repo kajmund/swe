@@ -1,10 +1,12 @@
 """Explicit invocations for the agent contract. Not a scheduler.
 
-SWE compiles a microtask DAG into SWD map layers. A later layer starts only
-after every task in the previous layer finishes. There is no event-ready
-mode, where a task would start as soon as its own dependencies finish.
-``WorkflowRunner`` is the dispatch boundary and it requires ``swe_native``.
-This module does not replace that machine.
+This module has no dispatcher. ``require_swe_dispatch`` stays closed.
+SWE's ordered default compiles a microtask DAG into one SWD map per
+topological layer (``docs/specs/swe-microtasks.md``). ``schedule="ready"``
+emits one SWD 1.1 map and admits a task when its own dependencies finish
+(``docs/swe-standalone/18-ready-map-decision.md`` section 7).
+``WorkflowRunner`` is that dispatch boundary and it requires ``swe_native``.
+This module does not replace that machine and does not add another scheduler.
 
 PR #11 is merged. A run attaches ``RuntimeBudget`` through
 ``WorkflowResources`` at that boundary. This module does not construct one.
@@ -34,7 +36,7 @@ _DEPENDENCIES = {
 
 
 class DispatchGap(RuntimeError):
-    """SWE cannot run this plan on the invocation boundary from here."""
+    """This package has no dispatcher. The call stays closed."""
 
 
 def runtime_budget_status() -> dict[str, Any]:
@@ -66,13 +68,17 @@ def dispatch_gap() -> dict[str, Any]:
     except ImportError:
         native = False
     return {
-        "event_ready": False,
-        "swe_dispatch": "layer_map",
+        "package_dispatcher": False,
+        "fail_closed": True,
+        "swe_ready": True,
+        "swe_ordered_default": "layer_map",
         "swe_native": native,
-        "spec": "docs/specs/swe-microtasks.md",
+        "ordered_spec": "docs/specs/swe-microtasks.md",
+        "ready_spec": "docs/swe-standalone/18-ready-map-decision.md",
         "reason": (
-            "compile_microtasks emits one map node per topological layer. "
-            "A task waits for the whole layer, not only for its own dependencies. "
+            "This package has no dispatcher, so require_swe_dispatch stays closed. "
+            'SWE schedule="ready" emits one SWD 1.1 map and admits a task when its own dependencies finish. '
+            "The ordered default emits one map node per topological layer. "
             "WorkflowRunner is the dispatch boundary and needs swe_native."
         ),
         "runtime_budget": runtime_budget_status(),

@@ -411,8 +411,10 @@ async def run_preflight() -> dict[str, Any]:
         "runtime_budget": alpha["budget"],
         "package_runtime_budget": package_budget,
         "package_dispatch_gap": {
-            "event_ready": gap["event_ready"],
-            "swe_dispatch": gap["swe_dispatch"],
+            "package_dispatcher": gap["package_dispatcher"],
+            "fail_closed": gap["fail_closed"],
+            "swe_ready": gap["swe_ready"],
+            "swe_ordered_default": gap["swe_ordered_default"],
             "swe_native": gap["swe_native"],
             "require_swe_dispatch_raises": refused,
         },

@@ -23,6 +23,7 @@ from hy4_research_policy.agent_adapter import (
 
 PACKAGE = Path(__file__).resolve().parents[1] / "agent_contract" / "join.py"
 SPEC = Path(__file__).resolve().parents[3] / "docs" / "specs" / "swe-microtasks.md"
+READY = Path(__file__).resolve().parents[3] / "docs" / "swe-standalone" / "18-ready-map-decision.md"
 
 
 class Journal:
@@ -121,10 +122,13 @@ def _invoke(
     return {"task_id": item["task_id"], "ok": result.ok, "output": result.output}
 
 
-def test_swe_has_no_event_ready_dispatch_here() -> None:
+def test_package_stays_closed_and_swe_has_ready() -> None:
     gap = dispatch_gap()
-    assert gap["event_ready"] is False
-    assert gap["swe_dispatch"] == "layer_map"
+    assert gap["package_dispatcher"] is False
+    assert gap["fail_closed"] is True
+    assert gap["swe_ready"] is True
+    assert gap["swe_ordered_default"] == "layer_map"
+    assert "event_ready" not in gap
     try:
         import swe_native  # noqa: F401
     except ImportError:
@@ -134,6 +138,11 @@ def test_swe_has_no_event_ready_dispatch_here() -> None:
     assert gap["runtime_budget"]["attached"] is False
     spec = SPEC.read_text(encoding="utf-8")
     assert "A later layer cannot start until every" in spec
+    ready = READY.read_text(encoding="utf-8")
+    section = ready.split("## 7. Acceptanskriterier", 1)[1].split("## 8.", 1)[0]
+    assert 'schedule: "ready"' in section
+    text = PACKAGE.read_text(encoding="utf-8")
+    assert "There is no event-ready" not in text
     with pytest.raises(DispatchGap):
         require_swe_dispatch()
     assert runtime_budget_status()["attached"] is False
