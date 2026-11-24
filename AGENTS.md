@@ -7,7 +7,9 @@ between iterations.
 
 Delivery is one clean commit. The reviewed tree is that commit and nothing
 else. Record the receipt in the PR body before merge and leave it there. The
-field list matches the Research delivery receipt:
+field list matches the Research delivery receipt in
+[AGENTS.md](https://github.com/kajmund/research/blob/1ef337ad8356bd830d85df703340e5e3bea14ed1/AGENTS.md)
+at Research `1ef337ad8356bd830d85df703340e5e3bea14ed1`:
 
 - base SHA and head SHA
 - whether the tree is clean
@@ -17,6 +19,14 @@ field list matches the Research delivery receipt:
 - review terminal, verdict, and where the report text is stored
 
 After a normal merge, add verification of the merged SHA to the same receipt.
+
+## Normative sources
+
+- [README.md](README.md) — development commands and contract compatibility.
+- [docs/specs/swe-runtime.md](docs/specs/swe-runtime.md) — kernel and host ownership.
+- [docs/specs/swe-budget-runtime.md](docs/specs/swe-budget-runtime.md) — reserve, settle, and the runtime ledger.
+- [docs/specs/swe-swd-1.1.md](docs/specs/swe-swd-1.1.md) — SWD 1.1 ready-map contract.
+- [SWE–Research execution boundary](https://github.com/kajmund/research/blob/1ef337ad8356bd830d85df703340e5e3bea14ed1/docs/architecture/swe-research-execution-boundary.md#mandatory-overgraph-execution-boundary-normative-2026-11-22) — Research `1ef337ad8356bd830d85df703340e5e3bea14ed1`. SWE owns dispatch, budget, journal, and replay. Research owns evidence. The boundary document lives in the Research repository.
 
 ## Local CI
 
