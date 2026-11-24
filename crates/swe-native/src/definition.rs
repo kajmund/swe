@@ -44,6 +44,12 @@ impl CachePolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MapSchedule {
+    Ordered,
+    Ready,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Task {
@@ -79,6 +85,9 @@ pub enum Node {
         concurrency: Option<u32>,
         join: Option<String>,
         next: Option<String>,
+        schedule: MapSchedule,
+        item_id: Option<String>,
+        item_depends_on: Option<String>,
     },
     End {
         status: EndStatus,
@@ -105,7 +114,7 @@ impl CompiledDefinition {
             )));
         }
         let version = required_str(&document, "version")?.to_string();
-        if version != "1.0" {
+        if version != "1.0" && version != "1.1" {
             return Err(RuntimeError::preflight(format!(
                 "unsupported SWD version {version:?}"
             )));
@@ -128,6 +137,27 @@ impl CompiledDefinition {
                 RuntimeError::preflight(format!("unknown node {:?}", loaded.entrypoint))
                     .with_path("entrypoint"),
             );
+        }
+        if loaded.version == "1.0" {
+            for (node_id, node) in &loaded.nodes {
+                if let Node::Map {
+                    schedule,
+                    item_id,
+                    item_depends_on,
+                    ..
+                } = node
+                {
+                    if *schedule != MapSchedule::Ordered
+                        || item_id.is_some()
+                        || item_depends_on.is_some()
+                    {
+                        return Err(RuntimeError::preflight(
+                            "map schedule/item fields require SWD 1.1",
+                        )
+                        .with_path(format!("nodes.{node_id}")));
+                    }
+                }
+            }
         }
         crate::preflight::assert_supported(&loaded)?;
         Ok(loaded)
@@ -383,12 +413,42 @@ fn parse_join(node_id: &str, node: &Json) -> Result<Node> {
 }
 
 fn parse_map(node_id: &str, node: &Json) -> Result<Node> {
+    let schedule = match node.get("schedule").and_then(Json::as_str) {
+        None | Some("ordered") => MapSchedule::Ordered,
+        Some("ready") => MapSchedule::Ready,
+        Some(other) => {
+            return Err(
+                RuntimeError::preflight(format!("unknown map schedule {other:?}"))
+                    .with_path(format!("nodes.{node_id}.schedule")),
+            )
+        }
+    };
+    let item_id = optional_str(node, "item_id");
+    let item_depends_on = optional_str(node, "item_depends_on");
+    match schedule {
+        MapSchedule::Ordered if item_id.is_some() || item_depends_on.is_some() => {
+            return Err(
+                RuntimeError::preflight("item_id/item_depends_on require schedule ready")
+                    .with_path(format!("nodes.{node_id}.schedule")),
+            )
+        }
+        MapSchedule::Ready if item_id.is_none() || item_depends_on.is_none() => {
+            return Err(RuntimeError::preflight(
+                "schedule ready requires item_id and item_depends_on",
+            )
+            .with_path(format!("nodes.{node_id}.schedule")))
+        }
+        _ => {}
+    }
     Ok(Node::Map {
         items: required_node_str(node_id, node, "items")?.to_string(),
         child: required_node_str(node_id, node, "child")?.to_string(),
         concurrency: optional_u32(node, "concurrency"),
         join: optional_str(node, "join"),
         next: optional_str(node, "next"),
+        schedule,
+        item_id,
+        item_depends_on,
     })
 }
 

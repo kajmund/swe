@@ -1,4 +1,7 @@
-use swe_native::{parse_json_str, sha256_hex, start_run, Effect, Json, RunStatus};
+use swe_native::{
+    parse_json_str, sha256_hex, start_run, Effect, ErrorKind, EventKind, Json, RunStatus,
+    RuntimeError,
+};
 
 fn load(doc: &str) -> (Json, String) {
     let document = parse_json_str(doc).unwrap();
@@ -475,4 +478,380 @@ fn timeout_and_max_steps_fail_closed() {
     let id = invoke_ids(&outcome.effects)[0].clone();
     let timed = machine.complete(&id, Json::empty_object(), 1000);
     assert_eq!(timed.status, RunStatus::Failed);
+}
+
+fn ready_definition() -> String {
+    r#"{
+      "version": "1.1",
+      "name": "ready_map",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 40, "max_depth": 3, "timeout_seconds": 30},
+      "nodes": {
+        "fanout": {
+          "type": "map",
+          "items": "$.input.tasks",
+          "child": "work",
+          "concurrency": 2,
+          "schedule": "ready",
+          "item_id": "$.item.task_id",
+          "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "work": {"type": "task", "handler": "demo.work"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#
+    .to_string()
+}
+
+fn task_item(task_id: &str, depends_on: &[&str]) -> Json {
+    Json::object([
+        ("task_id".into(), Json::from(task_id)),
+        (
+            "depends_on".into(),
+            Json::Array(depends_on.iter().copied().map(Json::from).collect()),
+        ),
+    ])
+}
+
+fn ready_input(items: Vec<Json>) -> Json {
+    Json::object([("tasks".into(), Json::Array(items))])
+}
+
+struct Admitted {
+    id: String,
+    index: u64,
+    task_id: String,
+    branch_path: String,
+}
+
+fn admitted(effects: &[Effect]) -> Vec<Admitted> {
+    effects
+        .iter()
+        .filter_map(|effect| match effect {
+            Effect::InvokeHandler {
+                invocation_id,
+                input,
+                branch_path,
+                ..
+            } => {
+                let index = input.get("index")?.as_number()?.as_u64()?;
+                let task_id = input.get("item")?.get("task_id")?.as_str()?.to_string();
+                Some(Admitted {
+                    id: invocation_id.clone(),
+                    index,
+                    task_id,
+                    branch_path: branch_path.clone(),
+                })
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn assert_no_child_journal(machine: &swe_native::WorkflowMachine) {
+    assert!(machine
+        .events()
+        .iter()
+        .all(|event| event.kind != EventKind::BranchSpawned));
+}
+
+#[test]
+fn ready_map_admits_a_dependent_while_a_straggler_is_open() {
+    let (document, sha) = load(&ready_definition());
+    let input = ready_input(vec![
+        task_item("slow", &[]),
+        task_item("fast", &[]),
+        task_item("after_fast", &["fast"]),
+    ]);
+    let (mut machine, outcome) = start_run(document, &sha, "straggler".into(), input, 0).unwrap();
+    let open = admitted(&outcome.effects);
+    assert_eq!(
+        open.iter()
+            .map(|item| item.task_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["slow", "fast"]
+    );
+    assert!(open.iter().all(|item| item
+        .branch_path
+        .ends_with(&format!("{}/{}", item.index, item.task_id))));
+    let fast = open.iter().find(|item| item.task_id == "fast").unwrap();
+    let slow = open.iter().find(|item| item.task_id == "slow").unwrap();
+    let after_fast = machine.complete(
+        &fast.id,
+        Json::object([("ok".into(), Json::from("fast"))]),
+        1,
+    );
+    let admitted_next = admitted(&after_fast.effects);
+    assert_eq!(admitted_next.len(), 1);
+    assert_eq!(admitted_next[0].task_id, "after_fast");
+    assert!(machine
+        .events()
+        .iter()
+        .any(|event| event.kind == EventKind::BranchSpawned
+            && event.payload.get("item_id").and_then(Json::as_str) == Some("after_fast")));
+    let _ = machine.complete(
+        &slow.id,
+        Json::object([("ok".into(), Json::from("slow"))]),
+        2,
+    );
+    let done = machine.complete(
+        &admitted_next[0].id,
+        Json::object([("ok".into(), Json::from("after"))]),
+        3,
+    );
+    assert_eq!(done.status, RunStatus::Completed);
+    let output = machine.output();
+    let results = output
+        .get("fanout")
+        .and_then(|value| value.get("result"))
+        .and_then(Json::as_array)
+        .unwrap();
+    assert_eq!(results.len(), 3);
+    assert_eq!(results[0].get("ok").and_then(Json::as_str), Some("slow"));
+    assert_eq!(results[1].get("ok").and_then(Json::as_str), Some("fast"));
+    assert_eq!(results[2].get("ok").and_then(Json::as_str), Some("after"));
+}
+
+#[test]
+fn ready_map_invocation_ids_survive_a_different_completion_order() {
+    let items = vec![
+        task_item("slow", &[]),
+        task_item("fast", &[]),
+        task_item("after_fast", &["fast"]),
+        task_item("after_slow", &["slow"]),
+    ];
+    let ids_fast_first = invocation_ids_for(&items, true);
+    let ids_slow_first = invocation_ids_for(&items, false);
+    assert_eq!(ids_fast_first, ids_slow_first);
+    assert_eq!(ids_fast_first.len(), 4);
+    assert!(ids_fast_first["after_fast"].contains("after_fast"));
+    assert!(ids_fast_first["slow"].contains("0/slow"));
+}
+
+fn invocation_ids_for(
+    items: &[Json],
+    complete_fast_first: bool,
+) -> std::collections::BTreeMap<String, String> {
+    let (document, sha) = load(&ready_definition());
+    let (mut machine, outcome) = start_run(
+        document,
+        &sha,
+        "replay".into(),
+        ready_input(items.to_vec()),
+        0,
+    )
+    .unwrap();
+    let mut pending = admitted(&outcome.effects);
+    let mut ids = std::collections::BTreeMap::new();
+    let mut now = 1u64;
+    for item in &pending {
+        ids.insert(item.task_id.clone(), item.id.clone());
+    }
+    let mut status = outcome.status;
+    while status == RunStatus::Running {
+        assert!(pending.len() <= 2, "peak concurrency exceeded");
+        let position = if complete_fast_first {
+            pending
+                .iter()
+                .position(|item| item.task_id == "fast")
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let item = pending.remove(position);
+        now += 1;
+        let step = machine.complete(
+            &item.id,
+            Json::object([("ok".into(), Json::from(item.task_id.as_str()))]),
+            now,
+        );
+        let spawned = admitted(&step.effects);
+        for spawned in &spawned {
+            ids.insert(spawned.task_id.clone(), spawned.id.clone());
+        }
+        pending.extend(spawned);
+        status = step.status;
+    }
+    assert_eq!(status, RunStatus::Completed);
+    ids
+}
+
+#[test]
+fn ready_map_rejects_bad_graphs_before_any_child() {
+    let cases = [
+        (
+            vec![task_item("a", &["missing"])],
+            "unknown item dependency",
+        ),
+        (
+            vec![task_item("a", &[]), task_item("a", &[])],
+            "duplicate item id",
+        ),
+        (vec![task_item("a", &["a"])], "depends on itself"),
+        (
+            vec![task_item("a", &["b"]), task_item("b", &["a"])],
+            "item dependency cycle",
+        ),
+        (vec![Json::from("bare")], "must be an object"),
+    ];
+    for (items, needle) in cases {
+        let (document, sha) = load(&ready_definition());
+        let (machine, outcome) =
+            start_run(document, &sha, "bad".into(), ready_input(items), 0).unwrap();
+        assert_eq!(outcome.status, RunStatus::Failed, "{needle}");
+        let error = machine.error().expect(needle);
+        assert_eq!(error.kind, ErrorKind::Preflight, "{needle}");
+        assert!(error.message.contains(needle), "{}", error.message);
+        assert!(admitted(&outcome.effects).is_empty(), "{needle}");
+        assert_no_child_journal(&machine);
+    }
+}
+
+#[test]
+fn ready_map_cancel_stops_admission() {
+    let (document, sha) = load(&ready_definition());
+    let input = ready_input(vec![
+        task_item("a", &[]),
+        task_item("b", &[]),
+        task_item("c", &[]),
+        task_item("d", &[]),
+    ]);
+    let (mut machine, outcome) = start_run(document, &sha, "cancel".into(), input, 0).unwrap();
+    let open = admitted(&outcome.effects);
+    assert_eq!(open.len(), 2);
+    let cancelled = machine.cancel(1);
+    assert_eq!(cancelled.status, RunStatus::Cancelled);
+    let cancels = cancelled
+        .effects
+        .iter()
+        .filter(|effect| matches!(effect, Effect::CancelInvocation { .. }))
+        .count();
+    assert_eq!(cancels, 2);
+    for item in &open {
+        let step = machine.complete(&item.id, Json::object([("ok".into(), Json::from("x"))]), 2);
+        assert_eq!(step.status, RunStatus::Cancelled);
+        assert!(admitted(&step.effects).is_empty());
+    }
+}
+
+#[test]
+fn ready_map_child_failure_admits_nothing_more() {
+    let (document, sha) = load(&ready_definition());
+    let input = ready_input(vec![
+        task_item("slow", &[]),
+        task_item("fast", &[]),
+        task_item("after_fast", &["fast"]),
+    ]);
+    let (mut machine, outcome) = start_run(document, &sha, "fail".into(), input, 0).unwrap();
+    let open = admitted(&outcome.effects);
+    let fast = open.iter().find(|item| item.task_id == "fast").unwrap();
+    let failed = machine.fail(&fast.id, RuntimeError::handler("nope"), 1);
+    assert_eq!(failed.status, RunStatus::Failed);
+    assert!(admitted(&failed.effects).is_empty());
+}
+
+#[test]
+fn ready_map_never_exceeds_concurrency() {
+    let mut raw = ready_definition();
+    raw = raw.replace("\"concurrency\": 2", "\"concurrency\": 3");
+    let (document, sha) = load(&raw);
+    let items: Vec<Json> = (0..12)
+        .map(|index| task_item(&format!("t{index}"), &[]))
+        .collect();
+    let (mut machine, outcome) =
+        start_run(document, &sha, "cap".into(), ready_input(items), 0).unwrap();
+    let mut pending = admitted(&outcome.effects);
+    assert!(pending.len() <= 3);
+    let mut seen = pending.len();
+    let mut now = 1u64;
+    let mut status = outcome.status;
+    while status == RunStatus::Running {
+        assert!(pending.len() <= 3);
+        let item = pending.remove(0);
+        now += 1;
+        let step = machine.complete(
+            &item.id,
+            Json::object([("ok".into(), Json::from(item.task_id.as_str()))]),
+            now,
+        );
+        let spawned = admitted(&step.effects);
+        seen += spawned.len();
+        pending.extend(spawned);
+        status = step.status;
+    }
+    assert_eq!(status, RunStatus::Completed);
+    assert_eq!(seen, 12);
+}
+
+#[test]
+fn swd_1_0_rejects_ready_fields_and_ordered_1_1_keeps_input_order() {
+    let raw = r#"{
+      "version": "1.0",
+      "name": "legacy",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 8, "max_depth": 2, "timeout_seconds": 5},
+      "nodes": {
+        "fanout": {
+          "type": "map",
+          "items": "$.needs",
+          "child": "work",
+          "schedule": "ready",
+          "item_id": "$.item.task_id",
+          "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "work": {"type": "task", "handler": "demo.work"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#;
+    let (document, sha) = load(raw);
+    let error = match start_run(document, &sha, "legacy".into(), Json::empty_object(), 0) {
+        Err(error) => error,
+        Ok(_) => panic!("1.0 cannot carry ready fields"),
+    };
+    assert_eq!(error.kind, ErrorKind::Preflight);
+
+    let ordered = r#"{
+      "version": "1.1",
+      "name": "ordered",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 20, "max_depth": 2, "timeout_seconds": 5},
+      "nodes": {
+        "fanout": {
+          "type": "map",
+          "items": "$.needs",
+          "child": "work",
+          "concurrency": 1,
+          "schedule": "ordered",
+          "next": "done"
+        },
+        "work": {"type": "task", "handler": "demo.work"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#;
+    let (document, sha) = load(ordered);
+    let input = Json::object([(
+        "needs".into(),
+        Json::Array(vec![Json::from("a"), Json::from("b"), Json::from("c")]),
+    )]);
+    let (mut machine, outcome) = start_run(document, &sha, "ordered".into(), input, 0).unwrap();
+    let first = admitted_index(&outcome.effects);
+    assert_eq!(first, vec![0]);
+    let step = machine.complete(
+        &invoke_ids(&outcome.effects)[0],
+        Json::object([("n".into(), Json::from(0))]),
+        1,
+    );
+    assert_eq!(admitted_index(&step.effects), vec![1]);
+}
+
+fn admitted_index(effects: &[Effect]) -> Vec<u64> {
+    effects
+        .iter()
+        .filter_map(|effect| match effect {
+            Effect::InvokeHandler { input, .. } => input.get("index")?.as_number()?.as_u64(),
+            _ => None,
+        })
+        .collect()
 }

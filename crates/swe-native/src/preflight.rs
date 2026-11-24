@@ -1,6 +1,6 @@
 //! Reject reserved SWD features before a run starts. Never ignore them.
 
-use crate::definition::{CompiledDefinition, Node};
+use crate::definition::{CompiledDefinition, MapSchedule, Node};
 use crate::error::{Result, RuntimeError};
 use crate::json::Json;
 
@@ -9,7 +9,24 @@ pub fn assert_supported(definition: &CompiledDefinition) -> Result<()> {
         match node {
             Node::Task { .. } => assert_task_supported(node_id, definition.document.get("nodes"))?,
             Node::Decision { .. } | Node::ProviderDecision { .. } => {}
-            Node::Fork { .. } | Node::Join { .. } | Node::Map { .. } | Node::End { .. } => {}
+            Node::Fork { .. } | Node::Join { .. } | Node::End { .. } => {}
+            Node::Map {
+                schedule,
+                item_id,
+                item_depends_on,
+                ..
+            } => {
+                if definition.version == "1.0"
+                    && (*schedule != MapSchedule::Ordered
+                        || item_id.is_some()
+                        || item_depends_on.is_some())
+                {
+                    return Err(RuntimeError::preflight(
+                        "map schedule/item fields require SWD 1.1",
+                    )
+                    .with_path(format!("nodes.{node_id}")));
+                }
+            }
         }
     }
     Ok(())

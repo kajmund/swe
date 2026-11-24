@@ -7,6 +7,7 @@ are inputs the Rust contract tests execute.
 | File | Contract | What it pins |
 | --- | --- | --- |
 | `swd-v1-workflow.json` | SWD 1.0 | A complete workflow document: task, expression and provider decisions, map, fork/join, end statuses |
+| `swd-v1_1-ready-map.json` | SWD 1.1 | One static ready-map: `schedule`, `item_id`, and `item_depends_on` on the existing `map` node |
 | `journal-v1-header.json` | Journal header v1 | `schema_version`, run identity, definition hash, contract version, dependency versions |
 | `journal-v1-events.json` | Journal events v1 | Every event kind, including an unconfirmed external charge |
 | `MANIFEST.sha256` | Structural | SHA-256 of each `*.json` file above |

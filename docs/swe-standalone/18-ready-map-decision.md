@@ -1,7 +1,7 @@
 # 18 — Kontraktsbeslut: statisk ready-map i SWD
 
-**Status:** **FÖRSLAG. Inte godkänt, inte fryst, ingen wire-ändring gjord.**
-Implementation får inte påbörjas förrän ägaren har godkänt detta beslut.
+**Status:** **Godkänt för implementation 2026-11-24.** SWD 1.0 förblir fryst.
+Kontraktsändring: SWD 1.1 lägger till opt-in `schedule: "ready"` på befintlig `map`. Journal v1, budget och värdekanal är oförändrade. Dynamisk admission ingår inte.
 Det följer `contracts/README.md` (“Changing a contract”) och
 `scripts/check_contract_freeze.py`: en ändrad SWD-yta kräver versionsbump och
 ett dokumenterat beslut — ingen tyst kontraktsändring.
@@ -44,7 +44,7 @@ En första klassens lösning måste ägas av maskinen och journalen. Eftersom
 `map`-noden då får nya fält krävs en SWD-version. Det finns inget sätt att
 uttrycka detta i oförändrad SWD 1.0.
 
-## 3. Beslut (förslag)
+## 3. Beslut
 
 **Utöka den befintliga `map`-noden med en opt-in `schedule: "ready"`-mode i
 SWD 1.1. Inför ingen ny nodtyp, ingen ny scheduler och inget nytt DAG-kontrakt.**
@@ -257,12 +257,11 @@ replay och fairness. Det får inte smygas in i 1.1.
 
 ## 8. Beslutspunkt
 
-Detta dokument är ett **förslag**. Ingen implementation har påbörjats och ingen
-wire-fil har ändrats. Ägaren måste godkänna:
+Ägaren godkände 2026-11-24:
 
 1. SWD 1.1 som ny version (1.0 förblir fryst),
 2. ready-mode på befintlig `map` (inte ny nod),
 3. item-ID-mönstret och `branch_path`-formen,
 4. att dynamisk admission är separat.
 
-Först därefter får implementationen påbörjas enligt avsnitt 4.
+Implementationen följer avsnitt 4. Värdekanalen förblir `absent`.

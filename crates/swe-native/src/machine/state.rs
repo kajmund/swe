@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 
-use crate::definition::CompiledDefinition;
+use crate::definition::{CompiledDefinition, MapSchedule};
 use crate::effects::{Effect, RunStatus};
 use crate::events::{Lineage, MemoryEventSink};
 use crate::json::Json;
@@ -20,6 +20,8 @@ pub enum WorkStatus {
     Completed,
     Failed,
     Cancelled,
+    /// Ready-map item that has not been admitted yet.
+    Waiting,
 }
 
 #[derive(Clone, Debug)]
@@ -36,6 +38,8 @@ pub struct ChildState {
     pub scope_id: String,
     pub status: WorkStatus,
     pub result: Option<Json>,
+    pub item_id: Option<String>,
+    pub pinned_serial: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -60,6 +64,13 @@ pub struct Scope {
     pub children: Vec<ChildState>,
     pub concurrency: u32,
     pub next_child: usize,
+    pub map_schedule: MapSchedule,
+    /// Unmet dependency counts for a ready map, aligned with `items`.
+    pub unmet: Vec<u32>,
+    /// Dependents of each ready-map item, aligned with `items`.
+    pub dependents: Vec<Vec<usize>>,
+    /// Serial reserved for the first node scheduled in this scope.
+    pub pinned_serial: Option<u64>,
     pub item: Option<Json>,
     pub index: Option<usize>,
 }
@@ -128,7 +139,13 @@ impl Machine {
     }
 
     pub fn instance_id(&mut self, node_id: &str, scope: &Scope) -> String {
-        let serial = self.new_serial();
+        // Ready-map children pin a serial in input order at start_map so
+        // invocation identity does not follow admission order.
+        let pinned = self
+            .scopes
+            .get_mut(&scope.id)
+            .and_then(|stored| stored.pinned_serial.take());
+        let serial = pinned.unwrap_or_else(|| self.new_serial());
         format!(
             "{}:{}:{}:{}:{}",
             self.run_id, node_id, scope.branch_path, scope.loop_epoch, serial

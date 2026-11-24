@@ -1,4 +1,4 @@
-"""Parse and validate a canonical SWD 1.0 document."""
+"""Parse and validate a canonical SWD 1.0 or 1.1 document."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from swe.schema import (
     HANDLER_NAME_PATTERN,
     PROMPT_KEY_PATTERN,
     PROVIDER_NAME_PATTERN,
+    SUPPORTED_VERSIONS,
     SWD_VERSION,
     load_schema,
 )
@@ -45,7 +46,7 @@ def compile_definition(
     providers: frozenset[str] | None = None,
     prompt_keys: frozenset[str] | None = None,
 ) -> CompiledDefinition:
-    """Compile and validate an SWD 1.0 document.
+    """Compile and validate an SWD 1.0 or 1.1 document.
 
     ``prompt_keys`` is the host's prompt-catalog allowlist. It is fail-closed:
     a document that declares a provider decision must be given one, because a
@@ -53,11 +54,11 @@ def compile_definition(
     A document without provider decisions may omit it.
     """
     parsed = json_object(document)
-    _assert_version(parsed)
+    version = _assert_version(parsed)
     canonical = canonicalize(parsed)
     _assert_size(canonical)
     assert_known_node_types(canonical)
-    _validate_schema(canonical)
+    _validate_schema(canonical, version=version)
     validate_graph(canonical)
     _validate_registry(
         canonical,
@@ -90,12 +91,14 @@ def compile_swd_text(
     )
 
 
-def _assert_version(document: dict[str, Any]) -> None:
-    if document.get("version") != SWD_VERSION:
+def _assert_version(document: dict[str, Any]) -> str:
+    version = document.get("version")
+    if version not in SUPPORTED_VERSIONS:
         raise SwdValidationError(
-            f"unsupported SWD version {document.get('version')!r}",
+            f"unsupported SWD version {version!r}",
             path="version",
         )
+    return str(version)
 
 
 def _assert_size(document: dict[str, Any]) -> None:
@@ -103,8 +106,10 @@ def _assert_size(document: dict[str, Any]) -> None:
         raise SwdValidationError("definition exceeds 1MB canonical size", path="")
 
 
-def _validate_schema(document: dict[str, Any]) -> None:
-    validator = Draft202012Validator(load_schema())
+def _validate_schema(
+    document: dict[str, Any], *, version: str = SWD_VERSION
+) -> None:
+    validator = Draft202012Validator(load_schema(version))
     error = next(validator.iter_errors(document), None)
     if error is None:
         return

@@ -13,7 +13,9 @@ Two failure modes this gate must survive:
 So the gate works on **contract types** and compares a **per-file fingerprint**
 of the wire form and public API, not paths:
 
-    SWD form                      -> SWD_VERSION
+    SWD 1.0 schema and fixture    -> SWD_VERSION
+    SWD 1.1 schema, fixture, and the shared parser when 1.0 wire is unchanged
+                                  -> SWD_VERSION_1_1
     journal wire form             -> JOURNAL_SCHEMA_VERSION
     needs/evidence/operations API -> CONTRACT_VERSION
 
@@ -101,7 +103,7 @@ VERSIONS = {
 VERSION_CONSTANTS = frozenset(name for _, name in VERSIONS.values())
 
 FIXTURES = {
-    SWD: ("contracts/swd-v1-workflow.json",),
+    SWD: ("contracts/swd-v1-workflow.json", "contracts/swd-v1_1-ready-map.json"),
     JOURNAL: ("contracts/journal-v1-events.json", "contracts/journal-v1-header.json"),
 }
 
@@ -124,7 +126,21 @@ WIRE_KEY_FILES = {"crates/swe-reference/src/journal.rs"}
 # without this the deletion would not even count as a contract path change.
 VERSION_FILES = tuple(dict.fromkeys(path for path, _ in VERSIONS.values()))
 
-EXTRA_CONTRACT_PATHS = ("python/swe/swd_v1.schema.json",)
+EXTRA_CONTRACT_PATHS = (
+    "python/swe/swd_v1.schema.json",
+    "python/swe/swd_v1_1.schema.json",
+)
+
+# Owns embedded 1.1 values. It is not a second copy of SWD_VERSION: 1.0 stays
+# frozen, and a 1.1-only surface change has to move this constant.
+EXTRA_VERSIONS = {
+    "SWD_VERSION_1_1": ("python/swe/schema.py", "SWD_VERSION_1_1"),
+}
+
+SWD_V1_WIRE = (
+    "python/swe/swd_v1.schema.json",
+    "contracts/swd-v1-workflow.json",
+)
 
 # Documentation that lives next to the fixtures but is not part of the frozen
 # surface. Editing it must not demand a contract decision; every *.json fixture
@@ -239,6 +255,7 @@ EMBEDDED: dict[tuple[str, str], str] = {
         "/dependency_versions/mock.supplier_facts",
     ): "CONTRACT_VERSION",
     ("python/swe/swd_v1.schema.json", "/properties/version/const"): "SWD_VERSION",
+    ("python/swe/swd_v1_1.schema.json", "/properties/version/const"): "SWD_VERSION_1_1",
 }
 
 
@@ -431,7 +448,26 @@ def constant_value(rev: str, constant: str) -> str | None:
     for path, name in VERSIONS.values():
         if name == constant:
             return read_version(rev, path, name)
+    extra = EXTRA_VERSIONS.get(constant)
+    if extra is not None:
+        path, name = extra
+        return read_version(rev, path, name)
     raise KeyError(f"unknown version constant {constant}")
+
+
+def swd_v1_wire_unchanged(base: str, head: str) -> bool:
+    """True when the frozen SWD 1.0 schema and workflow fixture are untouched."""
+    return all(
+        file_fingerprint(base, path) == file_fingerprint(head, path) for path in SWD_V1_WIRE
+    )
+
+
+def swd_v11_advanced(base: str, head: str) -> bool:
+    """True when SWD_VERSION_1_1 was introduced or bumped."""
+    path, name = EXTRA_VERSIONS["SWD_VERSION_1_1"]
+    before = read_version(base, path, name)
+    after = read_version(head, path, name)
+    return after is not None and before != after
 
 
 def _pointer_escape(key: str) -> str:
@@ -936,6 +972,22 @@ def main() -> int:
                 print(
                     f"  {contract}: form changed but version stays {before} — allowed by "
                     "the bootstrap exception (contracts/ does not exist at the base)"
+                )
+            elif (
+                contract == SWD
+                and swd_v1_wire_unchanged(args.base, args.head)
+                and swd_v11_advanced(args.base, args.head)
+            ):
+                print(
+                    "  swd: 1.0 wire unchanged; SWD 1.1 surface is versioned by "
+                    "SWD_VERSION_1_1"
+                )
+            elif contract == SWD and swd_v1_wire_unchanged(args.base, args.head):
+                path, name = EXTRA_VERSIONS["SWD_VERSION_1_1"]
+                current = read_version(args.head, path, name)
+                failures.append(
+                    "swd: 1.1 surface changed but SWD_VERSION_1_1 stayed "
+                    f"{current}; bump {name} in {path}"
                 )
             else:
                 path, name = VERSIONS[contract]
