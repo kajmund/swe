@@ -6,12 +6,11 @@ t1bp owns `experiment/microtask-swarm` and does not edit this directory.
 
 ## Dispatch gap
 
-SWE does not have event-ready scheduling. `compile_microtasks` turns a DAG
-into SWD map layers, and a later layer waits until every task in the previous
-layer has finished (`docs/specs/swe-microtasks.md`). The dispatch boundary is
-`WorkflowRunner`, which needs `swe_native`. This package does not run the plan
-and does not contain another scheduler. `require_swe_dispatch` still raises
-when the wheel is installed.
+`compile_microtasks(..., schedule="ready")` emits one SWD 1.1 map. The
+ordered default still waits for a whole layer (`docs/specs/swe-microtasks.md`).
+The dispatch boundary is `WorkflowRunner`, which needs `swe_native`. This
+package does not contain another scheduler. `require_swe_dispatch` still raises
+when the wheel is installed. The preflight is the caller that runs the map.
 
 `experiments/agent-contract/PREFLIGHT.md` builds that wheel from this checkout
 and records the machine trace. Dependency results stay in the completed run
@@ -29,12 +28,9 @@ A validator does not call the model again.
 
 ## Ready-DAG seam
 
-`SEAM.md` records the boundary with t1bq's `experiment/barrier-free-scheduler`.
-The migration check is `ready_ids`: a task is eligible when its dependency ids
-are complete. This package does not contain that scheduler. The proposed map
-fields are `schedule`, `item_id`, and `item_depends_on`. They admit a task and
-do not deliver the dependency result. `RuntimeBudget` stays unattached until
-PR #11 is merged.
+`SEAM.md` records the boundary with the merged ready map. `ready_ids` names
+eligibility and does not start work. The fields `schedule`, `item_id`, and
+`item_depends_on` admit a task and do not deliver the dependency result.
 
 ## Budget
 

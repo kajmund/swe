@@ -4,9 +4,9 @@ Status: proposal. SWD 1.0 is unchanged. `python/swe/swd_v1.schema.json` does
 not gain a field, and `compile_microtasks` still hands a handler only
 `task_id`, `payload`, and `depends_on`.
 
-`schedule`, `item_id`, and `item_depends_on` remain the ready-map admission
-proposal on `experiment/ready-dag-contract`. Admission is not a value channel.
-A validator cannot read generation output through `item_depends_on`.
+`schedule`, `item_id`, and `item_depends_on` are the merged ready-map admission
+fields on `origin/main` `f1ae2b8`. Admission is not a value channel. A
+validator cannot read generation output through `item_depends_on`.
 
 ## Typed bind
 

@@ -2,8 +2,8 @@
 
 PR 13, branch `experiment/agent-microtask-contract`. The run uses the checkout's
 `WorkflowRunner` and a `swe_native` wheel built from `crates/swe-native` in the
-same tree. `python/` and `crates/` match `origin/main` after PR 11
-(`252620be31a4bf0d2c1f451d3ce2137a2b158fc1`). Each run attaches
+same tree. `python/` and `crates/` match `origin/main` `f1ae2b8`, which
+merged the ready map. Each batch uses `schedule="ready"`. Each run attaches
 `RuntimeBudget` through `WorkflowResources` with an injected one-milli policy.
 The production tariff stays with t1bp. The run makes no provider call.
 

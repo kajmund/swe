@@ -1,7 +1,7 @@
 {
   "checkout": {
     "branch": "experiment/agent-microtask-contract",
-    "merge_base": "252620be31a4bf0d2c1f451d3ce2137a2b158fc1",
+    "merge_base": "f1ae2b8714fc6b88f66a00b47a1baa0469af718f",
     "python_and_crates_diff": ""
   },
   "contract": {
@@ -12,7 +12,7 @@
       {
         "model": "laya",
         "model_called": true,
-        "node_id": "microtask_4",
+        "node_id": "microtask",
         "ok": true,
         "provider": "system-one",
         "role": "decision",
@@ -23,7 +23,7 @@
       {
         "model": "laya",
         "model_called": false,
-        "node_id": "microtask_5",
+        "node_id": "microtask",
         "ok": true,
         "provider": "system-one",
         "role": "validator",
@@ -34,7 +34,7 @@
       {
         "model": "laya",
         "model_called": true,
-        "node_id": "microtask_4",
+        "node_id": "microtask",
         "ok": true,
         "provider": "system-one",
         "role": "decision",
@@ -45,7 +45,7 @@
       {
         "model": "laya",
         "model_called": false,
-        "node_id": "microtask_5",
+        "node_id": "microtask",
         "ok": true,
         "provider": "system-one",
         "role": "validator",
@@ -56,7 +56,7 @@
       {
         "model": "alpha-model",
         "model_called": true,
-        "node_id": "microtask_2",
+        "node_id": "microtask",
         "ok": true,
         "provider": "alpha",
         "role": "generation",
@@ -67,7 +67,7 @@
       {
         "model": "alpha-model",
         "model_called": false,
-        "node_id": "microtask_3",
+        "node_id": "microtask",
         "ok": true,
         "provider": "alpha",
         "role": "validator",
@@ -78,7 +78,7 @@
       {
         "model": "alpha-model",
         "model_called": true,
-        "node_id": "microtask_6",
+        "node_id": "microtask",
         "ok": true,
         "provider": "alpha",
         "role": "generation",
@@ -89,7 +89,7 @@
       {
         "model": "alpha-model",
         "model_called": false,
-        "node_id": "microtask_7",
+        "node_id": "microtask",
         "ok": true,
         "provider": "alpha",
         "role": "validator",
@@ -100,7 +100,7 @@
       {
         "model": "alpha-model",
         "model_called": true,
-        "node_id": "microtask_0",
+        "node_id": "microtask",
         "ok": true,
         "provider": "alpha",
         "role": "generation",
@@ -111,7 +111,7 @@
       {
         "model": "alpha-model",
         "model_called": false,
-        "node_id": "microtask_1",
+        "node_id": "microtask",
         "ok": true,
         "provider": "alpha",
         "role": "validator",
@@ -133,7 +133,7 @@
     "decision_providers": [
       "system-one"
     ],
-    "definition_sha256": "dd86b2cc97d6d292af886d3bc0f929a0722b09768016dcbb8c0e6f29c054e591",
+    "definition_sha256": "52dc0023e74135a02997107b4dc305a387d6b7d055ba18728a660da47cf451d8",
     "generation_calls": [
       "relevance",
       "extraction",
@@ -180,23 +180,17 @@
       ]
     ],
     "map_nodes": [
-      "microtasks_0",
-      "microtasks_1",
-      "microtasks_2",
-      "microtasks_3",
-      "microtasks_4",
-      "microtasks_5",
-      "microtasks_6",
-      "microtasks_7"
+      "microtasks"
     ],
     "same_definition": true,
     "same_task_ids": true,
+    "schedule": "ready",
     "status": "completed",
     "upstream_output_present": false,
     "validator_model_calls": 0
   },
   "layer_barrier": {
-    "after_fast_started_before_slow_released": false,
+    "after_fast_started_before_slow_released": true,
     "budget": {
       "account": "agent-contract",
       "attached": true,
@@ -225,11 +219,34 @@
         "after_fast"
       ]
     ],
+    "map_nodes": [
+      "microtasks"
+    ],
+    "schedule": "ready",
+    "slow_still_blocked_when_after_fast_started": true,
     "starts_while_slow_blocked": [
       "slow",
-      "fast"
+      "fast",
+      "after_fast"
     ],
-    "status": "completed"
+    "status": "completed",
+    "trace": [
+      {
+        "node_id": "microtask",
+        "ok": true,
+        "task_id": "after_fast"
+      },
+      {
+        "node_id": "microtask",
+        "ok": true,
+        "task_id": "fast"
+      },
+      {
+        "node_id": "microtask",
+        "ok": true,
+        "task_id": "slow"
+      }
+    ]
   },
   "package_dispatch_gap": {
     "event_ready": false,
@@ -262,7 +279,8 @@
       "a"
     ],
     "replayed_task_executed_again": false,
-    "resume_status": "completed"
+    "resume_status": "completed",
+    "schedule": "ready"
   },
   "runner_parameters": [
     "compiled",

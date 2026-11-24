@@ -18,10 +18,15 @@ def test_offline_machine_preflight() -> None:
     assert report["package_dispatch_gap"]["event_ready"] is False
     assert report["package_dispatch_gap"]["require_swe_dispatch_raises"] is True
     barrier = report["layer_barrier"]
+    assert barrier["schedule"] == "ready"
+    assert barrier["map_nodes"] == ["microtasks"]
     assert barrier["layers"] == [["slow", "fast"], ["after_fast"]]
-    assert barrier["after_fast_started_before_slow_released"] is False
-    assert set(barrier["starts_while_slow_blocked"]) == {"slow", "fast"}
+    assert barrier["after_fast_started_before_slow_released"] is True
+    assert barrier["slow_still_blocked_when_after_fast_started"] is True
+    assert set(barrier["starts_while_slow_blocked"]) == {"slow", "fast", "after_fast"}
+    assert len({row["invocation_id"] for row in barrier["trace"]}) == 3
     contract = report["contract"]
+    assert contract["schedule"] == "ready"
     assert contract["same_definition"] is True
     assert contract["same_task_ids"] is True
     assert len({row["invocation_id"] for row in contract["alpha_trace"]}) == 10
@@ -39,6 +44,7 @@ def test_offline_machine_preflight() -> None:
     assert contract["beta_generation_providers"] == ["beta"]
     assert contract["decision_providers"] == ["system-one"]
     assert contract["decision_models"] == ["laya"]
+    assert report["replay"]["schedule"] == "ready"
     assert report["replay"]["replayed_task_executed_again"] is False
     assert report["replay"]["executed_before_resume"] == ["a"]
     assert report["replay"]["executed_after_resume"] == ["a", "b"]

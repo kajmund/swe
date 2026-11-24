@@ -1,9 +1,11 @@
 """Offline preflight of PR 13 against the real SWE machine.
 
-The wheel and ``WorkflowRunner`` come from this checkout. Each run attaches
+The wheel and ``WorkflowRunner`` come from this checkout. Each batch is
+compiled with ``schedule="ready"`` on the merged SWD 1.1 map. Each run attaches
 ``RuntimeBudget`` through ``WorkflowResources``. The tariff is the injected
-one-milli policy, not the microtask-swarm policy. The script does not call a
-model provider.
+one-milli policy, not the microtask-swarm policy. Dependency admission does
+not copy generation output into the handler. The script does not call a model
+provider.
 """
 
 from __future__ import annotations
@@ -40,6 +42,8 @@ from hy4_research_policy.agent_adapter import (  # noqa: E402
     Usage,
 )
 from agent_contract.budget_run import budget_trace, open_budget, resources_for  # noqa: E402
+
+SCHEDULE = "ready"
 from swe.microtasks import Microtask, compile_microtasks  # noqa: E402
 from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord, RunStore  # noqa: E402
 from swe.runtime import WorkflowRunner  # noqa: E402
@@ -164,7 +168,8 @@ async def _layer_barrier() -> dict[str, Any]:
         ],
         handler="microtask.preflight",
         concurrency=2,
-        name="layer_barrier_witness",
+        name="ready_map_witness",
+        schedule=SCHEDULE,
     )
     started: list[str] = []
     release_slow = asyncio.Event()
@@ -179,16 +184,11 @@ async def _layer_barrier() -> dict[str, Any]:
         return {"task_id": task_id, "input_keys": sorted(payload)}
 
     async def watch() -> list[str]:
-        while True:
-            saved = [
-                record.value
-                for record in store.invocations.get("layer-barrier", {}).values()
-                if isinstance(record.value, Mapping) and record.value.get("task_id") == "fast"
-            ]
-            if saved:
-                break
+        while "fast" not in started:
             await asyncio.sleep(0)
-        for _ in range(30):
+        for _ in range(50):
+            if "after_fast" in started:
+                break
             await asyncio.sleep(0)
         window = list(started)
         release_slow.set()
@@ -206,13 +206,29 @@ async def _layer_barrier() -> dict[str, Any]:
         ),
         timeout=5,
     )
+    trace = []
+    for record in store.invocations["layer-barrier"].values():
+        value = record.value if isinstance(record.value, Mapping) else {}
+        trace.append(
+            {
+                "invocation_id": record.invocation_id,
+                "node_id": record.node_id,
+                "ok": record.ok,
+                "task_id": value.get("task_id"),
+            }
+        )
+    trace.sort(key=lambda row: str(row["task_id"]))
     return {
         "status": run.status,
+        "schedule": batch.schedule,
+        "map_nodes": list(batch.map_nodes),
         "layers": [list(layer) for layer in batch.layers],
         "starts_while_slow_blocked": window,
         "after_fast_started_before_slow_released": "after_fast" in window,
+        "slow_still_blocked_when_after_fast_started": "slow" in window and "after_fast" in window,
         "final_start_order": started,
         "handler_input_keys": ["depends_on", "payload", "task_id"],
+        "trace": trace,
         "budget": budget_trace(budget),
     }
 
@@ -223,6 +239,7 @@ async def _contract(provider_name: str) -> dict[str, Any]:
         handler="agent.preflight",
         concurrency=2,
         name="agent_contract_preflight",
+        schedule=SCHEDULE,
     )
     generation = _Generation(provider_name)
     decision = _Decision()
@@ -308,6 +325,7 @@ async def _contract(provider_name: str) -> dict[str, Any]:
     rows.sort(key=lambda row: str(row["task_id"]))
     return {
         "status": run.status,
+        "schedule": batch.schedule,
         "definition_sha256": batch.compiled.sha256,
         "layers": [list(layer) for layer in batch.layers],
         "map_nodes": list(batch.map_nodes),
@@ -329,6 +347,7 @@ async def _replay() -> dict[str, Any]:
         handler="microtask.replay",
         concurrency=1,
         name="replay_witness",
+        schedule=SCHEDULE,
     )
     executed: list[str] = []
 
@@ -349,6 +368,7 @@ async def _replay() -> dict[str, Any]:
     before = list(executed)
     resumed = await batch.resume(work, "replay-run", resources=resources, run_store=store)
     return {
+        "schedule": batch.schedule,
         "crashed_after_first_persisted_invocation": crashed,
         "executed_before_resume": before,
         "executed_after_resume": list(executed),
@@ -398,6 +418,7 @@ async def run_preflight() -> dict[str, Any]:
         },
         "layer_barrier": barrier,
         "contract": {
+            "schedule": alpha["schedule"],
             "same_definition": alpha["definition_sha256"] == beta["definition_sha256"],
             "definition_sha256": alpha["definition_sha256"],
             "same_task_ids": alpha_ids == beta_ids,

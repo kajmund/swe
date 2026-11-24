@@ -2,10 +2,10 @@
 
 Owner: t1bm, branch `experiment/agent-microtask-contract`.
 
-t1bq owns `experiment/barrier-free-scheduler` from `origin/main`
-(`eff1c7e8943dd64827fb4916719ced5515bf3db5`). That branch is the ready-DAG
-experiment. This package does not import it, does not copy its queue, and does
-not attach `RuntimeBudget`. Budget integration waits until PR 11 is merged.
+`origin/main` `f1ae2b8` merged the ready map. The preflight compiles
+`schedule="ready"` and runs that one SWD 1.1 map on `WorkflowRunner`. This
+package does not import `experiment/barrier-free-scheduler` and does not copy
+its queue.
 
 ## What is stable now
 
@@ -14,18 +14,17 @@ not attach `RuntimeBudget`. Budget integration waits until PR 11 is merged.
 on the validate items of the kinds it follows. Provider and model are payload
 fields. Alpha and beta keep the same ids and dependencies.
 
-`compile_microtasks` turns that DAG into one SWD map per topological layer.
-The measured handler input is `task_id`, `payload`, and `depends_on`
-(`preflight-trace.json`). Generation output is not in the next handler input.
+`compile_microtasks(..., schedule="ready")` turns that DAG into one SWD 1.1
+map. The measured handler input is `task_id`, `payload`, and `depends_on`.
+Generation output is not in the next handler input.
 
 `require_swe_dispatch` raises `DispatchGap` when the wheel is present. This
 package has no second scheduler.
 
-## Future ready map
+## Ready map
 
-The proposal on t1bq's branch, recorded in
-`docs/analysis/2026-11-24-barrier-free-scheduler.md` section 9, adds these
-fields to one map:
+The merged map, recorded in `docs/swe-standalone/18-ready-map-decision.md`,
+uses these fields:
 
 ```json
 {
@@ -41,16 +40,14 @@ fields to one map:
 predicate: a task is eligible once every dependency id is complete, in input
 order. It does not keep a queue, a clock, or a concurrency limit.
 
-The witness from the offline preflight is the disagreement to preserve:
+The ordered layer check stays false while the ready predicate is true:
 
 - `after_fast` depends only on `fast`.
 - With `fast` complete and `slow` still open, `ready_ids` lists `after_fast`.
-- `layer_is_complete(("slow", "fast"), {"fast"})` stays false, which is the
-  current map barrier.
+- `layer_is_complete(("slow", "fast"), {"fast"})` stays false.
 
-A later scheduler satisfies this seam when that predicate holds for the same
-items and each admitted task still has its own invocation id. Replacing the
-predicate with a layer wait would fail `tests/test_seam.py`.
+The preflight witness is the machine, not the predicate. `after_fast` starts
+while `slow` is still blocked, and each start has its own invocation id.
 
 ## What the ready map does not close
 

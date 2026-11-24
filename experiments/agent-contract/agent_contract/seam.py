@@ -1,15 +1,13 @@
-"""Seam between this plan and a future first-class ready DAG.
+"""Seam for the merged ready map. This module does not run it.
 
-``experiment/barrier-free-scheduler`` owns the scheduler experiment. This
-module does not import it and does not admit, order, or run tasks. The
-predicate below is the migration check: a task is eligible when every
-dependency id is complete. Today's SWE map still waits for the whole layer.
+``origin/main`` ``f1ae2b8`` compiles ``schedule="ready"`` as one SWD 1.1 map.
+The preflight calls that compiler. This module does not import a scheduler
+and does not admit, order, or run tasks. ``ready_ids`` only names the
+eligibility rule: a task is eligible when every dependency id is complete.
+The ordered layer map still waits for the whole layer.
 
-The field names match the proposed SWD map mode in
-``docs/analysis/2026-11-24-barrier-free-scheduler.md`` on that branch.
 ``item_depends_on`` admits a task. It does not put the dependency result in
-the handler input. That value channel is a separate contract. ``RuntimeBudget``
-stays unattached until PR 11 is merged.
+the handler input. That value channel stays a separate contract.
 """
 
 from __future__ import annotations
