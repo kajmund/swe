@@ -77,12 +77,29 @@ struct KeySignature {
     outcome: KeyOutcome,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReservationStatus {
+    Open,
+    Settled,
+    Released,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReservationView {
+    pub reservation_id: u64,
+    pub amount_milli: Amount,
+    pub spent_milli: Amount,
+    pub account: String,
+    pub status: ReservationStatus,
+}
+
 #[derive(Clone, Debug)]
 struct Reservation {
     run_id: String,
     account: String,
     amount: Amount,
     settled: bool,
+    released: bool,
     spent: Amount,
 }
 
@@ -238,6 +255,7 @@ impl Ledger {
                 account: account.to_string(),
                 amount: amount_milli,
                 settled: false,
+                released: false,
                 spent: 0,
             },
         );
@@ -354,6 +372,7 @@ impl Ledger {
             .get_mut(&reservation_id)
             .expect("checked above");
         reservation.settled = true;
+        reservation.released = true;
         let reserved_balance = self
             .reserved
             .get_mut(&account)
@@ -454,6 +473,31 @@ impl Ledger {
         Ok(())
     }
 
+    /// Look up a reservation by its reserve key. The result is authoritative
+    /// even after the reservation is settled or released, which lets a host
+    /// reject a re-dispatch whose in-process retention window has evicted it.
+    pub fn lookup(&self, key: &str) -> Option<ReservationView> {
+        let signature = self.keys.get(key)?;
+        let KeyOutcome::Reserved(reservation_id) = signature.outcome else {
+            return None;
+        };
+        let reservation = self.reservations.get(&reservation_id)?;
+        let status = if reservation.released {
+            ReservationStatus::Released
+        } else if reservation.settled {
+            ReservationStatus::Settled
+        } else {
+            ReservationStatus::Open
+        };
+        Some(ReservationView {
+            reservation_id,
+            amount_milli: reservation.amount,
+            spent_milli: reservation.spent,
+            account: reservation.account.clone(),
+            status,
+        })
+    }
+
     pub fn balance(&self, account: &str) -> Balance {
         Balance {
             allocated: *self.allocated.get(account).unwrap_or(&0),
@@ -522,6 +566,7 @@ impl Ledger {
                         account: account.clone(),
                         amount: event.amount_milli,
                         settled: false,
+                        released: false,
                         spent: 0,
                     },
                 );
@@ -566,6 +611,9 @@ impl Ledger {
                     .reservations
                     .get_mut(&id)
                     .ok_or(LedgerError::UnknownReservation(id))?;
+                if !reservation.settled {
+                    reservation.released = true;
+                }
                 reservation.settled = true;
                 let reserved_balance = self.reserved.get_mut(&account).ok_or_else(|| {
                     LedgerError::InvalidEvent("release without matching reserve".into())

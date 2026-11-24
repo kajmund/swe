@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "swe-budget-native"
+version = "0.1.0"
+description = "PyO3 bindings for the SWE Sweycoin ledger"
+requires-python = ">=3.12"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-NOTICES"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[project.urls]
+Homepage = "https://github.com/kajmund/swe"
+Repository = "https://github.com/kajmund/swe"
+Issues = "https://github.com/kajmund/swe/issues"
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+module-name = "swe_budget"
+features = ["extension-module"]

@@ -65,10 +65,15 @@ handler failures remain terminal and do not allow late results to reroute.
 
 ## Budget and recovery
 
-The microtask facade does not mint or reinterpret Sweycoins. A host that needs
-per-task cost accounting continues to use `swe-budget::Ledger` with stable
-invocation or host-operation keys. The batch result and event sequence remain
-the source for linking execution to those cost records.
+The microtask facade does not mint or reinterpret Sweycoins. A batch may pass
+`swe.budget.RuntimeBudget` in `WorkflowResources`; the runtime then reserves
+before each handler call, settles or releases exactly once, and keeps a
+cancelled/timed-out reservation pending. That path uses the existing Rust
+`swe-budget` ledger through `swe_budget.Ledger`; it does not add a second
+ledger. Without a budget resource, a host that needs per-task cost accounting
+continues to use `swe-budget::Ledger` with stable invocation or host-operation
+keys. The batch result and event sequence remain the source for linking
+execution to those cost records.
 
 With a `RunStore`, each handler outcome is persisted as an `InvocationRecord`.
 Resume starts a fresh deterministic machine, replays those outcomes, and

@@ -1,0 +1,26 @@
+[package]
+name = "swe-budget-py"
+version.workspace = true
+edition = "2021"
+rust-version = "1.83"
+description = "PyO3 bindings for the SWE Sweycoin ledger"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[lib]
+name = "swe_budget"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+python = ["dep:pyo3"]
+extension-module = ["python", "pyo3/extension-module"]
+
+[dependencies]
+budget_core = { path = "../swe-budget", version = "0.1.0", package = "swe-budget" }
+
+[dependencies.pyo3]
+version = "=0.24.2"
+optional = true

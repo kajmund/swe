@@ -21,6 +21,12 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from swe.budget import (
+    BudgetOutcome,
+    BudgetRequest,
+    BudgetReservation,
+    RuntimeBudget,
+)
 from swe.cache import (
     CacheComputeOwner,
     DecisionCache,
@@ -184,18 +190,44 @@ def spawn_invocations(
     provider_dispatch: ProviderDispatch,
     now_ms: NowMs,
     handles: Mapping[str, InvocationHandle] | None = None,
+    budget: RuntimeBudget | None = None,
+    budget_slots: dict[str, list[BudgetReservation | None]] | None = None,
+    run_id: str = "",
 ) -> None:
     bound = handles or {}
     for effect in effects:
         kind = effect["type"]
         handle = bound.get(str(effect["invocation_id"]))
+        invocation_id = str(effect["invocation_id"])
+        slot: list[BudgetReservation | None] | None = None
+        if kind in {"invoke_handler", "invoke_provider"} and budget_slots is not None:
+            slot = []
+            budget_slots[invocation_id] = slot
         if kind == "invoke_handler":
-            task = _run_handler(effect, handlers, nodes, semaphore, now_ms, handle)
+            task = _run_handler(
+                effect,
+                handlers,
+                nodes,
+                semaphore,
+                now_ms,
+                handle,
+                budget,
+                run_id,
+                slot,
+            )
         elif kind == "invoke_provider":
-            task = _run_provider(effect, provider_dispatch, semaphore, now_ms, handle)
+            task = _run_provider(
+                effect,
+                provider_dispatch,
+                semaphore,
+                now_ms,
+                handle,
+                budget,
+                run_id,
+                slot,
+            )
         else:
             continue
-        invocation_id = effect["invocation_id"]
         pending[invocation_id] = asyncio.create_task(
             task,
             name=f"swe:{invocation_id}",
@@ -288,6 +320,57 @@ def _outcome(
     )
 
 
+def _budget_request(
+    effect: Mapping[str, Any],
+    *,
+    run_id: str,
+    kind: str,
+    name: str,
+) -> BudgetRequest:
+    return BudgetRequest(
+        run_id=str(run_id),
+        invocation_id=str(effect["invocation_id"]),
+        node_id=str(effect["node_id"]),
+        kind=kind,
+        name=name,
+        input=dict(effect["input"]),
+    )
+
+
+def _settle(
+    budget: RuntimeBudget | None,
+    reservation: BudgetReservation | None,
+    outcome: BudgetOutcome,
+) -> None:
+    if budget is not None and reservation is not None:
+        budget.settle(reservation, outcome)
+
+
+def _budget_flags(handle: InvocationHandle | None) -> tuple[bool, bool]:
+    if handle is None:
+        return False, False
+    return handle.cancel.is_set(), handle.reason() == "timeout"
+
+
+def _budget_outcome(
+    handle: InvocationHandle | None,
+    *,
+    ok: bool,
+    value: Any = None,
+    error: Mapping[str, Any] | None = None,
+    cache_state: str | None = None,
+) -> BudgetOutcome:
+    cancelled, timed_out = _budget_flags(handle)
+    return BudgetOutcome(
+        ok=ok,
+        cancelled=cancelled,
+        timed_out=timed_out,
+        cache_state=cache_state,
+        value=value,
+        error=error,
+    )
+
+
 async def _run_handler(
     effect: Mapping[str, Any],
     handlers: Mapping[str, Handler],
@@ -295,13 +378,60 @@ async def _run_handler(
     semaphore: CapacityLimiter,
     now_ms: NowMs,
     handle: InvocationHandle | None,
+    budget: RuntimeBudget | None = None,
+    run_id: str = "",
+    reservation_slot: list[BudgetReservation | None] | None = None,
 ) -> HandlerOutcome:
     invocation_id = effect["invocation_id"]
     node_id = effect["node_id"]
     token = bind_current_invocation(handle)
     try:
         async with semaphore:
-            output = await handlers[effect["handler"]](effect["input"])
+            reservation = None
+            if budget is not None:
+                request = _budget_request(
+                    effect,
+                    run_id=run_id,
+                    kind="handler",
+                    name=str(effect["handler"]),
+                )
+                reservation = budget.reserve(request)
+                if reservation_slot is not None and reservation is not None:
+                    reservation_slot.append(reservation)
+            try:
+                output = await handlers[effect["handler"]](effect["input"])
+            except asyncio.CancelledError:
+                if budget is not None and reservation is not None:
+                    budget.mark_pending(reservation)
+                raise
+            except SweHandlerError as exc:
+                _settle(
+                    budget,
+                    reservation,
+                    _budget_outcome(
+                        handle,
+                        ok=False,
+                        error=invocation_error_from_exception(exc),
+                    ),
+                )
+                raise
+            except Exception as exc:  # noqa: BLE001 - settle, then report failure
+                _settle(
+                    budget,
+                    reservation,
+                    _budget_outcome(
+                        handle,
+                        ok=False,
+                        error=invocation_error_from_exception(exc),
+                    ),
+                )
+                raise
+            else:
+                _settle(
+                    budget,
+                    reservation,
+                    _budget_outcome(handle, ok=True, value=output),
+                )
         output = require_json_value(output, node_id=node_id)
         validate_output_schema(nodes[node_id], output, node_id=node_id)
         return _outcome(invocation_id, node_id, now_ms=now_ms, ok=True, value=output)
@@ -331,6 +461,9 @@ async def _run_provider(
     semaphore: CapacityLimiter,
     now_ms: NowMs,
     handle: InvocationHandle | None,
+    budget: RuntimeBudget | None = None,
+    run_id: str = "",
+    reservation_slot: list[BudgetReservation | None] | None = None,
 ) -> HandlerOutcome:
     invocation_id = effect["invocation_id"]
     node_id = effect["node_id"]
@@ -338,13 +471,62 @@ async def _run_provider(
     try:
         request = _provider_request(effect, dispatch.prompts)
         provider = dispatch.providers[effect["provider"]]
-        answer, cache_state = await _call_provider(
-            provider,
-            request,
-            dispatch.cache,
-            semaphore,
-            dispatch.cache_owner,
-        )
+        reservation = None
+        if budget is not None:
+            budget_request = _budget_request(
+                effect,
+                run_id=run_id,
+                kind="provider",
+                name=str(effect["provider"]),
+            )
+            reservation = budget.reserve(budget_request)
+            if reservation_slot is not None and reservation is not None:
+                reservation_slot.append(reservation)
+        try:
+            answer, cache_state = await _call_provider(
+                provider,
+                request,
+                dispatch.cache,
+                semaphore,
+                dispatch.cache_owner,
+            )
+        except asyncio.CancelledError:
+            if budget is not None and reservation is not None:
+                budget.mark_pending(reservation)
+            raise
+        except SweHandlerError as exc:
+            _settle(
+                budget,
+                reservation,
+                _budget_outcome(
+                    handle,
+                    ok=False,
+                    error=invocation_error_from_exception(exc),
+                ),
+            )
+            raise
+        except Exception as exc:  # noqa: BLE001 - settle, then report failure
+            _settle(
+                budget,
+                reservation,
+                _budget_outcome(
+                    handle,
+                    ok=False,
+                    error=invocation_error_from_exception(exc),
+                ),
+            )
+            raise
+        else:
+            _settle(
+                budget,
+                reservation,
+                _budget_outcome(
+                    handle,
+                    ok=True,
+                    cache_state=cache_state,
+                    value=dict(answer),
+                ),
+            )
         output = _provider_output(effect, answer, cache_state)
         return _outcome(invocation_id, node_id, now_ms=now_ms, ok=True, value=output)
     except asyncio.CancelledError:

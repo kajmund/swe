@@ -1,5 +1,13 @@
 """SWE (SWD 1.0) workflow definitions and host-adapter contracts."""
 
+from swe.budget import (
+    BudgetError,
+    BudgetOutcome,
+    BudgetPolicy,
+    BudgetRequest,
+    NativeBudgetLedger,
+    RuntimeBudget,
+)
 from swe.canonicalize import canonical_json_bytes, sha256_hex
 from swe.definition import CompiledDefinition, compile_definition, compile_swd_text
 from swe.errors import SwdError, SwdExpressionError, SwdParseError, SwdValidationError
@@ -13,6 +21,12 @@ __all__ = [
     "SWD_VERSION",
     "CompiledDefinition",
     "InvocationHandle",
+    "BudgetError",
+    "BudgetOutcome",
+    "BudgetPolicy",
+    "BudgetRequest",
+    "NativeBudgetLedger",
+    "RuntimeBudget",
     "SwdError",
     "SwdExpressionError",
     "SwdParseError",

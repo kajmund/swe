@@ -90,7 +90,7 @@ async def _never(_payload: Mapping[str, object]) -> dict[str, str]:
 
 
 class _CountingStore(MemoryRunStore):
-    """Count invocation settles; budget is not on the Python runtime path."""
+    """Count invocation settles; this fixture does not use a budget resource."""
 
     def __init__(self) -> None:
         super().__init__()

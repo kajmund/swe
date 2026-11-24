@@ -280,6 +280,14 @@ name = "swe-budget"
 version = "0.1.0"
 
 [[package]]
+name = "swe-budget-py"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+ "swe-budget",
+]
+
+[[package]]
 name = "swe-native"
 version = "0.1.0"
 dependencies = [

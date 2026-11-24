@@ -5,7 +5,7 @@
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use swe_budget::{Ledger, LedgerError};
+use swe_budget::{Ledger, LedgerError, ReservationStatus};
 
 fn funded(ledger: &mut Ledger, account: &str, amount: u64) {
     ledger
@@ -215,4 +215,39 @@ fn replay_reconstructs_identical_state_and_allows_resume() {
         .filter(|event| matches!(event.kind, swe_budget::EventKind::Spend))
         .count();
     assert_eq!(spends, 2);
+}
+
+#[test]
+fn lookup_reports_open_settled_and_released_across_replay() {
+    let mut ledger = Ledger::new();
+    funded(&mut ledger, "root", 100_000);
+
+    let open = ledger.reserve("run", "root", 10_000, "open-key").unwrap();
+    let open_view = ledger.lookup("open-key").unwrap();
+    assert_eq!(open_view.status, ReservationStatus::Open);
+    assert_eq!(open_view.account, "root");
+    ledger.settle(open, 4_000, "settle-open").unwrap();
+    let settled = ledger.lookup("open-key").unwrap();
+    assert_eq!(settled.status, ReservationStatus::Settled);
+    assert_eq!(settled.spent_milli, 4_000);
+
+    let released = ledger
+        .reserve("run", "root", 7_000, "released-key")
+        .unwrap();
+    ledger.release(released, "release-key").unwrap();
+    assert_eq!(
+        ledger.lookup("released-key").unwrap().status,
+        ReservationStatus::Released
+    );
+
+    let replayed = Ledger::replay(ledger.events()).unwrap();
+    assert_eq!(
+        replayed.lookup("open-key").unwrap().status,
+        ReservationStatus::Settled
+    );
+    assert_eq!(
+        replayed.lookup("released-key").unwrap().status,
+        ReservationStatus::Released
+    );
+    assert!(replayed.lookup("missing-key").is_none());
 }

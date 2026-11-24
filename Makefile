@@ -9,8 +9,10 @@ rust:
 
 python:
 	cd python && uv sync --locked --group dev
+	rm -rf python/dist
+	uvx maturin build --manifest-path crates/swe-budget-py/Cargo.toml --interpreter python/.venv/bin/python --out python/dist
 	uvx maturin build --manifest-path crates/swe-native/Cargo.toml --interpreter python/.venv/bin/python --out python/dist
-	cd python && uv pip install --reinstall $$(find dist -name '*.whl' -type f | head -1)
+	cd python && uv pip install --reinstall $$(find dist -name '*.whl' -type f)
 	cd python && uv run --no-sync pytest
 
 reference:
@@ -31,3 +33,4 @@ package:
 	cargo package --locked -p swe-native --allow-dirty
 	cd python && uv build
 	cd crates/swe-native && uv build
+	cd crates/swe-budget-py && uv build

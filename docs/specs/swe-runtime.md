@@ -88,13 +88,18 @@ ignores `InvocationHandle.cancel`. `task.cancel()` is cooperative asyncio
 only; blocking I/O (`time.sleep`, blocking sockets, threads that ignore
 cancel) is not aborted by SWE. Retry stays unsupported.
 
-Budget settlement is not on the Python runtime path. `swe-budget` is a
-separate ledger (reference host and ActionOffer). Timeout and cancel must
-not call `complete` / `fail` twice on the machine; hosts that settle from
-those completions therefore cannot double-settle. SWE does not invent a
-second ledger. A timed-out or cancelled invocation that never completed is
-not replayed as success; resume of a persisted timeout/cancel stays
-failed/cancelled and does not re-dispatch.
+Budget settlement is opt-in on the Python runtime path. When
+`WorkflowResources.budget` is provided, dispatch reserves atomically before the
+handler/provider call, settles or releases exactly once, and keeps the
+reservation pending when cancel or timeout makes the external charge unknown.
+The ledger is the existing `swe-budget` crate, exposed to Python as
+`swe_budget.Ledger`; SWE does not invent a second ledger. Without a budget
+resource the previous behaviour is unchanged. Timeout and cancel must not call
+`complete` / `fail` twice on the machine, so a host that settles from those
+completions cannot double-settle. A timed-out or cancelled invocation that
+never completed is not replayed as success; resume of a persisted
+timeout/cancel stays failed/cancelled and does not re-dispatch. The full
+contract is in [`swe-budget-runtime.md`](swe-budget-runtime.md).
 
 ## Non-goals
 
