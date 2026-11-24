@@ -107,14 +107,14 @@ def build_prompt(question: dict[str, Any], corpus: dict[str, str]) -> str:
         "conclusions": ["ANSWERED", "CONTRADICTED", "INSUFFICIENT_EVIDENCE"],
         "tools": ["retrieve", "read_passage"],
         "rules": [
-            "target_quotes and claims must be exact substrings of the named document.",
+            "needs, gaps, and claims must be exact substrings of the named document.",
             "Every claim must also appear as a read_passage action.",
             "Use CONTRADICTED when the corpus states conflicting values.",
             "Use INSUFFICIENT_EVIDENCE when the corpus does not state the answer.",
             "answer_complete is true only for ANSWERED with every required quote read.",
         ],
         "response_schema": {
-            "needs": [{"target_quotes": [{"source_id": "document id", "quote": "exact text"}]}],
+            "needs": [{"source_id": "document id", "quote": "exact text"}],
             "actions": [
                 {"tool": "retrieve", "gap": {"source_id": "document id", "quote": "exact text"}},
                 {"tool": "read_passage", "gap": {"source_id": "document id", "quote": "exact text"}},
@@ -197,7 +197,10 @@ def _steps_from_decision(decision: dict[str, Any]) -> list[dict[str, Any]]:
     needs = []
     for need in needs_in:
         targets_in = need.get("target_quotes") if isinstance(need, dict) else None
-        targets = [_as_quote(target) for target in targets_in] if isinstance(targets_in, list) else [dict(_UNPARSED)]
+        if isinstance(targets_in, list):
+            targets = [_as_quote(target) for target in targets_in]
+        else:
+            targets = [_as_quote(need)]
         needs.append({"target_quotes": targets})
     actions = decision.get("actions") if isinstance(decision.get("actions"), list) else []
     stop = decision.get("stop") if isinstance(decision.get("stop"), dict) else {}

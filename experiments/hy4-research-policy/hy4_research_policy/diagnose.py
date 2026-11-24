@@ -89,6 +89,19 @@ def _over_cap(observation: dict[str, Any], max_output: int) -> bool:
     return isinstance(output, int) and not isinstance(output, bool) and output > max_output
 
 
+def _apply_cached_stop(record: dict[str, Any], ledger: Ledger, max_output: int, reason: str) -> None:
+    """Reapply the live stop when a saved call already exceeded its reservation."""
+
+    if ledger.reason is not None:
+        return
+    classification = record.get("classification")
+    usage = classification.get("usage") if isinstance(classification, dict) else None
+    if not isinstance(usage, dict):
+        usage = {}
+    if record.get("hidden_retry") is True or _over_cap({"usage": usage}, max_output):
+        ledger.reason = reason
+
+
 def _record_native(
     *,
     name: str,
@@ -116,7 +129,14 @@ def _record_native(
         return {"name": name, "skipped": ledger.reason}
     existing = output_dir / f"{name}.json"
     if existing.is_file():
-        return json.loads(existing.read_text(encoding="utf-8"))
+        record = json.loads(existing.read_text(encoding="utf-8"))
+        _apply_cached_stop(
+            record,
+            ledger,
+            max_output,
+            "provider output exceeded num_predict or a second request was observed",
+        )
+        return record
     sent = post_chat(body)
     payload = sent["response"] if isinstance(sent["response"], dict) else {}
     observation = observation_from_native(payload)
@@ -176,7 +196,14 @@ def _record_pydantic(
         return {"name": name, "skipped": ledger.reason}
     existing = output_dir / f"{name}.json"
     if existing.is_file():
-        return json.loads(existing.read_text(encoding="utf-8"))
+        record = json.loads(existing.read_text(encoding="utf-8"))
+        _apply_cached_stop(
+            record,
+            ledger,
+            max_output,
+            "pydantic sent more than one request or output exceeded max_tokens",
+        )
+        return record
     try:
         sent = run_structured(
             model_name=model,

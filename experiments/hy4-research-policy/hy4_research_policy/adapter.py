@@ -41,7 +41,11 @@ def _observation(messages: list[Any], usage: Any) -> dict[str, Any]:
     tool_calls: list[dict[str, Any]] = []
     content_present = False
     thinking_present = False
+    # Prompted runs include the user request, which is itself JSON. Only the
+    # model response is the observation.
     for message in messages:
+        if getattr(message, "kind", None) != "response":
+            continue
         for part in getattr(message, "parts", []):
             kind = type(part).__name__.lower()
             if "think" in kind or "reason" in kind:
