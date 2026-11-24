@@ -26,6 +26,11 @@ from microtask_swarm.production_stop import (
     run_production_stop_benchmark,
     write_production_report,
 )
+from microtask_swarm.adaptive_budget import (
+    render_adaptive_budget_markdown,
+    run_adaptive_budget_benchmark,
+    write_adaptive_budget_report,
+)
 from microtask_swarm.live import (
     LiveDispatchRefused,
     OllamaCloudClient,
@@ -137,6 +142,31 @@ def build_parser() -> argparse.ArgumentParser:
         "--scale", type=float, default=None, help="scale deterministic trace latencies"
     )
 
+    adaptive_budget = sub.add_parser(
+        "adaptive-budget",
+        help="compare offline adaptive budget/routing policies",
+    )
+    adaptive_budget.add_argument(
+        "--async-config",
+        type=Path,
+        default=_ROOT / "config" / "async-benchmark.json",
+    )
+    adaptive_budget.add_argument(
+        "--budget-config",
+        type=Path,
+        default=_ROOT / "config" / "adaptive-budget.json",
+    )
+    adaptive_budget.add_argument(
+        "--report",
+        type=Path,
+        default=_ROOT / "reports" / "adaptive-budget.json",
+    )
+    adaptive_budget.add_argument(
+        "--markdown",
+        type=Path,
+        default=_ROOT / "reports" / "adaptive-budget.md",
+    )
+
     verify = sub.add_parser("verify-fixtures", help="validate the frozen gold fixtures")
     verify.add_argument("--pretty", action="store_true")
 
@@ -224,6 +254,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.markdown.parent.mkdir(parents=True, exist_ok=True)
             args.markdown.write_text(markdown, encoding="utf-8")
             _print_production_summary(report, args.report, args.markdown)
+            return 0
+        if args.command == "adaptive-budget":
+            report = asyncio.run(
+                run_adaptive_budget_benchmark(
+                    args.config, args.async_config, args.budget_config
+                )
+            )
+            write_adaptive_budget_report(report, args.report)
+            markdown = render_adaptive_budget_markdown(report)
+            args.markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.markdown.write_text(markdown, encoding="utf-8")
+            _print_adaptive_budget_summary(report, args.report, args.markdown)
             return 0
         if args.command == "verify-fixtures":
             config = load_config(args.config)
@@ -374,6 +416,23 @@ def _print_production_summary(report: dict, json_path: Path, md_path: Path) -> N
             f"posthoc_acc={row['posthoc_accuracy']} "
             f"posthoc_cov={row['posthoc_coverage']} "
             f"pending={row['pending_milli']} late={row['late_milli']}"
+        )
+
+
+def _print_adaptive_budget_summary(report: dict, json_path: Path, md_path: Path) -> None:
+    print(f"report: {json_path}")
+    print(f"markdown: {md_path}")
+    print(f"evidence: {report['evidence_kind']}  policies: {report['summary']['run_count']}")
+    for row in report["summary"]["rows"]:
+        print(
+            f"  {row['policy']}: stop={row['stopped']} tasks={row['completed_tasks']} "
+            f"acc={row['accuracy']} cov={row['coverage']} fs={row['false_support']} "
+            f"need={row['need_coverage']} abstain={row['abstention_rate']} "
+            f"conf={row['average_confidence']} latency={row['latency_ms']}ms "
+            f"calls={row['calls']} spec={row['speculative_tasks']} "
+            f"settled={row['settled_milli']} pending={row['pending_before_milli']} "
+            f"late={row['late_milli']} denied={row['denied_tasks']} "
+            f"calc={row['calculated_usd']}"
         )
 
 

@@ -498,6 +498,87 @@ PYTHONPATH=. python3 -m microtask_swarm production-stop \
 PYTHONPATH=. python3 -m unittest tests.test_production_stop -v
 ```
 
+## Adaptive budget/routing policy comparison (offline)
+
+This is a policy simulator, not a production scheduler and not a ledger. It
+reuses the frozen fixtures, offline heuristic, deterministic latency trace,
+verifier confidence, and the local pilot Sweycoin meter.
+
+- `microtask_swarm/adaptive_budget.py`
+- `config/adaptive-budget.json`
+- `tests/test_adaptive_budget.py`
+- `reports/adaptive-budget.json` / `.md`
+
+Training items: `bio-01`, `bio-02`, `law-01`, `law-02`, `finance-01`.
+Held-out items: `finance-02`, `medicine-01`, `medicine-02`, `engineering-01`,
+`engineering-02`. Training gold fits per-contract/model statistics; held-out
+gold is used only after the run. The policy receives task input, training
+statistics, and a gold-free `OutcomeView` (verification, abstention,
+confidence, latency, tariff) — never held-out correctness.
+
+Budget cap: **15,000 milli-Sweycoin** for 25 held-out tasks. Models and tariffs:
+GPT-OSS 1.2×, Nemotron 0.8×, MiMo 1.0×, DeepSeek 1.5× over the contract
+tariffs.
+
+| Policy | Stop | Tasks | Accuracy | Coverage | False support | Need cov. | Latency | Calls | Spec. | Settled | Pending | Late | Released | Denied | Overspend | Calc USD |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| equal_split | no | 20 | 0.72 | 0.00 | 0.00 | 0.80 | 5.77 s | 20 | 0 | 4,000 | 0 | 0 | 0 | 5 | 0 | $0.000117 |
+| greedy | yes | 23 | 0.84 | 1.00 | 0.00 | 0.92 | 6.95 s | 23 | 0 | 7,600 | 0 | 0 | 0 | 0 | 0 | $0.000187 |
+| fixed_routing | yes | 23 | 0.84 | 1.00 | 0.00 | 0.92 | 6.56 s | 23 | 0 | 8,600 | 0 | 0 | 0 | 0 | 0 | $0.000209 |
+| adaptive | yes | 23 | 0.84 | 1.00 | 0.00 | 0.92 | 6.56 s | 28 | 5 | 9,400 | 4,000 | 800 | 3,200 | 0 | 0 | N/A |
+| adaptive_no_spec | yes | 23 | 0.84 | 1.00 | 0.00 | 0.92 | 6.95 s | 23 | 0 | 7,600 | 0 | 0 | 0 | 0 | 0 | $0.000187 |
+
+Readings:
+
+- **Equal split** gives every task 600 milli. The cheapest extraction model
+  costs 800, so all five extraction needs are denied: coverage 0.00. The
+  per-task split cannot move unused classification budget to expensive
+  extraction.
+- **Greedy** and **adaptive without speculation** both choose Nemotron for the
+  affordable routes: same quality, calls, and 7,600 settled.
+- **Fixed routing** (Nemotron classifications, MiMo extraction) matches quality
+  and coverage but is faster (6.56 s vs 6.95 s) and costs 1,000 milli more.
+- **Adaptive with speculation** races a MiMo extraction secondary against the
+  Nemotron primary. It matches fixed-routing quality and latency but uses 28
+  calls, settles 9,400, leaves 4,000 milli pending before reconciliation, and
+  books 800 late-billed / 3,200 released. It produces **no quality gain** on
+  this training split: training extraction accuracy is at most 0.60 for every
+  model (GPT-OSS 0.40, Nemotron 0.60, MiMo 0.60, DeepSeek 0.00 with 1.00
+  abstention), so the expected marginal utility of escalation is not positive.
+- The gold-free stop gate stopped greedy, fixed, adaptive, and adaptive_no_spec
+  after 23 tasks (coverage 1.00, need coverage 0.92). Equal split did not reach
+  the gate because extraction was denied.
+- **No budget overrun occurred.** All policies fail closed on reservation; only
+  equal split recorded denied tasks.
+
+Totals across the five policies: **117 calls**, **37,200 milli settled**,
+4,000 milli pending before reconciliation, 800 milli late-billed, 3,200 milli
+released, 5 denied tasks, 0 overspend, **$0.000698** calculated USD (complete
+subset $0.000907). `actual_usd` is N/A.
+
+Policy interface for REA/t1bm:
+
+```python
+class BudgetRoutingPolicy(Protocol):
+    name: str
+    def begin(self, tasks, *, cap_milli, training, models) -> None: ...
+    def choose(self, task, state) -> RoutingDecision: ...
+    def observe(self, task, decision, outcome, state) -> None: ...
+```
+
+`RoutingDecision` contains one or two `ModelPlan`s, whether the plan is
+speculative, and a reason. `OutcomeView` deliberately omits held-out
+correctness. The simulator owns no production scheduler and no second ledger.
+
+Run:
+
+```sh
+PYTHONPATH=. python3 -m microtask_swarm adaptive-budget \
+  --report reports/adaptive-budget.json \
+  --markdown reports/adaptive-budget.md
+PYTHONPATH=. python3 -m unittest tests.test_adaptive_budget -v
+```
+
 ## Reuse and intentional gaps
 
 | Concern | Reused | Gap |
