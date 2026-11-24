@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: test offline async adaptive production-stop adaptive-budget estimate verify integration
+.PHONY: test offline async adaptive production-stop adaptive-budget runtime-budget-policy estimate verify integration
 
 test:
 	PYTHONPATH=. $(PYTHON) -m unittest discover -s tests -t . -v
@@ -27,6 +27,11 @@ adaptive-budget:
 	PYTHONPATH=. $(PYTHON) -m microtask_swarm adaptive-budget \
 		--report reports/adaptive-budget.json \
 		--markdown reports/adaptive-budget.md
+
+runtime-budget-policy:
+	PYTHONPATH=.:../../python $(PYTHON) -m microtask_swarm runtime-budget-policy \
+		--report reports/runtime-budget-policy.json \
+		--markdown reports/runtime-budget-policy.md
 
 estimate:
 	PYTHONPATH=. $(PYTHON) -m microtask_swarm estimate --pretty
