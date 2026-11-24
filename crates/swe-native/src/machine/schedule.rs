@@ -907,10 +907,13 @@ fn reserve_ready_serials(machine: &mut Machine, parent_id: &str, count: usize) -
     Ok(serials)
 }
 
-/// Child ranges come from the scope that creates them. A fork branch therefore
-/// does not share the ready item's cursor, so a sibling finishing first cannot
-/// take its serials. One scope owns `max_steps` serials; the next sibling
-/// starts after that. Overflow fails closed instead of aliasing ids.
+/// The next child scope takes its first serial from the immediate parent's
+/// cursor, in the order that parent creates scopes. A fork records each branch
+/// cursor when the fork starts, so one branch finishing first cannot take the
+/// other's serials. A descendant can continue into the same numeric span as a
+/// sibling. The public identity is the full
+/// `<run>:<node>:<branch_path>:<loop_epoch>:<serial>`, and a cursor that would
+/// pass `u64::MAX` fails closed.
 fn assign_isolated_cursor(machine: &mut Machine, parent_id: &str, scope: &mut Scope) -> Result<()> {
     if let Some(base) = reserve_parent_stride(machine, parent_id)? {
         scope.serial_cursor = Some(base);

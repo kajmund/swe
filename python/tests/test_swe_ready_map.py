@@ -382,6 +382,231 @@ async def test_ready_gate_ids_match_across_completion_order_and_resume() -> None
     assert set(store.invocations["ready-gate"]) == set(fast_first.values())
 
 
+def _nested_document() -> dict[str, Any]:
+    return {
+        "version": "1.1",
+        "name": "ready_nested_resume",
+        "entrypoint": "fanout",
+        "limits": {"max_steps": 500, "max_depth": 8, "timeout_seconds": 30},
+        "nodes": {
+            "fanout": {
+                "type": "map",
+                "items": "$.input.tasks",
+                "child": "split",
+                "concurrency": 2,
+                "schedule": "ready",
+                "item_id": "$.item.task_id",
+                "item_depends_on": "$.item.depends_on",
+                "next": "done",
+            },
+            "split": {
+                "type": "fork",
+                "branches": {"left": "lane_a", "right": "lane_b"},
+                "join": "joined",
+            },
+            "lane_a": {"type": "task", "handler": "demo.work", "next": "left_ordered"},
+            "left_ordered": {
+                "type": "map",
+                "items": "$.input.parts",
+                "child": "ordered_part",
+                "concurrency": 1,
+                "next": "lane_a2",
+            },
+            "ordered_part": {"type": "task", "handler": "demo.work"},
+            "lane_a2": {"type": "task", "handler": "demo.work"},
+            "lane_b": {"type": "task", "handler": "demo.work", "next": "right_ready"},
+            "right_ready": {
+                "type": "map",
+                "items": "$.input.more",
+                "child": "ready_part",
+                "concurrency": 2,
+                "schedule": "ready",
+                "item_id": "$.item.task_id",
+                "item_depends_on": "$.item.depends_on",
+                "next": "right_tail",
+            },
+            "ready_part": {"type": "task", "handler": "demo.work"},
+            "right_tail": {"type": "task", "handler": "demo.work"},
+            "joined": {"type": "join", "mode": "all", "next": "first_map"},
+            "first_map": {
+                "type": "map",
+                "items": "$.input.parts",
+                "child": "part_a",
+                "concurrency": 1,
+                "next": "second_map",
+            },
+            "second_map": {
+                "type": "map",
+                "items": "$.input.parts",
+                "child": "part_b",
+                "concurrency": 1,
+                "next": "body",
+            },
+            "part_a": {"type": "task", "handler": "demo.work"},
+            "part_b": {"type": "task", "handler": "demo.work"},
+            "body": {"type": "task", "handler": "demo.work", "next": "again"},
+            "again": {
+                "type": "decision",
+                "evaluator": "expression",
+                "condition": {"eq": [{"var": "$.body.result.go"}, {"const": True}]},
+                "routes": {"true": "body", "false": "tail"},
+            },
+            "tail": {"type": "task", "handler": "demo.work"},
+            "done": {"type": "end", "status": "completed"},
+        },
+    }
+
+
+def _nested_input() -> dict[str, Any]:
+    return {
+        "tasks": [{"task_id": "outer", "payload": {}, "depends_on": []}],
+        "parts": ["p0", "p1"],
+        "more": [
+            {"task_id": "slow", "depends_on": []},
+            {"task_id": "fast", "depends_on": []},
+            {"task_id": "after_fast", "depends_on": ["fast"]},
+        ],
+    }
+
+
+def _split_invocation(invocation_id: str) -> tuple[str, str, str, str]:
+    run_id, node, path, epoch, serial = invocation_id.split(":")
+    assert run_id
+    assert serial
+    return node, path, epoch, serial
+
+
+def _trace(invocations: Mapping[str, InvocationRecord]) -> dict[tuple[str, str, str], list[str]]:
+    """Group full ids by node, branch path and loop epoch, in persist order."""
+    grouped: dict[tuple[str, str, str], list[str]] = {}
+    for invocation_id in invocations:
+        node, path, epoch, _serial = _split_invocation(invocation_id)
+        grouped.setdefault((node, path, epoch), []).append(invocation_id)
+    return grouped
+
+
+def _assert_full_ids(trace: Mapping[tuple[str, str, str], Sequence[str]]) -> None:
+    flat = [invocation_id for ids in trace.values() for invocation_id in ids]
+    assert len(flat) == len(set(flat))
+    # Two maps reuse index paths. The loop reuses the item path for one node.
+    first = trace[("part_a", "0/outer/0", "0")][0]
+    second = trace[("part_b", "0/outer/0", "0")][0]
+    assert first != second
+    assert trace[("part_a", "0/outer/1", "0")][0] != trace[("part_b", "0/outer/1", "0")][0]
+    assert ("body", "0/outer", "0") in trace
+    assert ("body", "0/outer", "1") in trace
+    assert any(path.startswith("0/outer/left") for (_node, path, _epoch) in trace)
+    assert any("slow" in path for (_node, path, _epoch) in trace)
+    assert any("after_fast" in path for (_node, path, _epoch) in trace)
+
+
+async def _run_nested(
+    *,
+    hold: str,
+    delay_ready: str | None,
+    run_id: str,
+) -> MemoryRunStore:
+    fork_release = asyncio.Event()
+    ready_release = asyncio.Event()
+    release_node = "lane_a2" if hold == "right" else "right_tail"
+
+    async def work(payload: Mapping[str, Any]) -> dict[str, bool]:
+        handle = current_invocation()
+        assert handle is not None
+        invocation_id = handle.invocation_id
+        node, path, epoch, _serial = _split_invocation(invocation_id)
+        if (hold == "right" and "/right" in path) or (hold == "left" and "/left" in path):
+            await fork_release.wait()
+        item = payload.get("item")
+        task_id = item.get("task_id") if isinstance(item, dict) else None
+        if delay_ready is not None and task_id == delay_ready:
+            await ready_release.wait()
+        if node == release_node:
+            fork_release.set()
+        if delay_ready == "slow" and task_id == "after_fast":
+            ready_release.set()
+        if delay_ready == "fast" and task_id == "slow":
+            ready_release.set()
+        return {"go": node == "body" and epoch == "0"}
+
+    store = MemoryRunStore()
+    compiled = compile_definition(_nested_document(), handlers=frozenset({"demo.work"}))
+    runner = WorkflowRunner(compiled, {"demo.work": work}, run_store=store)
+    result = await asyncio.wait_for(runner.run(_nested_input(), run_id=run_id), timeout=2)
+    assert result.status == "completed"
+    return store
+
+
+async def test_nested_ready_fork_ids_match_when_completion_order_reverses() -> None:
+    run_id = "nested-ready"
+    left_first = await _run_nested(hold="right", delay_ready="slow", run_id=run_id)
+    right_first = await _run_nested(hold="left", delay_ready="fast", run_id=run_id)
+    left_trace = _trace(left_first.invocations[run_id])
+    right_trace = _trace(right_first.invocations[run_id])
+    assert left_trace == right_trace
+    _assert_full_ids(left_trace)
+
+
+async def test_nested_ready_fork_resume_skips_settled_handlers() -> None:
+    run_id = "nested-resume"
+    left_first = await _run_nested(hold="right", delay_ready=None, run_id=run_id)
+    right_first = await _run_nested(hold="left", delay_ready=None, run_id=run_id)
+    expected = _trace(left_first.invocations[run_id])
+    assert _trace(right_first.invocations[run_id]) == expected
+    cases = (
+        ("right", 4, "lane_b"),
+        ("left", 5, "lane_a"),
+    )
+    for hold, crash_after, waiting_node in cases:
+        store = _CrashOnceStore(crash_after=crash_after)
+        fork_release = asyncio.Event()
+        executions: list[str] = []
+
+        async def work(payload: Mapping[str, Any]) -> dict[str, bool]:
+            del payload
+            handle = current_invocation()
+            assert handle is not None
+            invocation_id = handle.invocation_id
+            executions.append(invocation_id)
+            node, path, epoch, _serial = _split_invocation(invocation_id)
+            held = (hold == "right" and "/right" in path) or (
+                hold == "left" and "/left" in path
+            )
+            if held:
+                await fork_release.wait()
+            return {"go": node == "body" and epoch == "0"}
+
+        compiled = compile_definition(_nested_document(), handlers=frozenset({"demo.work"}))
+        runner = WorkflowRunner(compiled, {"demo.work": work}, run_store=store)
+        with pytest.raises(RuntimeError, match="simulated crash"):
+            await asyncio.wait_for(runner.run(_nested_input(), run_id=run_id), timeout=2)
+        assert store.runs[run_id].status == "running"
+        settled = set(store.invocations[run_id])
+        assert len(settled) == crash_after
+        prefix = list(store.event_log[run_id])
+        assert prefix
+        fork_release.set()
+        resumed = await asyncio.wait_for(
+            WorkflowRunner(compiled, {"demo.work": work}, run_store=store).resume(run_id),
+            timeout=2,
+        )
+        assert resumed.status == "completed"
+        assert store.event_log[run_id][: len(prefix)] == prefix
+        assert len(store.event_log[run_id]) > len(prefix)
+        counts = Counter(executions)
+        for invocation_id in settled:
+            assert counts[invocation_id] == 1
+        waiting = [invocation_id for invocation_id, count in counts.items() if count == 2]
+        assert len(waiting) == 1
+        assert _split_invocation(waiting[0])[0] == waiting_node
+        assert waiting[0] not in settled
+        final = set(store.invocations[run_id])
+        for invocation_id in final:
+            if invocation_id != waiting[0]:
+                assert counts[invocation_id] == 1
+        assert _trace(store.invocations[run_id]) == expected
+
+
 class _CrashOnceStore(RunStore):
     def __init__(self, *, crash_after: int) -> None:
         self.crash_after = crash_after
