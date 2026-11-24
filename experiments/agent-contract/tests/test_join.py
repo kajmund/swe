@@ -10,7 +10,7 @@ from agent_contract.join import (
     runtime_budget_status,
     validate,
 )
-from hy4_research_policy.agent_adapter import (
+from agent_contract.offline_adapter import (
     DECISION_PROFILE,
     AgentConfig,
     AgentHost,

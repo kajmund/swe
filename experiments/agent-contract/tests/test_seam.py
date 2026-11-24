@@ -2,6 +2,7 @@ import ast
 from pathlib import Path
 
 from agent_contract.join import validate
+from agent_contract.offline_adapter import AgentConfig
 from agent_contract.seam import (
     FIRST_CLASS_READY_FIELDS,
     HANDLER_INPUT_KEYS,
@@ -11,7 +12,6 @@ from agent_contract.seam import (
     migration_items,
     ready_ids,
 )
-from hy4_research_policy.agent_adapter import AgentConfig
 
 SEAM = Path(__file__).resolve().parents[1] / "agent_contract" / "seam.py"
 JOIN = Path(__file__).resolve().parents[1] / "agent_contract" / "join.py"
@@ -74,8 +74,8 @@ def test_seam_does_not_import_a_scheduler_or_budget() -> None:
         "__future__",
         "collections.abc",
         "typing",
-        "hy4_research_policy.agent_adapter",
         "agent_contract.join",
+        "agent_contract.offline_adapter",
     ]
     names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
     assert "RuntimeBudget" not in names

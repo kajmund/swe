@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from hy4_research_policy.agent_adapter import AgentConfig
+from agent_contract.offline_adapter import AgentConfig
 
 KINDS: tuple[str, ...] = (
     "relevance",

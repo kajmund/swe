@@ -22,18 +22,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "python"))
-sys.path.insert(0, str(ROOT / "experiments" / "hy4-research-policy"))
 sys.path.insert(0, str(ROOT / "experiments" / "agent-contract"))
 
-from hy4_research_policy.agent_adapter import (
-    DECISION_PROFILE,
-    AgentConfig,
-    AgentHost,
-    Completion,
-    DecisionRequest,
-    GenerationRequest,
-    Usage,
-)
 from swe.microtasks import Microtask, compile_microtasks
 from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord, RunStore
 from swe.runtime import WorkflowRunner
@@ -45,6 +35,15 @@ from agent_contract.join import (
     plan_invocations,
     require_swe_dispatch,
     runtime_budget_status,
+)
+from agent_contract.offline_adapter import (
+    DECISION_PROFILE,
+    AgentConfig,
+    AgentHost,
+    Completion,
+    DecisionRequest,
+    GenerationRequest,
+    Usage,
 )
 
 SCHEDULE = "ready"
