@@ -64,7 +64,7 @@ jobs:
 
           while IFS= read -r path; do
             case "$path" in
-              contracts/*|crates/swe-native/src/journal.rs|crates/swe-native/src/definition.rs|crates/swe-native/src/needs.rs|crates/swe-native/src/evidence.rs|crates/swe-native/src/operations.rs|crates/swe-reference/src/journal.rs|python/swe/swd_v1.schema.json|python/swe/schema.py)
+              contracts/*|crates/swe-native/src/journal.rs|crates/swe-native/src/definition.rs|crates/swe-native/src/needs.rs|crates/swe-native/src/evidence.rs|crates/swe-native/src/operations.rs|crates/swe-reference/src/journal.rs|python/swe/swd_v1.schema.json|python/swe/swd_v1_1.schema.json|python/swe/schema.py)
                 contract_surface=true
                 core=true
                 ;;

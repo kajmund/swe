@@ -297,6 +297,7 @@ EXPECTED_EMBEDDED = {
         "/dependency_versions/mock.supplier_facts",
     ): "CONTRACT_VERSION",
     ("python/swe/swd_v1.schema.json", "/properties/version/const"): "SWD_VERSION",
+    ("python/swe/swd_v1_1.schema.json", "/properties/version/const"): "SWD_VERSION_1_1",
 }
 
 

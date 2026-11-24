@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 
-use crate::definition::Node;
+use crate::definition::{MapSchedule, Node};
 use crate::effects::{Effect, RunStatus};
 use crate::error::{ErrorKind, Result, RuntimeError};
 use crate::events::EventKind;
@@ -245,14 +245,28 @@ impl Machine {
                     "map {map_id} child vector is out of order at {index}"
                 )));
             }
+            if state.status != WorkStatus::Running {
+                return Ok(());
+            }
             state.status = WorkStatus::Completed;
             state.result = Some(result);
             map.remaining = map.remaining.saturating_sub(1);
+            if map.map_schedule == MapSchedule::Ready {
+                let dependents = map.dependents.get(index).cloned().unwrap_or_default();
+                for dependent in dependents {
+                    if let Some(count) = map.unmet.get_mut(dependent) {
+                        *count = count.saturating_sub(1);
+                    }
+                }
+            }
+        }
+        if self.status.is_terminal() {
+            return Ok(());
         }
         if let Some(child_node) = child_node {
             self.spawn_map_children(&map_id, &child_node)?;
         }
-        if self.scope_or_err(&map_id)?.remaining == 0 {
+        if !self.status.is_terminal() && self.scope_or_err(&map_id)?.remaining == 0 {
             self.finish_map(&map_id)?;
         }
         Ok(())

@@ -44,6 +44,12 @@ impl CachePolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MapSchedule {
+    Ordered,
+    Ready,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Task {
@@ -79,6 +85,9 @@ pub enum Node {
         concurrency: Option<u32>,
         join: Option<String>,
         next: Option<String>,
+        schedule: MapSchedule,
+        item_id: Option<String>,
+        item_depends_on: Option<String>,
     },
     End {
         status: EndStatus,
@@ -105,7 +114,7 @@ impl CompiledDefinition {
             )));
         }
         let version = required_str(&document, "version")?.to_string();
-        if version != "1.0" {
+        if version != "1.0" && version != "1.1" {
             return Err(RuntimeError::preflight(format!(
                 "unsupported SWD version {version:?}"
             )));
@@ -383,12 +392,49 @@ fn parse_join(node_id: &str, node: &Json) -> Result<Node> {
 }
 
 fn parse_map(node_id: &str, node: &Json) -> Result<Node> {
+    // A present value of the wrong type is not the same as an absent field.
+    // `as_str` would drop numbers and null and silently default the map.
+    let schedule = match node.get("schedule") {
+        None => MapSchedule::Ordered,
+        Some(Json::String(value)) if value == "ordered" => MapSchedule::Ordered,
+        Some(Json::String(value)) if value == "ready" => MapSchedule::Ready,
+        Some(Json::String(other)) => {
+            return Err(
+                RuntimeError::preflight(format!("unknown map schedule {other:?}"))
+                    .with_path(format!("nodes.{node_id}.schedule")),
+            )
+        }
+        Some(_) => {
+            return Err(RuntimeError::preflight("map schedule must be a string")
+                .with_path(format!("nodes.{node_id}.schedule")))
+        }
+    };
+    let item_id = strict_optional_string(node_id, node, "item_id")?;
+    let item_depends_on = strict_optional_string(node_id, node, "item_depends_on")?;
+    match schedule {
+        MapSchedule::Ordered if item_id.is_some() || item_depends_on.is_some() => {
+            return Err(
+                RuntimeError::preflight("item_id/item_depends_on require schedule ready")
+                    .with_path(format!("nodes.{node_id}.schedule")),
+            )
+        }
+        MapSchedule::Ready if item_id.is_none() || item_depends_on.is_none() => {
+            return Err(RuntimeError::preflight(
+                "schedule ready requires item_id and item_depends_on",
+            )
+            .with_path(format!("nodes.{node_id}.schedule")))
+        }
+        _ => {}
+    }
     Ok(Node::Map {
         items: required_node_str(node_id, node, "items")?.to_string(),
         child: required_node_str(node_id, node, "child")?.to_string(),
         concurrency: optional_u32(node, "concurrency"),
         join: optional_str(node, "join"),
         next: optional_str(node, "next"),
+        schedule,
+        item_id,
+        item_depends_on,
     })
 }
 
@@ -418,6 +464,17 @@ fn required_node_str<'a>(node_id: &str, node: &'a Json, key: &str) -> Result<&'a
 
 fn optional_str(node: &Json, key: &str) -> Option<String> {
     node.get(key).and_then(Json::as_str).map(ToOwned::to_owned)
+}
+
+fn strict_optional_string(node_id: &str, node: &Json, key: &str) -> Result<Option<String>> {
+    match node.get(key) {
+        None => Ok(None),
+        Some(Json::String(value)) => Ok(Some(value.clone())),
+        Some(_) => Err(
+            RuntimeError::preflight(format!("map {key} must be a string"))
+                .with_path(format!("nodes.{node_id}.{key}")),
+        ),
+    }
 }
 
 fn optional_u32(node: &Json, key: &str) -> Option<u32> {

@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 
-use crate::definition::CompiledDefinition;
+use crate::definition::{CompiledDefinition, MapSchedule};
 use crate::effects::{Effect, RunStatus};
 use crate::events::{Lineage, MemoryEventSink};
 use crate::json::Json;
@@ -20,6 +20,8 @@ pub enum WorkStatus {
     Completed,
     Failed,
     Cancelled,
+    /// Ready-map item that has not been admitted yet.
+    Waiting,
 }
 
 #[derive(Clone, Debug)]
@@ -36,6 +38,8 @@ pub struct ChildState {
     pub scope_id: String,
     pub status: WorkStatus,
     pub result: Option<Json>,
+    pub item_id: Option<String>,
+    pub pinned_serial: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -60,6 +64,17 @@ pub struct Scope {
     pub children: Vec<ChildState>,
     pub concurrency: u32,
     pub next_child: usize,
+    pub map_schedule: MapSchedule,
+    /// Unmet dependency counts for a ready map, aligned with `items`.
+    pub unmet: Vec<u32>,
+    /// Dependents of each ready-map item, aligned with `items`.
+    pub dependents: Vec<Vec<usize>>,
+    /// Next serial for this scope when it must not read the global clock.
+    ///
+    /// `None` keeps SWD 1.0 allocation: one run-wide counter. A ready-map item
+    /// and every scope under it set this so a sibling's completion cannot
+    /// change their invocation ids.
+    pub serial_cursor: Option<u64>,
     pub item: Option<Json>,
     pub index: Option<usize>,
 }
@@ -128,7 +143,15 @@ impl Machine {
     }
 
     pub fn instance_id(&mut self, node_id: &str, scope: &Scope) -> String {
-        let serial = self.new_serial();
+        // A private cursor is consumed for every node in the scope, not only
+        // the first. Taking it once left later nodes on the global clock.
+        let local = self.scopes.get_mut(&scope.id).and_then(|stored| {
+            let cursor = stored.serial_cursor.as_mut()?;
+            let serial = *cursor;
+            *cursor = cursor.saturating_add(1);
+            Some(serial)
+        });
+        let serial = local.unwrap_or_else(|| self.new_serial());
         format!(
             "{}:{}:{}:{}:{}",
             self.run_id, node_id, scope.branch_path, scope.loop_epoch, serial
