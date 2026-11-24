@@ -1,7 +1,7 @@
 {
   "checkout": {
     "branch": "experiment/agent-microtask-contract",
-    "merge_base": "f1ae2b8714fc6b88f66a00b47a1baa0469af718f",
+    "merge_base": "85fe8a79e7a6a9e9c9aca8665ac88bb45686b6f6",
     "python_and_crates_diff": ""
   },
   "contract": {
