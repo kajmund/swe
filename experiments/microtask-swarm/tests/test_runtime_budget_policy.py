@@ -15,6 +15,7 @@ from unittest import mock
 from microtask_swarm.dag import ensure_repo_python_on_path
 from microtask_swarm.production_stop import FROZEN_EXPECTED, _frozen_hashes
 from microtask_swarm.runtime_budget_policy import (
+    T1BM_PR12_COMMIT,
     T1BM_PR13_COMMIT,
     CarriedMilliPolicy,
     RuntimeBudgetBackend,
@@ -323,8 +324,12 @@ class RuntimeBudgetPolicyTests(unittest.IsolatedAsyncioTestCase):
             report["runtime_budget"]["backend"], "swe.budget.RuntimeBudget"
         )
         self.assertEqual(report["runtime_budget"]["ledger"], "swe_budget.Ledger")
-        self.assertEqual(T1BM_PR13_COMMIT, "285d0770147eb5584ad7c8faa23872ed4b9dbb17")
-        self.assertIn(T1BM_PR13_COMMIT, " ".join(report["notes"]))
+        self.assertEqual(T1BM_PR12_COMMIT, "27eacd1ec1581174bdb242da6d63f2ca5f121ed6")
+        self.assertEqual(T1BM_PR13_COMMIT, "6dfc451fc26e3720ba55f63def7cee0917e5905f")
+        notes = " ".join(report["notes"])
+        self.assertIn(T1BM_PR12_COMMIT, notes)
+        self.assertIn(T1BM_PR13_COMMIT, notes)
+        self.assertNotIn("285d0770147eb5584ad7c8faa23872ed4b9dbb17", notes)
         self.assertIn("experiments/agent-contract", " ".join(report["notes"]))
 
         runs = {run["policy"]: run for run in report["runs"]}

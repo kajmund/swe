@@ -6,9 +6,10 @@ This module is the integration path. It uses the merged ``swe.budget``
 unchanged and is imported for fixtures, policies, training statistics, and
 scoring.
 
-t1bm PR 13 (``285d0770147eb5584ad7c8faa23872ed4b9dbb17``) attaches the same
-``RuntimeBudget`` through ``WorkflowResources`` with an injected one-milli
-stand-in. The production tariff stays in this module. That branch's
+t1bm PR 13 (``6dfc451fc26e3720ba55f63def7cee0917e5905f``, stacked on open
+PR 12 ``27eacd1ec1581174bdb242da6d63f2ca5f121ed6``) injects a one-milli
+``RuntimeBudget`` policy through ``WorkflowRunner``. It does not import this
+tariff. The production tariff stays here, on main. That branch's
 ``experiments/agent-contract`` tree is not edited here, and this path makes
 no provider call.
 """
@@ -41,8 +42,10 @@ from microtask_swarm.production_stop import StopSignals, compute_signals
 from microtask_swarm.results import CallRecord, TaskResult
 from microtask_swarm.scoring import score_suite
 
-# t1bm PR 13 head. The injected one-milli policy there is the stand-in.
-T1BM_PR13_COMMIT = "285d0770147eb5584ad7c8faa23872ed4b9dbb17"
+# Open t1bm stack. PR 13 is the one-milli stand-in; PR 12 is its base. Neither
+# imports this tariff, and this branch stays on main.
+T1BM_PR12_COMMIT = "27eacd1ec1581174bdb242da6d63f2ca5f121ed6"
+T1BM_PR13_COMMIT = "6dfc451fc26e3720ba55f63def7cee0917e5905f"
 
 ensure_repo_python_on_path()
 
@@ -552,10 +555,11 @@ async def run_runtime_budget_benchmark(
             "Gold is used for training statistics and post-hoc scoring only.",
             "No paid call, no new scheduler, and no local meter in this integration path.",
             (
-                "Coordinates with t1bm PR 13 at "
-                f"{T1BM_PR13_COMMIT}: that commit attaches RuntimeBudget "
-                "through WorkflowResources with an injected one-milli stand-in. "
-                "This module owns the production tariff and does not edit "
+                "Coordinates with open t1bm PR 13 at "
+                f"{T1BM_PR13_COMMIT}, stacked on open PR 12 at "
+                f"{T1BM_PR12_COMMIT}. PR 13 injects a one-milli policy through "
+                "WorkflowRunner and does not import this tariff. This module "
+                "owns the production tariff on main and does not edit "
                 "experiments/agent-contract."
             ),
         ],
@@ -638,6 +642,7 @@ def render_runtime_budget_markdown(report: Mapping[str, Any]) -> str:
 
 __all__ = [
     "RUNTIME_BUDGET_AVAILABLE",
+    "T1BM_PR12_COMMIT",
     "T1BM_PR13_COMMIT",
     "CarriedMilliPolicy",
     "RuntimeBudgetBackend",
