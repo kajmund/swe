@@ -15,8 +15,6 @@ from unittest import mock
 from microtask_swarm.dag import ensure_repo_python_on_path
 from microtask_swarm.production_stop import FROZEN_EXPECTED, _frozen_hashes
 from microtask_swarm.runtime_budget_policy import (
-    T1BM_PR12_COMMIT,
-    T1BM_PR13_COMMIT,
     CarriedMilliPolicy,
     RuntimeBudgetBackend,
     render_runtime_budget_markdown,
@@ -165,8 +163,16 @@ class FrozenBaselineTests(unittest.TestCase):
             ROOT / "microtask_swarm" / "runtime_budget_policy.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("from microtask_swarm.budget import", source)
-        self.assertNotIn("agent_contract", source)
-        self.assertIn(T1BM_PR13_COMMIT, source)
+        self.assertNotIn("import agent_contract", source)
+        self.assertNotIn("from agent_contract", source)
+        self.assertNotIn("T1BM_PR", source)
+        for pin in (
+            "285d0770147eb5584ad7c8faa23872ed4b9dbb17",
+            "27eacd1ec1581174bdb242da6d63f2ca5f121ed6",
+            "6dfc451fc26e3720ba55f63def7cee0917e5905f",
+        ):
+            self.assertNotIn(pin, source)
+        self.assertIn("swe.budget.BudgetPolicy", source)
 
     def test_carried_milli_policy_uses_the_runtime_budget_surface(self) -> None:
         from microtask_swarm.dag import ensure_repo_python_on_path
@@ -324,13 +330,20 @@ class RuntimeBudgetPolicyTests(unittest.IsolatedAsyncioTestCase):
             report["runtime_budget"]["backend"], "swe.budget.RuntimeBudget"
         )
         self.assertEqual(report["runtime_budget"]["ledger"], "swe_budget.Ledger")
-        self.assertEqual(T1BM_PR12_COMMIT, "27eacd1ec1581174bdb242da6d63f2ca5f121ed6")
-        self.assertEqual(T1BM_PR13_COMMIT, "6dfc451fc26e3720ba55f63def7cee0917e5905f")
+        self.assertEqual(report["runtime_budget"]["policy"], "CarriedMilliPolicy")
+        self.assertEqual(
+            report["runtime_budget"]["policy_surface"], "swe.budget.BudgetPolicy"
+        )
         notes = " ".join(report["notes"])
-        self.assertIn(T1BM_PR12_COMMIT, notes)
-        self.assertIn(T1BM_PR13_COMMIT, notes)
-        self.assertNotIn("285d0770147eb5584ad7c8faa23872ed4b9dbb17", notes)
-        self.assertIn("experiments/agent-contract", " ".join(report["notes"]))
+        self.assertIn("CarriedMilliPolicy", notes)
+        self.assertIn("swe.budget.BudgetPolicy", notes)
+        self.assertNotIn("import agent_contract", notes)
+        for pin in (
+            "285d0770147eb5584ad7c8faa23872ed4b9dbb17",
+            "27eacd1ec1581174bdb242da6d63f2ca5f121ed6",
+            "6dfc451fc26e3720ba55f63def7cee0917e5905f",
+        ):
+            self.assertNotIn(pin, notes)
 
         runs = {run["policy"]: run for run in report["runs"]}
         self.assertEqual(set(runs), set(FROZEN_RUNS))
@@ -421,7 +434,9 @@ class RuntimeBudgetCliTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(code, 0)
-            self.assertIn(T1BM_PR13_COMMIT, report_path.read_text(encoding="utf-8"))
+            report_text = report_path.read_text(encoding="utf-8")
+            self.assertIn("CarriedMilliPolicy", report_text)
+            self.assertNotIn("6dfc451fc26e3720ba55f63def7cee0917e5905f", report_text)
             self.assertIn("Overspend", markdown_path.read_text(encoding="utf-8"))
 
 

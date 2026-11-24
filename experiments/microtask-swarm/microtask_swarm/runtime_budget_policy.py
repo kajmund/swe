@@ -6,12 +6,11 @@ This module is the integration path. It uses the merged ``swe.budget``
 unchanged and is imported for fixtures, policies, training statistics, and
 scoring.
 
-t1bm PR 13 (``6dfc451fc26e3720ba55f63def7cee0917e5905f``, stacked on open
-PR 12 ``27eacd1ec1581174bdb242da6d63f2ca5f121ed6``) injects a one-milli
-``RuntimeBudget`` policy through ``WorkflowRunner``. It does not import this
-tariff. The production tariff stays here, on main. That branch's
-``experiments/agent-contract`` tree is not edited here, and this path makes
-no provider call.
+The shared contract is ``swe.budget.BudgetPolicy``. ``CarriedMilliPolicy`` is
+the production tariff on that surface: it returns the milli amount the routing
+policy already chose. The agent adapter attaches its own policy through
+``WorkflowRunner`` and does not import this tariff. This module does not import
+the agent adapter and it makes no provider call.
 """
 
 from __future__ import annotations
@@ -42,11 +41,6 @@ from microtask_swarm.production_stop import StopSignals, compute_signals
 from microtask_swarm.results import CallRecord, TaskResult
 from microtask_swarm.scoring import score_suite
 
-# Open t1bm stack. PR 13 is the one-milli stand-in; PR 12 is its base. Neither
-# imports this tariff, and this branch stays on main.
-T1BM_PR12_COMMIT = "27eacd1ec1581174bdb242da6d63f2ca5f121ed6"
-T1BM_PR13_COMMIT = "6dfc451fc26e3720ba55f63def7cee0917e5905f"
-
 ensure_repo_python_on_path()
 
 try:  # pragma: no cover - the native extension is built separately
@@ -75,10 +69,11 @@ class RuntimeBudgetUnavailable(RuntimeError):
 class CarriedMilliPolicy:
     """Runtime ``BudgetPolicy`` for a tariff chosen before the call.
 
-    ``reserve`` and ``settle`` return milli integers, the same surface as
-    t1bm PR 13's ``InjectedPolicy``. That stand-in returns one milli. This
-    policy returns the amount the routing policy already placed on the
-    request. It does not price tokens and it does not call a provider.
+    ``reserve`` and ``settle`` are ``swe.budget.BudgetPolicy``. They return the
+    milli amount the routing policy already placed on the request. Another
+    host may attach a different policy, including a fixed one-milli stand-in,
+    through ``WorkflowRunner``. This policy does not price tokens and it does
+    not call a provider.
     """
 
     def reserve(self, request: Any) -> int:
@@ -543,6 +538,8 @@ async def run_runtime_budget_benchmark(
             "available": True,
             "backend": "swe.budget.RuntimeBudget",
             "ledger": "swe_budget.Ledger",
+            "policy": "CarriedMilliPolicy",
+            "policy_surface": "swe.budget.BudgetPolicy",
             "local_meter_used_in_integration_path": False,
         },
         "runs": runs,
@@ -555,12 +552,10 @@ async def run_runtime_budget_benchmark(
             "Gold is used for training statistics and post-hoc scoring only.",
             "No paid call, no new scheduler, and no local meter in this integration path.",
             (
-                "Coordinates with open t1bm PR 13 at "
-                f"{T1BM_PR13_COMMIT}, stacked on open PR 12 at "
-                f"{T1BM_PR12_COMMIT}. PR 13 injects a one-milli policy through "
-                "WorkflowRunner and does not import this tariff. This module "
-                "owns the production tariff on main and does not edit "
-                "experiments/agent-contract."
+                "Production tariff is CarriedMilliPolicy on swe.budget.BudgetPolicy. "
+                "The agent adapter attaches its own policy through WorkflowRunner "
+                "and does not import this tariff. This module does not import "
+                "the agent adapter."
             ),
         ],
     }
@@ -642,8 +637,6 @@ def render_runtime_budget_markdown(report: Mapping[str, Any]) -> str:
 
 __all__ = [
     "RUNTIME_BUDGET_AVAILABLE",
-    "T1BM_PR12_COMMIT",
-    "T1BM_PR13_COMMIT",
     "CarriedMilliPolicy",
     "RuntimeBudgetBackend",
     "RuntimeBudgetPolicySimulator",
