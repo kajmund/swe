@@ -332,6 +332,7 @@ impl Machine {
         fork.branch_name = branch_name;
         fork.fork_instance_id = Some(fork_id.clone());
         fork.remaining = branches.len();
+        assign_isolated_cursor(self, parent_id, &mut fork);
         for (name, start) in &branches {
             fork.branches.insert(
                 name.clone(),
@@ -356,6 +357,7 @@ impl Machine {
             branch.branch_name = Some(name.clone());
             branch.branch_path = path.clone();
             branch.fork_instance_id = Some(fork_id.clone());
+            assign_isolated_cursor(self, &fork_id, &mut branch);
             self.scopes.insert(branch_id.clone(), branch);
             self.emit(
                 EventKind::BranchSpawned,
@@ -409,6 +411,7 @@ impl Machine {
         map.items = items;
         map.concurrency = cap;
         map.remaining = map.items.len();
+        assign_isolated_cursor(self, start.parent_id, &mut map);
         if let Some(plan) = ready {
             let serials = reserve_ready_serials(self, start.parent_id, plan.ids.len());
             map.map_schedule = MapSchedule::Ready;
@@ -461,7 +464,7 @@ impl Machine {
                 (index, map.items[index].clone())
             };
             let child_id = format!("{map_id}[{index}]");
-            let child_scope = {
+            let mut child_scope = {
                 let parent = self.scope_or_err(map_id)?;
                 let mut scope =
                     child_scope(parent, child_id.clone(), ScopeKind::MapChild, parent.depth);
@@ -472,6 +475,7 @@ impl Machine {
                 scope.owner_node = parent.owner_node.clone();
                 scope
             };
+            assign_isolated_cursor(self, map_id, &mut child_scope);
             self.scopes.insert(child_id.clone(), child_scope);
             if let Some(map) = self.scopes.get_mut(map_id) {
                 map.next_child += 1;
@@ -878,7 +882,7 @@ fn child_scope(parent: &Scope, id: String, kind: ScopeKind, depth: u32) -> Scope
         map_schedule: MapSchedule::Ordered,
         unmet: Vec::new(),
         dependents: Vec::new(),
-        serial_cursor: parent.serial_cursor.map(|_| 0),
+        serial_cursor: None,
         item: None,
         index: None,
     }
@@ -891,11 +895,50 @@ fn reserve_ready_serials(machine: &mut Machine, parent_id: &str, count: usize) -
         .and_then(|scope| scope.serial_cursor)
         .is_some();
     if isolated {
-        // Already inside one item. Input order is 0..n; the branch path
-        // distinguishes these ids from the parent item's own serials.
-        return (0..count as u64).collect();
+        return (0..count)
+            .map(|_| {
+                reserve_isolated_stride(machine, parent_id)
+                    .expect("isolated ready map has a cursor")
+            })
+            .collect();
     }
     (0..count).map(|_| machine.new_serial()).collect()
+}
+
+/// A scope under a ready item gets its own serial range. Ranges are `max_steps`
+/// apart so a later fork or map that reuses a branch path cannot repeat an id.
+fn assign_isolated_cursor(machine: &mut Machine, parent_id: &str, scope: &mut Scope) {
+    if let Some(base) = reserve_isolated_stride(machine, parent_id) {
+        scope.serial_cursor = Some(base);
+    }
+}
+
+fn reserve_isolated_stride(machine: &mut Machine, parent_id: &str) -> Option<u64> {
+    let root_id = isolated_root(machine, parent_id)?;
+    let stride = u64::from(machine.definition.limits.max_steps).max(1);
+    let root = machine.scopes.get_mut(&root_id)?;
+    let cursor = root.serial_cursor.as_mut()?;
+    let base = *cursor;
+    *cursor = cursor.saturating_add(stride);
+    Some(base)
+}
+
+fn isolated_root(machine: &Machine, start: &str) -> Option<String> {
+    let mut current = start.to_string();
+    let mut root = None;
+    loop {
+        let scope = machine.scopes.get(&current)?;
+        if scope.serial_cursor.is_none() {
+            break;
+        }
+        let parent = scope.parent.clone();
+        root = Some(current);
+        match parent {
+            Some(parent) => current = parent,
+            None => break,
+        }
+    }
+    root
 }
 
 pub fn join_path(parent: &str, child: &str) -> String {

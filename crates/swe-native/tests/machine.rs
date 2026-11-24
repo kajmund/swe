@@ -745,13 +745,18 @@ fn ready_child_graphs_keep_invocation_ids_across_completion_order() {
         ("tasks", two_task_ready_definition()),
         ("fork", fork_ready_definition()),
         ("nested_map", nested_map_ready_definition()),
+        ("reused_map", reused_map_ready_definition()),
         ("loop", loop_ready_definition()),
     ] {
-        let input = ready_child_input(&items, name == "nested_map");
+        let input = ready_child_input(&items, name == "nested_map" || name == "reused_map");
         let low = handler_ids(&raw, input.clone(), false, child_output);
         let high = handler_ids(&raw, input, true, child_output);
         assert_eq!(low, high, "{name}");
         assert!(low.len() >= 4, "{name} scheduled no item handlers");
+        let mut unique = std::collections::BTreeSet::new();
+        for id in low.values() {
+            assert!(unique.insert(id.clone()), "{name} repeated {id}");
+        }
         let work = low
             .iter()
             .filter(|((node, path, _), _)| node == "work" && path.contains("after_"))
@@ -959,6 +964,28 @@ fn nested_map_ready_definition() -> String {
           "next": "done"
         },
         "inner": {"type": "map", "items": "$.item.parts", "child": "part", "concurrency": 2, "next": "tail"},
+        "part": {"type": "task", "handler": "demo.part"},
+        "tail": {"type": "task", "handler": "demo.tail"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#
+    .to_string()
+}
+
+fn reused_map_ready_definition() -> String {
+    r#"{
+      "version": "1.1",
+      "name": "ready_reused",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 80, "max_depth": 4, "timeout_seconds": 30},
+      "nodes": {
+        "fanout": {
+          "type": "map", "items": "$.input.tasks", "child": "first_map", "concurrency": 2,
+          "schedule": "ready", "item_id": "$.item.task_id", "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "first_map": {"type": "map", "items": "$.item.parts", "child": "part", "concurrency": 2, "next": "second_map"},
+        "second_map": {"type": "map", "items": "$.item.parts", "child": "part", "concurrency": 2, "next": "tail"},
         "part": {"type": "task", "handler": "demo.part"},
         "tail": {"type": "task", "handler": "demo.tail"},
         "done": {"type": "end", "status": "completed"}
