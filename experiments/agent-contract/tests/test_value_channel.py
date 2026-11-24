@@ -2,10 +2,14 @@ import ast
 from pathlib import Path
 
 import pytest
+from agent_contract.join import KINDS, validate
+from agent_contract.value_channel import (
+    CHANNEL,
+    GenerationOutput,
+    ValidatorInput,
+    bind_validator,
+)
 from pydantic import ValidationError
-
-from agent_contract.join import KINDS
-from agent_contract.value_channel import CHANNEL, GenerationOutput, ValidatorInput, bind_validator
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = ROOT / "python" / "swe" / "swd_v1.schema.json"
@@ -55,6 +59,35 @@ def test_crossed_kind_and_task_id_is_rejected() -> None:
 def test_unplanned_kind_is_rejected() -> None:
     with pytest.raises(ValidationError):
         bind_validator(GenerationOutput(task_id="unrelated", kind="invented", output={}))
+
+
+def test_outer_dict_is_not_semantic_validation() -> None:
+    generated = GenerationOutput(
+        task_id="relevance.generate",
+        kind="relevance",
+        output={"relevant": "yes"},
+    )
+    assert generated.output == {"relevant": "yes"}
+    assert validate("relevance", generated.output) == "relevant must be a boolean"
+
+
+def test_identity_is_frozen() -> None:
+    generated = GenerationOutput(
+        task_id="relevance.generate",
+        kind="relevance",
+        output={"relevant": True},
+    )
+    bound = bind_validator(generated)
+    with pytest.raises(ValidationError):
+        generated.kind = "extraction"  # type: ignore[misc]
+    with pytest.raises(ValidationError):
+        bound.task_id = "extraction.validate"  # type: ignore[misc]
+    with pytest.raises(ValidationError):
+        bound.generation = GenerationOutput(
+            task_id="extraction.generate",
+            kind="extraction",
+            output={"quotes": []},
+        )
 
 
 def test_direct_validator_input_rejects_a_crossed_generation() -> None:

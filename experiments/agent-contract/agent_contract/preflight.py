@@ -25,14 +25,7 @@ sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "experiments" / "hy4-research-policy"))
 sys.path.insert(0, str(ROOT / "experiments" / "agent-contract"))
 
-from agent_contract.join import (  # noqa: E402
-    DispatchGap,
-    dispatch_gap,
-    plan_invocations,
-    require_swe_dispatch,
-    runtime_budget_status,
-)
-from hy4_research_policy.agent_adapter import (  # noqa: E402
+from hy4_research_policy.agent_adapter import (
     DECISION_PROFILE,
     AgentConfig,
     AgentHost,
@@ -41,12 +34,20 @@ from hy4_research_policy.agent_adapter import (  # noqa: E402
     GenerationRequest,
     Usage,
 )
-from agent_contract.budget_run import budget_trace, open_budget, resources_for  # noqa: E402
+from swe.microtasks import Microtask, compile_microtasks
+from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord, RunStore
+from swe.runtime import WorkflowRunner
+
+from agent_contract.budget_run import budget_trace, open_budget, resources_for
+from agent_contract.join import (
+    DispatchGap,
+    dispatch_gap,
+    plan_invocations,
+    require_swe_dispatch,
+    runtime_budget_status,
+)
 
 SCHEDULE = "ready"
-from swe.microtasks import Microtask, compile_microtasks  # noqa: E402
-from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord, RunStore  # noqa: E402
-from swe.runtime import WorkflowRunner  # noqa: E402
 
 
 class _Journal:
@@ -270,7 +271,7 @@ async def _contract(provider_name: str) -> dict[str, Any]:
                     output_mode="text",
                 ),
                 generation,
-                amount=Decimal("1"),
+                amount=Decimal(1),
             )
             model_called = result.ok
             semantic_check = "generation invocation"
@@ -284,7 +285,7 @@ async def _contract(provider_name: str) -> dict[str, Any]:
                     options=["entailment", "contradiction", "neutral"],
                 ),
                 decision,
-                amount=Decimal("1"),
+                amount=Decimal(1),
             )
             model_called = result.ok
             semantic_check = "decision invocation"
@@ -339,6 +340,7 @@ async def _contract(provider_name: str) -> dict[str, Any]:
 
 
 async def _replay() -> dict[str, Any]:
+    """In-process resume. The same ledger object is reused after the simulated crash."""
     batch = compile_microtasks(
         [
             Microtask("a", {"ordinal": 0}),
@@ -369,6 +371,8 @@ async def _replay() -> dict[str, Any]:
     resumed = await batch.resume(work, "replay-run", resources=resources, run_store=store)
     return {
         "schedule": batch.schedule,
+        "resume_scope": "in-process",
+        "fresh_ledger": False,
         "crashed_after_first_persisted_invocation": crashed,
         "executed_before_resume": before,
         "executed_after_resume": list(executed),

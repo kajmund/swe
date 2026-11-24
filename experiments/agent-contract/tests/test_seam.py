@@ -70,7 +70,13 @@ def test_seam_does_not_import_a_scheduler_or_budget() -> None:
             modules.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             modules.append(node.module)
-    assert modules == ["__future__", "typing", "agent_contract.join", "hy4_research_policy.agent_adapter"]
+    assert modules == [
+        "__future__",
+        "collections.abc",
+        "typing",
+        "hy4_research_policy.agent_adapter",
+        "agent_contract.join",
+    ]
     names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
     assert "RuntimeBudget" not in names
     assert "schedule_ready" not in names

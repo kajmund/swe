@@ -12,10 +12,12 @@ the handler input. That value channel stays a separate contract.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+from hy4_research_policy.agent_adapter import AgentConfig
 
 from agent_contract.join import plan_invocations
-from hy4_research_policy.agent_adapter import AgentConfig
 
 FIRST_CLASS_READY_FIELDS = ("schedule", "item_id", "item_depends_on")
 READY_MAP_PROPOSAL = {

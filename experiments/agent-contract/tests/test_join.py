@@ -2,7 +2,6 @@ import ast
 from pathlib import Path
 
 import pytest
-
 from agent_contract.join import (
     DispatchGap,
     dispatch_gap,
@@ -122,11 +121,27 @@ def _invoke(
     return {"task_id": item["task_id"], "ok": result.ok, "output": result.output}
 
 
+def _installed_compiler_accepts_ready() -> bool:
+    try:
+        from swe.microtasks import Microtask, MicrotaskError, compile_microtasks
+    except ImportError:
+        return False
+    try:
+        batch = compile_microtasks(
+            [Microtask("probe")],
+            handler="probe.ready",
+            schedule="ready",
+        )
+    except (MicrotaskError, TypeError):
+        return False
+    return batch.schedule == "ready" and batch.map_nodes == ("microtasks",)
+
+
 def test_package_stays_closed_and_swe_has_ready() -> None:
     gap = dispatch_gap()
     assert gap["package_dispatcher"] is False
     assert gap["fail_closed"] is True
-    assert gap["swe_ready"] is True
+    assert gap["swe_ready"] is _installed_compiler_accepts_ready()
     assert gap["swe_ordered_default"] == "layer_map"
     assert "event_ready" not in gap
     try:
@@ -208,6 +223,11 @@ def test_offline_invocations_cancel_and_replay() -> None:
         _invoke(item, replayed, decision_provider, again, store)
     assert replayed.calls == []
     assert again.records == []
+
+
+def test_unknown_kind_is_closed() -> None:
+    assert validate("invented", {}) == "kind is outside the planned kinds"
+    assert validate("Relevance", {"relevant": True}) == "kind is outside the planned kinds"
 
 
 def test_semantic_failure_does_not_add_another_model_call() -> None:

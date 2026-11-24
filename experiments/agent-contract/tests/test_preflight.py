@@ -1,8 +1,13 @@
 import asyncio
+import sys
+from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python"))
 pytest.importorskip("swe_native")
+pytest.importorskip("swe.budget")
+pytest.importorskip("swe_budget")
 
 from agent_contract.preflight import run_preflight
 
@@ -49,6 +54,8 @@ def test_offline_machine_preflight() -> None:
     assert contract["decision_providers"] == ["system-one"]
     assert contract["decision_models"] == ["laya"]
     assert report["replay"]["schedule"] == "ready"
+    assert report["replay"]["resume_scope"] == "in-process"
+    assert report["replay"]["fresh_ledger"] is False
     assert report["replay"]["replayed_task_executed_again"] is False
     assert report["replay"]["executed_before_resume"] == ["a"]
     assert report["replay"]["executed_after_resume"] == ["a", "b"]

@@ -262,6 +262,20 @@
     "reason": "RuntimeBudget attaches per run through WorkflowResources"
   },
   "paid_calls": 0,
+  "provenance": {
+    "omitted": [
+      "checkout.head",
+      "wheel.file",
+      "invocation_id"
+    ],
+    "published": "scrubbed-preflight",
+    "sources": {
+      "origin_main": "85fe8a79e7a6a9e9c9aca8665ac88bb45686b6f6",
+      "pr12": "f17027bb173ad34510ba2596087d3700884443c6",
+      "python_and_crates": "match origin_main",
+      "ready_map": "f1ae2b8714fc6b88f66a00b47a1baa0469af718f"
+    }
+  },
   "replay": {
     "budget": {
       "account": "agent-contract",
@@ -280,7 +294,9 @@
     "executed_before_resume": [
       "a"
     ],
+    "fresh_ledger": false,
     "replayed_task_executed_again": false,
+    "resume_scope": "in-process",
     "resume_status": "completed",
     "schedule": "ready"
   },
@@ -300,8 +316,5 @@
     "policy": "injected-fixed-milli",
     "reserved_milli": 0,
     "spent_milli": 10
-  },
-  "wheel": {
-    "file": "/private/tmp/pr13-preflight/venv/lib/python3.12/site-packages/swe_native/__init__.py"
   }
 }

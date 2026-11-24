@@ -28,7 +28,7 @@ def _validator_task_id(kind: str) -> str:
 
 
 class GenerationOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     task_id: str = Field(min_length=1)
     kind: str = Field(min_length=1)
     output: dict[str, Any]
@@ -41,7 +41,7 @@ class GenerationOutput(BaseModel):
 
 
 class ValidatorInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     task_id: str = Field(min_length=1)
     source_task_id: str = Field(min_length=1)
     generation: GenerationOutput

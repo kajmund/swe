@@ -37,14 +37,24 @@ interpreter unchanged.
 
 ## Observed trace
 
-The invocation rows from that run are in
-`experiments/agent-contract/preflight-trace.json`. Local wheel paths are omitted.
-`paid_calls` is 0.
+`experiments/agent-contract/preflight-trace.json` is a scrubbed copy of
+`python -m agent_contract.preflight`, not the raw stdout. The published file
+drops `checkout.head`, `wheel.file`, and every `invocation_id`. `checkout.head`
+would name the commit that contains this file. `wheel.file` is a machine path.
+`invocation_id` is a new value on every run. `paid_calls` is 0.
+
+The reproducible sources for that run are `origin/main`
+`85fe8a79e7a6a9e9c9aca8665ac88bb45686b6f6`, which contains the ready-map merge
+`f1ae2b8714fc6b88f66a00b47a1baa0469af718f`, and PR 12
+`f17027bb173ad34510ba2596087d3700884443c6`. `python/` and `crates/` match
+`origin/main`. Re-run the command and drop the same three fields to compare
+the observation.
 
 `require_swe_dispatch` raises `DispatchGap` while `swe_native` imports. The
 package records `package_dispatcher` false and `fail_closed` true. It does not
-execute the plan. `swe_ready` is true: SWE admits a ready task when its own
-dependencies finish. `swe_ordered_default` stays `layer_map` for the ordered
+execute the plan. `swe_ready` is the installed compiler probe: this
+interpreter's `compile_microtasks(..., schedule="ready")` accepts that
+schedule. `swe_ordered_default` stays `layer_map` for the ordered
 compiler. The preflight script is the caller. It compiles each batch with
 `schedule="ready"`
 and runs that one SWD 1.1 map on `WorkflowRunner`. The map node is
@@ -71,10 +81,14 @@ only these, are the five model invocations: `relevance.generate`,
 `operation.generate`. All five validator rows have `model_called` false. The
 contract budget spends 10 milli, reserved 0, 21 events.
 
-A crash after the persisted invocation `a` resumes through `WorkflowRunner` to
-`completed`. `schedule` is `ready`. `executed_before_resume` is `a`.
-`executed_after_resume` is `a`, `b`. `replayed_task_executed_again` is false,
-so `a` runs once. The replay budget spends 2 milli, reserved 0, 5 events.
+`_CrashOnce` raises inside the same process after the first persisted
+invocation. Resume calls `WorkflowRunner.resume` on that same `RunStore` and
+the same `RuntimeBudget` object. `resume_scope` is `in-process` and
+`fresh_ledger` is false. This run does not build a new
+`NativeBudgetLedger` from saved events after a process exit. `schedule` is
+`ready`. `executed_before_resume` is `a`. `executed_after_resume` is `a`, `b`.
+`replayed_task_executed_again` is false, so `a` runs once. The replay budget
+spends 2 milli, reserved 0, 5 events.
 
 ## Historical ordered baseline
 

@@ -39,9 +39,31 @@ class DispatchGap(RuntimeError):
     """This package has no dispatcher. The call stays closed."""
 
 
+def probe_swe_ready() -> bool:
+    """Whether this interpreter's compiler accepts ``schedule="ready"``.
+
+    A missing compiler or a rejected schedule is false. This is not a static
+    claim about a checkout.
+    """
+
+    try:
+        from swe.microtasks import Microtask, MicrotaskError, compile_microtasks
+    except ImportError:
+        return False
+    try:
+        batch = compile_microtasks(
+            [Microtask("probe")],
+            handler="probe.ready",
+            schedule="ready",
+        )
+    except (MicrotaskError, TypeError):
+        return False
+    return batch.schedule == "ready" and batch.map_nodes == ("microtasks",)
+
+
 def runtime_budget_status() -> dict[str, Any]:
     try:
-        import swe.budget as budget
+        from swe import budget
     except ImportError:
         return {
             "available": False,
@@ -70,7 +92,7 @@ def dispatch_gap() -> dict[str, Any]:
     return {
         "package_dispatcher": False,
         "fail_closed": True,
-        "swe_ready": True,
+        "swe_ready": probe_swe_ready(),
         "swe_ordered_default": "layer_map",
         "swe_native": native,
         "ordered_spec": "docs/specs/swe-microtasks.md",
@@ -129,6 +151,8 @@ def validate(kind: str, output: dict[str, Any] | None) -> str | None:
 
     if not isinstance(output, dict):
         return "output is not an object"
+    if kind not in KINDS:
+        return "kind is outside the planned kinds"
     if kind == "relevance" and not isinstance(output.get("relevant"), bool):
         return "relevant must be a boolean"
     if kind == "extraction" and not isinstance(output.get("quotes"), list):
