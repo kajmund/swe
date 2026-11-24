@@ -1,0 +1,4 @@
+__pycache__/
+*.py[cod]
+reports/live.json
+reports/live-smoke.json

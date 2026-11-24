@@ -1,0 +1,4945 @@
+{
+  "approval_estimate": {
+    "all_in_estimated_usd": "1.0758594",
+    "assumptions": {
+      "cache_read_fraction": "0.5",
+      "concurrency_levels": 6,
+      "deterministic_verifier_calls": 0,
+      "input_tokens_per_call": 1000,
+      "output_tokens_per_call_including_generated_reasoning": 500,
+      "reasoning_tokens_priced_independently": false,
+      "retry_rate": "0.1"
+    },
+    "baseline_all_calls_estimated_usd": "2.186712",
+    "calls": {
+      "available_models": 4,
+      "calls_per_model": 660,
+      "candidate_calls": 2640,
+      "items": 10,
+      "microtasks": 50,
+      "sweep": 6,
+      "verifier_calls": 0
+    },
+    "currency": "USD",
+    "note": "Estimate only. Actual billing is N/A unless the provider reports a charge.",
+    "per_model": [
+      {
+        "api_model": "gpt-oss:20b",
+        "attempts_with_retries": "726",
+        "calls": 660,
+        "input_tokens": 660000,
+        "model_id": "gpt-oss-20b",
+        "output_tokens": 330000,
+        "usd": "0.147015"
+      },
+      {
+        "api_model": "nemotron-3-super",
+        "attempts_with_retries": "726",
+        "calls": 660,
+        "input_tokens": 660000,
+        "model_id": "nemotron-3-super",
+        "output_tokens": 330000,
+        "usd": "0.22869"
+      },
+      {
+        "api_model": "mimo-v2.6-flash",
+        "attempts_with_retries": "726",
+        "calls": 660,
+        "input_tokens": 660000,
+        "model_id": "mimo-v2.6-flash",
+        "output_tokens": 330000,
+        "usd": "0.1534764"
+      },
+      {
+        "api_model": "deepseek-v4.1-flash",
+        "attempts_with_retries": "726",
+        "calls": 660,
+        "input_tokens": 660000,
+        "model_id": "deepseek-v4.1-flash",
+        "output_tokens": 330000,
+        "usd": "0.546678"
+      }
+    ],
+    "price_basis": "published peak price rows; price_period=peak",
+    "recommended_cap_usd": "3.00"
+  },
+  "base_commit": "eff1c7e8943dd64827fb4916719ced5515bf3db5",
+  "concurrency_levels": [
+    1,
+    2,
+    3
+  ],
+  "domains": [
+    "biology",
+    "engineering",
+    "finance",
+    "law",
+    "medicine"
+  ],
+  "estimate": {
+    "sweycoins": {
+      "competition_per_suite": 80000,
+      "currency": "milli-Sweycoin",
+      "deterministic_verifier_per_suite": 25000,
+      "distributed_per_model_suite": 20000,
+      "matrix_estimated_milli": 1551000,
+      "matrix_estimated_sweycoins": "1551",
+      "note": "Host meter estimate; retries and verifier calls are charged separately.",
+      "retry_rate": "0.1",
+      "run_allocated_milli": 250000,
+      "single_call_per_model_suite": 12500
+    },
+    "usd": {
+      "all_in_estimated_usd": "1.0758594",
+      "assumptions": {
+        "cache_read_fraction": "0.5",
+        "concurrency_levels": 6,
+        "deterministic_verifier_calls": 0,
+        "input_tokens_per_call": 1000,
+        "output_tokens_per_call_including_generated_reasoning": 500,
+        "reasoning_tokens_priced_independently": false,
+        "retry_rate": "0.1"
+      },
+      "baseline_all_calls_estimated_usd": "2.186712",
+      "calls": {
+        "available_models": 4,
+        "calls_per_model": 660,
+        "candidate_calls": 2640,
+        "items": 10,
+        "microtasks": 50,
+        "sweep": 6,
+        "verifier_calls": 0
+      },
+      "currency": "USD",
+      "note": "Estimate only. Actual billing is N/A unless the provider reports a charge.",
+      "per_model": [
+        {
+          "api_model": "gpt-oss:20b",
+          "attempts_with_retries": "726",
+          "calls": 660,
+          "input_tokens": 660000,
+          "model_id": "gpt-oss-20b",
+          "output_tokens": 330000,
+          "usd": "0.147015"
+        },
+        {
+          "api_model": "nemotron-3-super",
+          "attempts_with_retries": "726",
+          "calls": 660,
+          "input_tokens": 660000,
+          "model_id": "nemotron-3-super",
+          "output_tokens": 330000,
+          "usd": "0.22869"
+        },
+        {
+          "api_model": "mimo-v2.6-flash",
+          "attempts_with_retries": "726",
+          "calls": 660,
+          "input_tokens": 660000,
+          "model_id": "mimo-v2.6-flash",
+          "output_tokens": 330000,
+          "usd": "0.1534764"
+        },
+        {
+          "api_model": "deepseek-v4.1-flash",
+          "attempts_with_retries": "726",
+          "calls": 660,
+          "input_tokens": 660000,
+          "model_id": "deepseek-v4.1-flash",
+          "output_tokens": 330000,
+          "usd": "0.546678"
+        }
+      ],
+      "price_basis": "published peak price rows; price_period=peak",
+      "recommended_cap_usd": "3.00"
+    }
+  },
+  "evidence_kind": "live_ollama_cloud",
+  "experiment_id": "swe-microtask-swarm",
+  "fixture_item_count": 10,
+  "fixture_microtask_count": 50,
+  "fixture_sha256": "be95745f8bed6981536c8c1592304be8afd02dfc4d78776eb4495f3138f0ad06",
+  "generated_at": "2026-11-23T21:34:17.924387+00:00",
+  "live_gate": {
+    "approved_cap_usd": "3",
+    "chat_endpoint": "https://ollama.com/api/chat",
+    "credential": "present",
+    "price_period": "off_peak",
+    "use_local_daemon": false
+  },
+  "models": [
+    {
+      "api_model": "gpt-oss:20b",
+      "available": true,
+      "id": "gpt-oss-20b",
+      "reason": null
+    },
+    {
+      "api_model": "nemotron-3-super",
+      "available": true,
+      "id": "nemotron-3-super",
+      "reason": null
+    },
+    {
+      "api_model": "nemotron-3-nano:30b-cloud",
+      "available": false,
+      "id": "nemotron-3-nano",
+      "reason": "POST /api/show returned HTTP 410: nemotron-3-nano:30b was retired on 2026-11-09. The tag is absent from GET /api/tags. No price row exists."
+    },
+    {
+      "api_model": "mimo-v2.6-flash",
+      "available": true,
+      "id": "mimo-v2.6-flash",
+      "reason": null
+    },
+    {
+      "api_model": "deepseek-v4.1-flash",
+      "available": true,
+      "id": "deepseek-v4.1-flash",
+      "reason": null
+    }
+  ],
+  "modes": [
+    "single_call",
+    "distributed_independent",
+    "heterogeneous_competition"
+  ],
+  "notes": [
+    "No agent-to-agent prose is exchanged; every request and response is typed JSON.",
+    "Single-call quality is expanded into the same five contract rows as distributed mode.",
+    "Calculated USD is a price-list equivalent; actual USD is N/A unless every call reports a charge.",
+    "Offline heuristic numbers are pipeline evidence, not model results."
+  ],
+  "preflight": {
+    "catalog_count": 25,
+    "models": [
+      {
+        "api_model": "gpt-oss:20b",
+        "capabilities": [
+          "completion",
+          "tools",
+          "thinking"
+        ],
+        "context_length": 131072,
+        "digest": "05afbac4bad6",
+        "model_id": "gpt-oss-20b",
+        "thinking": {
+          "default": "medium",
+          "values": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      },
+      {
+        "api_model": "nemotron-3-super",
+        "capabilities": [
+          "completion",
+          "thinking",
+          "tools"
+        ],
+        "context_length": 262144,
+        "digest": "da11955bb451",
+        "model_id": "nemotron-3-super",
+        "thinking": {
+          "default": true,
+          "values": [
+            false,
+            true
+          ]
+        }
+      },
+      {
+        "api_model": "mimo-v2.6-flash",
+        "capabilities": [
+          "completion",
+          "thinking",
+          "tools",
+          "vision"
+        ],
+        "context_length": 1048576,
+        "digest": "8b2b3c0ae11a",
+        "model_id": "mimo-v2.6-flash",
+        "thinking": {
+          "default": true,
+          "values": [
+            false,
+            true
+          ]
+        }
+      },
+      {
+        "api_model": "deepseek-v4.1-flash",
+        "capabilities": [
+          "completion",
+          "thinking",
+          "tools",
+          "vision"
+        ],
+        "context_length": 1048576,
+        "digest": "97308b916fc3",
+        "model_id": "deepseek-v4.1-flash",
+        "thinking": {
+          "default": "high",
+          "values": [
+            false,
+            "low",
+            "high",
+            "max"
+          ]
+        }
+      }
+    ]
+  },
+  "report_scope": "compact; use --full for per-task diagnostics",
+  "runs": [
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 0.483,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000050995",
+          "calculated_input_usd": "0.00026341",
+          "calculated_output_usd": "0.0007464",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.001060805",
+          "calculated_usd_complete_calls": "0.001060805",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 111504.868,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 1457,
+            "cache_write": "N/A",
+            "input": 5220,
+            "output": 2488,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 1457,
+            "cache_write": "N/A",
+            "input": 5220,
+            "output": 2488,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.001060805"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "gpt-oss-20b"
+      ],
+      "p50_call_latency_ms": 10437.722,
+      "p95_call_latency_ms": 20680.584,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.8,
+        "accuracy_on_verified": 0.8,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "coverage": 1.0,
+            "emitted_quotes": 13,
+            "exact_match_rate": 0.8,
+            "exact_match_tasks": 8,
+            "false_support_count": 3,
+            "false_support_rate": 0.230769,
+            "gold_quotes": 10,
+            "matched_quotes": 10,
+            "quote_precision": 0.769231,
+            "tasks": 10,
+            "unsupported_quotes": 3,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 13,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.4,
+            "accuracy_on_verified": 0.4,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 4,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 40,
+        "extraction": {
+          "coverage": 1.0,
+          "emitted_quotes": 13,
+          "exact_match_rate": 0.8,
+          "exact_match_tasks": 8,
+          "false_support_count": 3,
+          "false_support_rate": 0.230769,
+          "gold_quotes": 10,
+          "matched_quotes": 10,
+          "quote_precision": 0.769231,
+          "unsupported_quotes": 3,
+          "unverified_quotes": 0,
+          "verified_quotes": 13
+        },
+        "false_support": {
+          "emitted_quotes": 13,
+          "false_support_count": 3,
+          "false_support_rate": 0.230769,
+          "unsupported_quotes": 3,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 2.417,
+      "wall_ms": 20683.477
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 0.778,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00018235",
+          "calculated_input_usd": "0.0000007",
+          "calculated_output_usd": "0.0007179",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.00090095",
+          "calculated_usd_complete_calls": "0.00090095",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 74777.11,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 5210,
+            "cache_write": "N/A",
+            "input": 5220,
+            "output": 2393,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 5210,
+            "cache_write": "N/A",
+            "input": 5220,
+            "output": 2393,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00090095"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "gpt-oss-20b"
+      ],
+      "p50_call_latency_ms": 7210.74,
+      "p95_call_latency_ms": 12846.042,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.76,
+        "accuracy_on_verified": 0.76,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "coverage": 0.9,
+            "emitted_quotes": 13,
+            "exact_match_rate": 0.7,
+            "exact_match_tasks": 7,
+            "false_support_count": 4,
+            "false_support_rate": 0.307692,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.692308,
+            "tasks": 10,
+            "unsupported_quotes": 4,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 13,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.4,
+            "accuracy_on_verified": 0.4,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 4,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 38,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 13,
+          "exact_match_rate": 0.7,
+          "exact_match_tasks": 7,
+          "false_support_count": 4,
+          "false_support_rate": 0.307692,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.692308,
+          "unsupported_quotes": 4,
+          "unverified_quotes": 0,
+          "verified_quotes": 13
+        },
+        "false_support": {
+          "emitted_quotes": 13,
+          "false_support_count": 4,
+          "false_support_rate": 0.307692,
+          "unsupported_quotes": 4,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 3.891,
+      "wall_ms": 12848.794
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 1.162,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00018235",
+          "calculated_input_usd": "0.0000007",
+          "calculated_output_usd": "0.0007167",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.00089975",
+          "calculated_usd_complete_calls": "0.00089975",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 54443.357,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 5210,
+            "cache_write": "N/A",
+            "input": 5220,
+            "output": 2389,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 5210,
+            "cache_write": "N/A",
+            "input": 5220,
+            "output": 2389,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00089975"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "gpt-oss-20b"
+      ],
+      "p50_call_latency_ms": 4750.299,
+      "p95_call_latency_ms": 8602.28,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.72,
+        "accuracy_on_verified": 0.72,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.6,
+            "accuracy_on_verified": 0.6,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 6,
+            "coverage": 0.8,
+            "emitted_quotes": 13,
+            "exact_match_rate": 0.6,
+            "exact_match_tasks": 6,
+            "false_support_count": 5,
+            "false_support_rate": 0.384615,
+            "gold_quotes": 10,
+            "matched_quotes": 8,
+            "quote_precision": 0.615385,
+            "tasks": 10,
+            "unsupported_quotes": 5,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 13,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.4,
+            "accuracy_on_verified": 0.4,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 4,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 36,
+        "extraction": {
+          "coverage": 0.8,
+          "emitted_quotes": 13,
+          "exact_match_rate": 0.6,
+          "exact_match_tasks": 6,
+          "false_support_count": 5,
+          "false_support_rate": 0.384615,
+          "gold_quotes": 10,
+          "matched_quotes": 8,
+          "quote_precision": 0.615385,
+          "unsupported_quotes": 5,
+          "unverified_quotes": 0,
+          "verified_quotes": 13
+        },
+        "false_support": {
+          "emitted_quotes": 13,
+          "false_support_count": 5,
+          "false_support_rate": 0.384615,
+          "unsupported_quotes": 5,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 5.812,
+      "wall_ms": 8603.516
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 1.19,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.0000216",
+          "calculated_input_usd": "0.00005292",
+          "calculated_output_usd": "0.000579",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.00065352",
+          "calculated_usd_complete_calls": "0.00065352",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 44893.78,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 1440,
+            "cache_write": "N/A",
+            "input": 4968,
+            "output": 965,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 1440,
+            "cache_write": "N/A",
+            "input": 4968,
+            "output": 965,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00065352"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "nemotron-3-super"
+      ],
+      "p50_call_latency_ms": 4045.833,
+      "p95_call_latency_ms": 8404.825,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.68,
+        "accuracy_on_verified": 0.68,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.6,
+            "accuracy_on_verified": 0.6,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 6,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "coverage": 0.8,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.8,
+            "exact_match_tasks": 8,
+            "false_support_count": 2,
+            "false_support_rate": 0.2,
+            "gold_quotes": 10,
+            "matched_quotes": 8,
+            "quote_precision": 0.8,
+            "tasks": 10,
+            "unsupported_quotes": 2,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.1,
+            "accuracy_on_verified": 0.1,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 1,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 34,
+        "extraction": {
+          "coverage": 0.8,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.8,
+          "exact_match_tasks": 8,
+          "false_support_count": 2,
+          "false_support_rate": 0.2,
+          "gold_quotes": 10,
+          "matched_quotes": 8,
+          "quote_precision": 0.8,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 2,
+          "false_support_rate": 0.2,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 5.948,
+      "wall_ms": 8405.709
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 2.26,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00005688",
+          "calculated_input_usd": "0.00001764",
+          "calculated_output_usd": "0.000564",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.00063852",
+          "calculated_usd_complete_calls": "0.00063852",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 25541.601,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 3792,
+            "cache_write": "N/A",
+            "input": 4968,
+            "output": 940,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 3792,
+            "cache_write": "N/A",
+            "input": 4968,
+            "output": 940,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00063852"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "nemotron-3-super"
+      ],
+      "p50_call_latency_ms": 2195.122,
+      "p95_call_latency_ms": 4423.055,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.66,
+        "accuracy_on_verified": 0.66,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.6,
+            "accuracy_on_verified": 0.6,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 6,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "coverage": 0.7,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.7,
+            "exact_match_tasks": 7,
+            "false_support_count": 3,
+            "false_support_rate": 0.3,
+            "gold_quotes": 10,
+            "matched_quotes": 7,
+            "quote_precision": 0.7,
+            "tasks": 10,
+            "unsupported_quotes": 3,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.1,
+            "accuracy_on_verified": 0.1,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 1,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 33,
+        "extraction": {
+          "coverage": 0.7,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.7,
+          "exact_match_tasks": 7,
+          "false_support_count": 3,
+          "false_support_rate": 0.3,
+          "gold_quotes": 10,
+          "matched_quotes": 7,
+          "quote_precision": 0.7,
+          "unsupported_quotes": 3,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 3,
+          "false_support_rate": 0.3,
+          "unsupported_quotes": 3,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 11.302,
+      "wall_ms": 4423.922
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 3.283,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00006456",
+          "calculated_input_usd": "0.00000996",
+          "calculated_output_usd": "0.0005784",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.00065292",
+          "calculated_usd_complete_calls": "0.00065292",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 18529.579,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 4304,
+            "cache_write": "N/A",
+            "input": 4968,
+            "output": 964,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 4304,
+            "cache_write": "N/A",
+            "input": 4968,
+            "output": 964,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00065292"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "nemotron-3-super"
+      ],
+      "p50_call_latency_ms": 1695.064,
+      "p95_call_latency_ms": 3045.386,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.68,
+        "accuracy_on_verified": 0.68,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "coverage": 0.7,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.7,
+            "exact_match_tasks": 7,
+            "false_support_count": 3,
+            "false_support_rate": 0.3,
+            "gold_quotes": 10,
+            "matched_quotes": 7,
+            "quote_precision": 0.7,
+            "tasks": 10,
+            "unsupported_quotes": 3,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.1,
+            "accuracy_on_verified": 0.1,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 1,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 34,
+        "extraction": {
+          "coverage": 0.7,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.7,
+          "exact_match_tasks": 7,
+          "false_support_count": 3,
+          "false_support_rate": 0.3,
+          "gold_quotes": 10,
+          "matched_quotes": 7,
+          "quote_precision": 0.7,
+          "unsupported_quotes": 3,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 3,
+          "false_support_rate": 0.3,
+          "unsupported_quotes": 3,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 16.414,
+      "wall_ms": 3046.25
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 1.265,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000010752",
+          "calculated_input_usd": "0.0000903",
+          "calculated_output_usd": "0.00016296",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000264012",
+          "calculated_usd_complete_calls": "0.000264012",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 44230.206,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 3840,
+            "cache_write": "N/A",
+            "input": 4485,
+            "output": 582,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 3840,
+            "cache_write": "N/A",
+            "input": 4485,
+            "output": 582,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000264012"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "mimo-v2.6-flash"
+      ],
+      "p50_call_latency_ms": 3973.906,
+      "p95_call_latency_ms": 7907.009,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.72,
+        "accuracy_on_verified": 0.72,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "coverage": 0.9,
+            "emitted_quotes": 11,
+            "exact_match_rate": 0.8,
+            "exact_match_tasks": 8,
+            "false_support_count": 2,
+            "false_support_rate": 0.181818,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.818182,
+            "tasks": 10,
+            "unsupported_quotes": 2,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 11,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.3,
+            "accuracy_on_verified": 0.3,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 3,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 36,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 11,
+          "exact_match_rate": 0.8,
+          "exact_match_tasks": 8,
+          "false_support_count": 2,
+          "false_support_rate": 0.181818,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.818182,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0,
+          "verified_quotes": 11
+        },
+        "false_support": {
+          "emitted_quotes": 11,
+          "false_support_count": 2,
+          "false_support_rate": 0.181818,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 6.323,
+      "wall_ms": 7907.847
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 2.167,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000010752",
+          "calculated_input_usd": "0.0000903",
+          "calculated_output_usd": "0.00015876",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000259812",
+          "calculated_usd_complete_calls": "0.000259812",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 27124.386,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 3840,
+            "cache_write": "N/A",
+            "input": 4485,
+            "output": 567,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 3840,
+            "cache_write": "N/A",
+            "input": 4485,
+            "output": 567,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000259812"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "mimo-v2.6-flash"
+      ],
+      "p50_call_latency_ms": 2696.458,
+      "p95_call_latency_ms": 4612.848,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.76,
+        "accuracy_on_verified": 0.76,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 1.0,
+            "emitted_quotes": 11,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.090909,
+            "gold_quotes": 10,
+            "matched_quotes": 10,
+            "quote_precision": 0.909091,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 11,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.4,
+            "accuracy_on_verified": 0.4,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 4,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 38,
+        "extraction": {
+          "coverage": 1.0,
+          "emitted_quotes": 11,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.090909,
+          "gold_quotes": 10,
+          "matched_quotes": 10,
+          "quote_precision": 0.909091,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 11
+        },
+        "false_support": {
+          "emitted_quotes": 11,
+          "false_support_count": 1,
+          "false_support_rate": 0.090909,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 10.837,
+      "wall_ms": 4613.671
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 2.51,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000010752",
+          "calculated_input_usd": "0.0000903",
+          "calculated_output_usd": "0.00015876",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000259812",
+          "calculated_usd_complete_calls": "0.000259812",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 23236.227,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 3840,
+            "cache_write": "N/A",
+            "input": 4485,
+            "output": 567,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 3840,
+            "cache_write": "N/A",
+            "input": 4485,
+            "output": 567,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000259812"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "mimo-v2.6-flash"
+      ],
+      "p50_call_latency_ms": 2070.817,
+      "p95_call_latency_ms": 3983.027,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.76,
+        "accuracy_on_verified": 0.76,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 1.0,
+            "emitted_quotes": 11,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.090909,
+            "gold_quotes": 10,
+            "matched_quotes": 10,
+            "quote_precision": 0.909091,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 11,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.4,
+            "accuracy_on_verified": 0.4,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 4,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 38,
+        "extraction": {
+          "coverage": 1.0,
+          "emitted_quotes": 11,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.090909,
+          "gold_quotes": 10,
+          "matched_quotes": 10,
+          "quote_precision": 0.909091,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 11
+        },
+        "false_support": {
+          "emitted_quotes": 11,
+          "false_support_count": 1,
+          "false_support_rate": 0.090909,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 12.551,
+      "wall_ms": 3983.899
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 1.23,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000010656",
+          "calculated_input_usd": "0.00019455",
+          "calculated_output_usd": "0.0003666",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000571806",
+          "calculated_usd_complete_calls": "0.000571806",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 39566.254,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 3552,
+            "cache_write": "N/A",
+            "input": 4849,
+            "output": 611,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 3552,
+            "cache_write": "N/A",
+            "input": 4849,
+            "output": 611,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000571806"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 3360.431,
+      "p95_call_latency_ms": 8130.332,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.72,
+        "accuracy_on_verified": 0.72,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.1,
+            "accuracy_on_verified": 0.1,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 1,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 36,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 6.149,
+      "wall_ms": 8131.16
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 2.741,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000009576",
+          "calculated_input_usd": "0.00024855",
+          "calculated_output_usd": "0.0003666",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000624726",
+          "calculated_usd_complete_calls": "0.000624726",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 22241.021,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 3192,
+            "cache_write": "N/A",
+            "input": 4849,
+            "output": 611,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 3192,
+            "cache_write": "N/A",
+            "input": 4849,
+            "output": 611,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000624726"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 2082.81,
+      "p95_call_latency_ms": 3647.336,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.72,
+        "accuracy_on_verified": 0.72,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.1,
+            "accuracy_on_verified": 0.1,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 1,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 36,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 13.705,
+      "wall_ms": 3648.239
+    },
+    {
+      "call_count": 10,
+      "call_throughput_per_second": 2.933,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000010656",
+          "calculated_input_usd": "0.00019455",
+          "calculated_output_usd": "0.0003666",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000571806",
+          "calculated_usd_complete_calls": "0.000571806",
+          "calls": 10,
+          "calls_with_complete_usage": 10,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 18665.866,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 3552,
+            "cache_write": "N/A",
+            "input": 4849,
+            "output": 611,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 3552,
+            "cache_write": "N/A",
+            "input": 4849,
+            "output": 611,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000571806"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "single_call",
+      "model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 1627.524,
+      "p95_call_latency_ms": 3408.059,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.72,
+        "accuracy_on_verified": 0.72,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.1,
+            "accuracy_on_verified": 0.1,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 1,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 36,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 237500,
+        "event_count": 20,
+        "reservations": 10,
+        "reserved_milli": 0,
+        "spent_milli": 12500
+      },
+      "task_count": 10,
+      "task_throughput_per_second": 14.666,
+      "wall_ms": 3409.282
+    },
+    {
+      "call_count": 51,
+      "call_throughput_per_second": 1.037,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00040663",
+          "calculated_input_usd": "0.00000357",
+          "calculated_output_usd": "0.0009828",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.001393",
+          "calculated_usd_complete_calls": "0.001393",
+          "calls": 51,
+          "calls_with_complete_usage": 51,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 1240670.867,
+          "retries": 1,
+          "tokens": {
+            "cache_read": 11618,
+            "cache_write": "N/A",
+            "input": 11669,
+            "output": 3276,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 11618,
+            "cache_write": "N/A",
+            "input": 11669,
+            "output": 3276,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.001393"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "gpt-oss-20b"
+      ],
+      "p50_call_latency_ms": 24025.365,
+      "p95_call_latency_ms": 46088.086,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.86,
+        "accuracy_on_verified": 0.86,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.6,
+            "accuracy_on_verified": 0.6,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 6,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 43,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 1,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 229000,
+        "event_count": 102,
+        "reservations": 51,
+        "reserved_milli": 0,
+        "spent_milli": 21000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 1.017,
+      "wall_ms": 49173.168
+    },
+    {
+      "call_count": 51,
+      "call_throughput_per_second": 1.953,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00040663",
+          "calculated_input_usd": "0.00000357",
+          "calculated_output_usd": "0.0010092",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.0014194",
+          "calculated_usd_complete_calls": "0.0014194",
+          "calls": 51,
+          "calls_with_complete_usage": 51,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 656069.325,
+          "retries": 1,
+          "tokens": {
+            "cache_read": 11618,
+            "cache_write": "N/A",
+            "input": 11669,
+            "output": 3364,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 11618,
+            "cache_write": "N/A",
+            "input": 11669,
+            "output": 3364,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.0014194"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "gpt-oss-20b"
+      ],
+      "p50_call_latency_ms": 12738.782,
+      "p95_call_latency_ms": 24046.459,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.86,
+        "accuracy_on_verified": 0.86,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.6,
+            "accuracy_on_verified": 0.6,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 6,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 43,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 1,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 229000,
+        "event_count": 102,
+        "reservations": 51,
+        "reserved_milli": 0,
+        "spent_milli": 21000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 1.914,
+      "wall_ms": 26120.278
+    },
+    {
+      "call_count": 50,
+      "call_throughput_per_second": 2.979,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00039774",
+          "calculated_input_usd": "0.0000035",
+          "calculated_output_usd": "0.0009369",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.00133814",
+          "calculated_usd_complete_calls": "0.00133814",
+          "calls": 50,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 425431.36,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 11364,
+            "cache_write": "N/A",
+            "input": 11414,
+            "output": 3123,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 11364,
+            "cache_write": "N/A",
+            "input": 11414,
+            "output": 3123,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00133814"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "gpt-oss-20b"
+      ],
+      "p50_call_latency_ms": 8335.754,
+      "p95_call_latency_ms": 15995.77,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.84,
+        "accuracy_on_verified": 0.84,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.4,
+            "accuracy_on_verified": 0.4,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 4,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 42,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 230000,
+        "event_count": 100,
+        "reservations": 50,
+        "reserved_milli": 0,
+        "spent_milli": 20000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 2.979,
+      "wall_ms": 16786.733
+    },
+    {
+      "call_count": 50,
+      "call_throughput_per_second": 1.79,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00011256",
+          "calculated_input_usd": "0.00002055",
+          "calculated_output_usd": "0.0004242",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.00055731",
+          "calculated_usd_complete_calls": "0.00055731",
+          "calls": 50,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 670920.221,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 7504,
+            "cache_write": "N/A",
+            "input": 8874,
+            "output": 707,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 7504,
+            "cache_write": "N/A",
+            "input": 8874,
+            "output": 707,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00055731"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "nemotron-3-super"
+      ],
+      "p50_call_latency_ms": 12334.561,
+      "p95_call_latency_ms": 26719.827,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.9,
+        "accuracy_on_verified": 0.9,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "coverage": 0.8,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.8,
+            "exact_match_tasks": 8,
+            "false_support_count": 2,
+            "false_support_rate": 0.2,
+            "gold_quotes": 10,
+            "matched_quotes": 8,
+            "quote_precision": 0.8,
+            "tasks": 10,
+            "unsupported_quotes": 2,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 45,
+        "extraction": {
+          "coverage": 0.8,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.8,
+          "exact_match_tasks": 8,
+          "false_support_count": 2,
+          "false_support_rate": 0.2,
+          "gold_quotes": 10,
+          "matched_quotes": 8,
+          "quote_precision": 0.8,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 2,
+          "false_support_rate": 0.2,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 230000,
+        "event_count": 100,
+        "reservations": 50,
+        "reserved_milli": 0,
+        "spent_milli": 20000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 1.79,
+      "wall_ms": 27927.955
+    },
+    {
+      "call_count": 50,
+      "call_throughput_per_second": 3.227,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.00011256",
+          "calculated_input_usd": "0.00002055",
+          "calculated_output_usd": "0.0004248",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.00055791",
+          "calculated_usd_complete_calls": "0.00055791",
+          "calls": 50,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 396639.952,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 7504,
+            "cache_write": "N/A",
+            "input": 8874,
+            "output": 708,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 7504,
+            "cache_write": "N/A",
+            "input": 8874,
+            "output": 708,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00055791"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "nemotron-3-super"
+      ],
+      "p50_call_latency_ms": 7554.052,
+      "p95_call_latency_ms": 14934.949,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.92,
+        "accuracy_on_verified": 0.92,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 46,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 230000,
+        "event_count": 100,
+        "reservations": 50,
+        "reserved_milli": 0,
+        "spent_milli": 20000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 3.227,
+      "wall_ms": 15492.391
+    },
+    {
+      "call_count": 54,
+      "call_throughput_per_second": 1.632,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "N/A",
+          "calculated_input_usd": "N/A",
+          "calculated_output_usd": "N/A",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "N/A",
+          "calculated_usd_complete_calls": "0.00055911",
+          "calls": 54,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 4,
+          "estimated_tokens": false,
+          "latency_ms": 733030.327,
+          "retries": 4,
+          "tokens": {
+            "cache_read": "N/A",
+            "cache_write": "N/A",
+            "input": "N/A",
+            "output": "N/A",
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 7664,
+            "cache_write": "N/A",
+            "input": 8874,
+            "output": 710,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.00055911"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "nemotron-3-super"
+      ],
+      "p50_call_latency_ms": 9585.34,
+      "p95_call_latency_ms": 30072.904,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.92,
+        "accuracy_on_verified": 0.92,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 46,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 4,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 229000,
+        "event_count": 108,
+        "reservations": 54,
+        "reserved_milli": 0,
+        "spent_milli": 21000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 1.511,
+      "wall_ms": 33096.82
+    },
+    {
+      "call_count": 50,
+      "call_throughput_per_second": 0.707,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 10,
+          "calculated_cache_usd": "0.000014336",
+          "calculated_input_usd": "0.00044142",
+          "calculated_output_usd": "0.00013328",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000589036",
+          "calculated_usd_complete_calls": "0.000589036",
+          "calls": 50,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 2057851.484,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 5120,
+            "cache_write": "N/A",
+            "input": 8273,
+            "output": 476,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 5120,
+            "cache_write": "N/A",
+            "input": 8273,
+            "output": 476,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000589036"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "mimo-v2.6-flash"
+      ],
+      "p50_call_latency_ms": 43942.34,
+      "p95_call_latency_ms": 68087.545,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.92,
+        "accuracy_on_verified": 0.92,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 46,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 230000,
+        "event_count": 100,
+        "reservations": 50,
+        "reserved_milli": 0,
+        "spent_milli": 20000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 0.707,
+      "wall_ms": 70717.664
+    },
+    {
+      "call_count": 50,
+      "call_throughput_per_second": 1.424,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 10,
+          "calculated_cache_usd": "0.000014336",
+          "calculated_input_usd": "0.00044142",
+          "calculated_output_usd": "0.00013328",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000589036",
+          "calculated_usd_complete_calls": "0.000589036",
+          "calls": 50,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 1028528.151,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 5120,
+            "cache_write": "N/A",
+            "input": 8273,
+            "output": 476,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 5120,
+            "cache_write": "N/A",
+            "input": 8273,
+            "output": 476,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000589036"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "mimo-v2.6-flash"
+      ],
+      "p50_call_latency_ms": 21721.398,
+      "p95_call_latency_ms": 34126.681,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.92,
+        "accuracy_on_verified": 0.92,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 46,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 230000,
+        "event_count": 100,
+        "reservations": 50,
+        "reserved_milli": 0,
+        "spent_milli": 20000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 1.424,
+      "wall_ms": 35119.62
+    },
+    {
+      "call_count": 50,
+      "call_throughput_per_second": 2.114,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 10,
+          "calculated_cache_usd": "0.000014336",
+          "calculated_input_usd": "0.00044142",
+          "calculated_output_usd": "0.00013328",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.000589036",
+          "calculated_usd_complete_calls": "0.000589036",
+          "calls": 50,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 637569.197,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 5120,
+            "cache_write": "N/A",
+            "input": 8273,
+            "output": 476,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 5120,
+            "cache_write": "N/A",
+            "input": 8273,
+            "output": 476,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000589036"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "mimo-v2.6-flash"
+      ],
+      "p50_call_latency_ms": 13477.954,
+      "p95_call_latency_ms": 22886.982,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.92,
+        "accuracy_on_verified": 0.92,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 46,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 230000,
+        "event_count": 100,
+        "reservations": 50,
+        "reserved_milli": 0,
+        "spent_milli": 20000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 2.114,
+      "wall_ms": 23646.9
+    },
+    {
+      "call_count": 52,
+      "call_throughput_per_second": 0.921,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "N/A",
+          "calculated_input_usd": "N/A",
+          "calculated_output_usd": "N/A",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "N/A",
+          "calculated_usd_complete_calls": "0.001285674",
+          "calls": 52,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 2,
+          "estimated_tokens": false,
+          "latency_ms": 1545010.731,
+          "retries": 2,
+          "tokens": {
+            "cache_read": "N/A",
+            "cache_write": "N/A",
+            "input": "N/A",
+            "output": "N/A",
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 1908,
+            "cache_write": "N/A",
+            "input": 8421,
+            "output": 505,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.001285674"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 30013.673,
+      "p95_call_latency_ms": 54229.06,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.88,
+        "accuracy_on_verified": 0.88,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 44,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 2,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 228750,
+        "event_count": 104,
+        "reservations": 52,
+        "reserved_milli": 0,
+        "spent_milli": 21250
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 0.885,
+      "wall_ms": 56489.982
+    },
+    {
+      "call_count": 50,
+      "call_throughput_per_second": 1.339,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000004584",
+          "calculated_input_usd": "0.00103395",
+          "calculated_output_usd": "0.0003018",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.001340334",
+          "calculated_usd_complete_calls": "0.001340334",
+          "calls": 50,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 1056871.508,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 1528,
+            "cache_write": "N/A",
+            "input": 8421,
+            "output": 503,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 1528,
+            "cache_write": "N/A",
+            "input": 8421,
+            "output": 503,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.001340334"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 21891.177,
+      "p95_call_latency_ms": 36532.688,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.9,
+        "accuracy_on_verified": 0.9,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 45,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 230000,
+        "event_count": 100,
+        "reservations": 50,
+        "reserved_milli": 0,
+        "spent_milli": 20000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 1.339,
+      "wall_ms": 37328.9
+    },
+    {
+      "call_count": 50,
+      "call_throughput_per_second": 1.732,
+      "cancelled_count": 0,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "0.000004998",
+          "calculated_input_usd": "0.00101325",
+          "calculated_output_usd": "0.000303",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "0.001321248",
+          "calculated_usd_complete_calls": "0.001321248",
+          "calls": 50,
+          "calls_with_complete_usage": 50,
+          "calls_with_unknown_usage": 0,
+          "estimated_tokens": false,
+          "latency_ms": 809536.623,
+          "retries": 0,
+          "tokens": {
+            "cache_read": 1666,
+            "cache_write": "N/A",
+            "input": 8421,
+            "output": 505,
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 1666,
+            "cache_write": "N/A",
+            "input": 8421,
+            "output": 505,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.001321248"
+      },
+      "early_cancelled_tasks": 0,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "distributed_independent",
+      "model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 16408.863,
+      "p95_call_latency_ms": 28106.757,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.88,
+        "accuracy_on_verified": 0.88,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 44,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 0,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 230000,
+        "event_count": 100,
+        "reservations": 50,
+        "reserved_milli": 0,
+        "spent_milli": 20000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 1.732,
+      "wall_ms": 28873.327
+    },
+    {
+      "call_count": 201,
+      "call_throughput_per_second": 2.573,
+      "cancelled_count": 150,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "N/A",
+          "calculated_input_usd": "N/A",
+          "calculated_output_usd": "N/A",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "N/A",
+          "calculated_usd_complete_calls": "0.001371185",
+          "calls": 201,
+          "calls_with_complete_usage": 51,
+          "calls_with_unknown_usage": 150,
+          "estimated_tokens": false,
+          "latency_ms": 8045085.378,
+          "retries": 1,
+          "tokens": {
+            "cache_read": "N/A",
+            "cache_write": "N/A",
+            "input": "N/A",
+            "output": "N/A",
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 11364,
+            "cache_write": "N/A",
+            "input": 11617,
+            "output": 3196,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.001371185"
+      },
+      "early_cancelled_tasks": 50,
+      "effective_concurrency": 1,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "heterogeneous_competition",
+      "model_ids": [
+        "gpt-oss-20b",
+        "nemotron-3-super",
+        "mimo-v2.6-flash",
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 42554.507,
+      "p95_call_latency_ms": 73010.26,
+      "peak_in_flight": 1,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.82,
+        "accuracy_on_verified": 0.82,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "coverage": 0.8,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.8,
+            "exact_match_tasks": 8,
+            "false_support_count": 2,
+            "false_support_rate": 0.2,
+            "gold_quotes": 10,
+            "matched_quotes": 8,
+            "quote_precision": 0.8,
+            "tasks": 10,
+            "unsupported_quotes": 2,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.6,
+            "accuracy_on_verified": 0.6,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 6,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 41,
+        "extraction": {
+          "coverage": 0.8,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.8,
+          "exact_match_tasks": 8,
+          "false_support_count": 2,
+          "false_support_rate": 0.2,
+          "gold_quotes": 10,
+          "matched_quotes": 8,
+          "quote_precision": 0.8,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 2,
+          "false_support_rate": 0.2,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 1,
+      "retry_count": 1,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 169000,
+        "event_count": 402,
+        "reservations": 201,
+        "reserved_milli": 0,
+        "spent_milli": 81000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 0.64,
+      "wall_ms": 78123.846
+    },
+    {
+      "call_count": 203,
+      "call_throughput_per_second": 2.041,
+      "cancelled_count": 150,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 0,
+          "calculated_cache_usd": "N/A",
+          "calculated_input_usd": "N/A",
+          "calculated_output_usd": "N/A",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "N/A",
+          "calculated_usd_complete_calls": "0.000845173",
+          "calls": 203,
+          "calls_with_complete_usage": 51,
+          "calls_with_unknown_usage": 152,
+          "estimated_tokens": false,
+          "latency_ms": 10903219.014,
+          "retries": 3,
+          "tokens": {
+            "cache_read": "N/A",
+            "cache_write": "N/A",
+            "input": "N/A",
+            "output": "N/A",
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 8876,
+            "cache_write": "N/A",
+            "input": 9928,
+            "output": 1526,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.000845173"
+      },
+      "early_cancelled_tasks": 50,
+      "effective_concurrency": 2,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "heterogeneous_competition",
+      "model_ids": [
+        "gpt-oss-20b",
+        "nemotron-3-super",
+        "mimo-v2.6-flash",
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 56560.298,
+      "p95_call_latency_ms": 97589.362,
+      "peak_in_flight": 2,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.86,
+        "accuracy_on_verified": 0.86,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "coverage": 0.8,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.8,
+            "exact_match_tasks": 8,
+            "false_support_count": 2,
+            "false_support_rate": 0.2,
+            "gold_quotes": 10,
+            "matched_quotes": 8,
+            "quote_precision": 0.8,
+            "tasks": 10,
+            "unsupported_quotes": 2,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.7,
+            "accuracy_on_verified": 0.7,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 7,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 43,
+        "extraction": {
+          "coverage": 0.8,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.8,
+          "exact_match_tasks": 8,
+          "false_support_count": 2,
+          "false_support_rate": 0.2,
+          "gold_quotes": 10,
+          "matched_quotes": 8,
+          "quote_precision": 0.8,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 2,
+          "false_support_rate": 0.2,
+          "unsupported_quotes": 2,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 2,
+      "retry_count": 3,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 168500,
+        "event_count": 406,
+        "reservations": 203,
+        "reserved_milli": 0,
+        "spent_milli": 81500
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 0.503,
+      "wall_ms": 99451.719
+    },
+    {
+      "call_count": 201,
+      "call_throughput_per_second": 3.658,
+      "cancelled_count": 149,
+      "cost": {
+        "all_in": {
+          "actual_usd": "N/A",
+          "cache_read_assumed_miss_calls": 4,
+          "calculated_cache_usd": "N/A",
+          "calculated_input_usd": "N/A",
+          "calculated_output_usd": "N/A",
+          "calculated_reasoning_usd": "N/A",
+          "calculated_usd": "N/A",
+          "calculated_usd_complete_calls": "0.0007515028",
+          "calls": 201,
+          "calls_with_complete_usage": 52,
+          "calls_with_unknown_usage": 149,
+          "estimated_tokens": false,
+          "latency_ms": 5533777.178,
+          "retries": 1,
+          "tokens": {
+            "cache_read": "N/A",
+            "cache_write": "N/A",
+            "input": "N/A",
+            "output": "N/A",
+            "reasoning": "N/A"
+          },
+          "tokens_complete_calls": {
+            "cache_read": 7618,
+            "cache_write": "N/A",
+            "input": 9464,
+            "output": 1103,
+            "reasoning": "N/A"
+          }
+        },
+        "all_in_complete_calls_calculated_usd": "0.0007515028"
+      },
+      "early_cancelled_tasks": 50,
+      "effective_concurrency": 3,
+      "layer_fallback_reason": "ModuleNotFoundError: No module named 'jsonschema'",
+      "layer_source": "microtask_swarm.dag fallback",
+      "limit_exceeded": false,
+      "mode": "heterogeneous_competition",
+      "model_ids": [
+        "gpt-oss-20b",
+        "nemotron-3-super",
+        "mimo-v2.6-flash",
+        "deepseek-v4.1-flash"
+      ],
+      "p50_call_latency_ms": 25300.435,
+      "p95_call_latency_ms": 53430.174,
+      "peak_in_flight": 3,
+      "provider_concurrency_limit": 3,
+      "quality": {
+        "accuracy": 0.9,
+        "accuracy_on_verified": 0.9,
+        "answered": 50,
+        "answered_rate": 1.0,
+        "by_contract": {
+          "atomicity": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "entailment": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "extraction": {
+            "accuracy": 0.9,
+            "accuracy_on_verified": 0.9,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 9,
+            "coverage": 0.9,
+            "emitted_quotes": 10,
+            "exact_match_rate": 0.9,
+            "exact_match_tasks": 9,
+            "false_support_count": 1,
+            "false_support_rate": 0.1,
+            "gold_quotes": 10,
+            "matched_quotes": 9,
+            "quote_precision": 0.9,
+            "tasks": 10,
+            "unsupported_quotes": 1,
+            "unverified_quotes": 0,
+            "verified": 10,
+            "verified_quotes": 10,
+            "verified_rate": 1.0
+          },
+          "operation_selection": {
+            "accuracy": 0.8,
+            "accuracy_on_verified": 0.8,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 8,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          },
+          "relevance": {
+            "accuracy": 1.0,
+            "accuracy_on_verified": 1.0,
+            "answered": 10,
+            "answered_rate": 1.0,
+            "correct": 10,
+            "tasks": 10,
+            "verified": 10,
+            "verified_rate": 1.0
+          }
+        },
+        "correct": 45,
+        "extraction": {
+          "coverage": 0.9,
+          "emitted_quotes": 10,
+          "exact_match_rate": 0.9,
+          "exact_match_tasks": 9,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "gold_quotes": 10,
+          "matched_quotes": 9,
+          "quote_precision": 0.9,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0,
+          "verified_quotes": 10
+        },
+        "false_support": {
+          "emitted_quotes": 10,
+          "false_support_count": 1,
+          "false_support_rate": 0.1,
+          "unsupported_quotes": 1,
+          "unverified_quotes": 0
+        },
+        "scored_subtasks": 50,
+        "verified": 50,
+        "verified_rate": 1.0
+      },
+      "requested_concurrency": 3,
+      "retry_count": 1,
+      "scored_subtasks": 50,
+      "sweycoins": {
+        "allocated_milli": 250000,
+        "available_milli": 169000,
+        "event_count": 402,
+        "reservations": 201,
+        "reserved_milli": 0,
+        "spent_milli": 81000
+      },
+      "task_count": 50,
+      "task_throughput_per_second": 0.91,
+      "wall_ms": 54946.379
+    }
+  ],
+  "schema_version": 1,
+  "status": "LIVE_RUN",
+  "summary": {
+    "best_by_mode": {
+      "distributed_independent": {
+        "accuracy": 0.92,
+        "actual_usd": "N/A",
+        "answered_rate": 1.0,
+        "calculated_usd": "0.00055791",
+        "calculated_usd_complete_calls": "0.00055791",
+        "calls_with_unknown_usage": 0,
+        "concurrency": 2,
+        "early_cancelled_tasks": 0,
+        "extraction_coverage": 0.9,
+        "false_support_rate": 0.1,
+        "mode": "distributed_independent",
+        "model_ids": [
+          "nemotron-3-super"
+        ],
+        "p50_call_latency_ms": 7554.052,
+        "p95_call_latency_ms": 14934.949,
+        "sweycoins_spent_milli": 20000,
+        "tokens_complete_calls": {
+          "cache_read": 7504,
+          "cache_write": "N/A",
+          "input": 8874,
+          "output": 708,
+          "reasoning": "N/A"
+        },
+        "verified_rate": 1.0
+      },
+      "heterogeneous_competition": {
+        "accuracy": 0.9,
+        "actual_usd": "N/A",
+        "answered_rate": 1.0,
+        "calculated_usd": "N/A",
+        "calculated_usd_complete_calls": "0.0007515028",
+        "calls_with_unknown_usage": 149,
+        "concurrency": 3,
+        "early_cancelled_tasks": 50,
+        "extraction_coverage": 0.9,
+        "false_support_rate": 0.1,
+        "mode": "heterogeneous_competition",
+        "model_ids": [
+          "gpt-oss-20b",
+          "nemotron-3-super",
+          "mimo-v2.6-flash",
+          "deepseek-v4.1-flash"
+        ],
+        "p50_call_latency_ms": 25300.435,
+        "p95_call_latency_ms": 53430.174,
+        "sweycoins_spent_milli": 81000,
+        "tokens_complete_calls": {
+          "cache_read": 7618,
+          "cache_write": "N/A",
+          "input": 9464,
+          "output": 1103,
+          "reasoning": "N/A"
+        },
+        "verified_rate": 1.0
+      },
+      "single_call": {
+        "accuracy": 0.8,
+        "actual_usd": "N/A",
+        "answered_rate": 1.0,
+        "calculated_usd": "0.001060805",
+        "calculated_usd_complete_calls": "0.001060805",
+        "calls_with_unknown_usage": 0,
+        "concurrency": 1,
+        "early_cancelled_tasks": 0,
+        "extraction_coverage": 1.0,
+        "false_support_rate": 0.230769,
+        "mode": "single_call",
+        "model_ids": [
+          "gpt-oss-20b"
+        ],
+        "p50_call_latency_ms": 10437.722,
+        "p95_call_latency_ms": 20680.584,
+        "sweycoins_spent_milli": 12500,
+        "tokens_complete_calls": {
+          "cache_read": 1457,
+          "cache_write": "N/A",
+          "input": 5220,
+          "output": 2488,
+          "reasoning": "N/A"
+        },
+        "verified_rate": 1.0
+      }
+    },
+    "by_model_and_mode": {
+      "deepseek-v4.1-flash": {
+        "distributed_independent": {
+          "accuracy": 0.9,
+          "actual_usd": "N/A",
+          "answered_rate": 1.0,
+          "calculated_usd": "0.001340334",
+          "calculated_usd_complete_calls": "0.001340334",
+          "calls_with_unknown_usage": 0,
+          "concurrency": 2,
+          "early_cancelled_tasks": 0,
+          "extraction_coverage": 0.9,
+          "false_support_rate": 0.1,
+          "mode": "distributed_independent",
+          "model_ids": [
+            "deepseek-v4.1-flash"
+          ],
+          "p50_call_latency_ms": 21891.177,
+          "p95_call_latency_ms": 36532.688,
+          "sweycoins_spent_milli": 20000,
+          "tokens_complete_calls": {
+            "cache_read": 1528,
+            "cache_write": "N/A",
+            "input": 8421,
+            "output": 503,
+            "reasoning": "N/A"
+          },
+          "verified_rate": 1.0
+        },
+        "single_call": {
+          "accuracy": 0.72,
+          "actual_usd": "N/A",
+          "answered_rate": 1.0,
+          "calculated_usd": "0.000571806",
+          "calculated_usd_complete_calls": "0.000571806",
+          "calls_with_unknown_usage": 0,
+          "concurrency": 3,
+          "early_cancelled_tasks": 0,
+          "extraction_coverage": 0.9,
+          "false_support_rate": 0.1,
+          "mode": "single_call",
+          "model_ids": [
+            "deepseek-v4.1-flash"
+          ],
+          "p50_call_latency_ms": 1627.524,
+          "p95_call_latency_ms": 3408.059,
+          "sweycoins_spent_milli": 12500,
+          "tokens_complete_calls": {
+            "cache_read": 3552,
+            "cache_write": "N/A",
+            "input": 4849,
+            "output": 611,
+            "reasoning": "N/A"
+          },
+          "verified_rate": 1.0
+        }
+      },
+      "gpt-oss-20b": {
+        "distributed_independent": {
+          "accuracy": 0.86,
+          "actual_usd": "N/A",
+          "answered_rate": 1.0,
+          "calculated_usd": "0.001393",
+          "calculated_usd_complete_calls": "0.001393",
+          "calls_with_unknown_usage": 0,
+          "concurrency": 1,
+          "early_cancelled_tasks": 0,
+          "extraction_coverage": 0.9,
+          "false_support_rate": 0.1,
+          "mode": "distributed_independent",
+          "model_ids": [
+            "gpt-oss-20b"
+          ],
+          "p50_call_latency_ms": 24025.365,
+          "p95_call_latency_ms": 46088.086,
+          "sweycoins_spent_milli": 21000,
+          "tokens_complete_calls": {
+            "cache_read": 11618,
+            "cache_write": "N/A",
+            "input": 11669,
+            "output": 3276,
+            "reasoning": "N/A"
+          },
+          "verified_rate": 1.0
+        },
+        "single_call": {
+          "accuracy": 0.8,
+          "actual_usd": "N/A",
+          "answered_rate": 1.0,
+          "calculated_usd": "0.001060805",
+          "calculated_usd_complete_calls": "0.001060805",
+          "calls_with_unknown_usage": 0,
+          "concurrency": 1,
+          "early_cancelled_tasks": 0,
+          "extraction_coverage": 1.0,
+          "false_support_rate": 0.230769,
+          "mode": "single_call",
+          "model_ids": [
+            "gpt-oss-20b"
+          ],
+          "p50_call_latency_ms": 10437.722,
+          "p95_call_latency_ms": 20680.584,
+          "sweycoins_spent_milli": 12500,
+          "tokens_complete_calls": {
+            "cache_read": 1457,
+            "cache_write": "N/A",
+            "input": 5220,
+            "output": 2488,
+            "reasoning": "N/A"
+          },
+          "verified_rate": 1.0
+        }
+      },
+      "mimo-v2.6-flash": {
+        "distributed_independent": {
+          "accuracy": 0.92,
+          "actual_usd": "N/A",
+          "answered_rate": 1.0,
+          "calculated_usd": "0.000589036",
+          "calculated_usd_complete_calls": "0.000589036",
+          "calls_with_unknown_usage": 0,
+          "concurrency": 3,
+          "early_cancelled_tasks": 0,
+          "extraction_coverage": 0.9,
+          "false_support_rate": 0.1,
+          "mode": "distributed_independent",
+          "model_ids": [
+            "mimo-v2.6-flash"
+          ],
+          "p50_call_latency_ms": 13477.954,
+          "p95_call_latency_ms": 22886.982,
+          "sweycoins_spent_milli": 20000,
+          "tokens_complete_calls": {
+            "cache_read": 5120,
+            "cache_write": "N/A",
+            "input": 8273,
+            "output": 476,
+            "reasoning": "N/A"
+          },
+          "verified_rate": 1.0
+        },
+        "single_call": {
+          "accuracy": 0.76,
+          "actual_usd": "N/A",
+          "answered_rate": 1.0,
+          "calculated_usd": "0.000259812",
+          "calculated_usd_complete_calls": "0.000259812",
+          "calls_with_unknown_usage": 0,
+          "concurrency": 3,
+          "early_cancelled_tasks": 0,
+          "extraction_coverage": 1.0,
+          "false_support_rate": 0.090909,
+          "mode": "single_call",
+          "model_ids": [
+            "mimo-v2.6-flash"
+          ],
+          "p50_call_latency_ms": 2070.817,
+          "p95_call_latency_ms": 3983.027,
+          "sweycoins_spent_milli": 12500,
+          "tokens_complete_calls": {
+            "cache_read": 3840,
+            "cache_write": "N/A",
+            "input": 4485,
+            "output": 567,
+            "reasoning": "N/A"
+          },
+          "verified_rate": 1.0
+        }
+      },
+      "nemotron-3-super": {
+        "distributed_independent": {
+          "accuracy": 0.92,
+          "actual_usd": "N/A",
+          "answered_rate": 1.0,
+          "calculated_usd": "0.00055791",
+          "calculated_usd_complete_calls": "0.00055791",
+          "calls_with_unknown_usage": 0,
+          "concurrency": 2,
+          "early_cancelled_tasks": 0,
+          "extraction_coverage": 0.9,
+          "false_support_rate": 0.1,
+          "mode": "distributed_independent",
+          "model_ids": [
+            "nemotron-3-super"
+          ],
+          "p50_call_latency_ms": 7554.052,
+          "p95_call_latency_ms": 14934.949,
+          "sweycoins_spent_milli": 20000,
+          "tokens_complete_calls": {
+            "cache_read": 7504,
+            "cache_write": "N/A",
+            "input": 8874,
+            "output": 708,
+            "reasoning": "N/A"
+          },
+          "verified_rate": 1.0
+        },
+        "single_call": {
+          "accuracy": 0.68,
+          "actual_usd": "N/A",
+          "answered_rate": 1.0,
+          "calculated_usd": "0.00065292",
+          "calculated_usd_complete_calls": "0.00065292",
+          "calls_with_unknown_usage": 0,
+          "concurrency": 3,
+          "early_cancelled_tasks": 0,
+          "extraction_coverage": 0.7,
+          "false_support_rate": 0.3,
+          "mode": "single_call",
+          "model_ids": [
+            "nemotron-3-super"
+          ],
+          "p50_call_latency_ms": 1695.064,
+          "p95_call_latency_ms": 3045.386,
+          "sweycoins_spent_milli": 12500,
+          "tokens_complete_calls": {
+            "cache_read": 4304,
+            "cache_write": "N/A",
+            "input": 4968,
+            "output": 964,
+            "reasoning": "N/A"
+          },
+          "verified_rate": 1.0
+        }
+      }
+    },
+    "offline_disclaimer": "Offline runs use deterministic lexical personas; they are not evidence about any Ollama model.",
+    "run_count": 27
+  }
+}

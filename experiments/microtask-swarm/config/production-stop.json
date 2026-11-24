@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "scale": 1.0,
+  "provider_limit": 3,
+  "concurrency": 8,
+  "target_queue_ms": 400,
+  "count_stop_after_verified": 25,
+  "schedulers": [
+    {
+      "id": "D",
+      "adaptive": false,
+      "priority": false
+    },
+    {
+      "id": "P",
+      "adaptive": true,
+      "priority": true
+    }
+  ],
+  "policies": {
+    "coverage": {
+      "min_items": 5,
+      "min_need_coverage": 0.6,
+      "min_evidence_coverage": 0.6,
+      "max_abstention": 0.2,
+      "min_confidence": 0.6
+    },
+    "confidence": {
+      "min_items": 5,
+      "min_need_coverage": 0.5,
+      "min_evidence_coverage": 0.5,
+      "max_abstention": 0.2,
+      "min_confidence": 0.85
+    },
+    "hybrid": {
+      "min_items": 6,
+      "min_need_coverage": 0.7,
+      "min_evidence_coverage": 0.7,
+      "max_abstention": 0.1,
+      "min_confidence": 0.8
+    },
+    "strict": {
+      "min_items": 6,
+      "min_need_coverage": 0.8,
+      "min_evidence_coverage": 0.8,
+      "max_abstention": 0.05,
+      "min_confidence": 0.8,
+      "max_invalid_outputs": 0
+    }
+  },
+  "stress": {
+    "enabled": true,
+    "scheduler": "P",
+    "provider_limit": 3,
+    "concurrency": 8,
+    "abstain_fraction": 0.25,
+    "neutral_fraction": 0.25,
+    "seed": 99
+  }
+}

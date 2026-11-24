@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "train_item_count": 5,
+  "budget_cap_milli": 15000,
+  "models": [
+    "gpt-oss-20b",
+    "nemotron-3-super",
+    "mimo-v2.6-flash",
+    "deepseek-v4.1-flash"
+  ],
+  "model_tariff_multiplier": {
+    "gpt-oss-20b": 1.2,
+    "nemotron-3-super": 0.8,
+    "mimo-v2.6-flash": 1.0,
+    "deepseek-v4.1-flash": 1.5
+  },
+  "model_latency_multiplier": {
+    "gpt-oss-20b": 1.4,
+    "nemotron-3-super": 1.0,
+    "mimo-v2.6-flash": 0.7,
+    "deepseek-v4.1-flash": 1.8
+  },
+  "false_support_penalty": 0.5,
+  "speculative": true,
+  "max_speculative_extractions": 5,
+  "min_secondary_utility_gain": 0.0,
+  "late_billing_fraction": 0.5,
+  "stop": {
+    "min_items": 3,
+    "min_need_coverage": 0.6,
+    "min_evidence_coverage": 0.6,
+    "max_abstention": 0.1,
+    "min_confidence": 0.8,
+    "max_invalid_outputs": 1000000
+  },
+  "fixed_routes": {
+    "relevance": "nemotron-3-super",
+    "entailment": "nemotron-3-super",
+    "atomicity": "nemotron-3-super",
+    "extraction": "mimo-v2.6-flash",
+    "operation_selection": "nemotron-3-super"
+  }
+}
