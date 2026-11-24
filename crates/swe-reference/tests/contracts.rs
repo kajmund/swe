@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use swe_native::{
-    canonical_json_bytes, parse_json_str, sha256_hex, ChargeState, CompiledDefinition, Delivery,
-    GateError, Journal, JournalEvent, JournalHeader, NeedDiscovery, NeedLoopError, NeedRef,
-    NeedStatus, OperationSpec, Recovery, JOURNAL_SCHEMA_VERSION,
+    canonical_json_bytes, parse_json_str, sha256_hex, start_run, ChargeState, CompiledDefinition,
+    Delivery, Effect, GateError, Journal, JournalEvent, JournalHeader, Json, NeedDiscovery,
+    NeedLoopError, NeedRef, NeedStatus, OperationSpec, Recovery, RunStatus, JOURNAL_SCHEMA_VERSION,
 };
 use swe_reference::{journal_events_from_json, journal_events_to_json};
 
@@ -165,6 +165,68 @@ fn the_swd_fixture_compiles_to_the_definition_hash_the_journal_pins() {
     // no-op, so the hash above is about content, not formatting.
     let re_encoded = canonical_json_bytes(&document).expect("canonical");
     assert_eq!(read("swd-v1-workflow.json"), re_encoded);
+}
+
+#[test]
+fn the_swd_1_1_ready_map_fixture_admits_a_dependent_while_another_root_is_open() {
+    let document = fixture("swd-v1_1-ready-map.json");
+    let re_encoded = canonical_json_bytes(&document).expect("canonical");
+    assert_eq!(read("swd-v1_1-ready-map.json"), re_encoded);
+    let sha = fixture_digest("swd-v1_1-ready-map.json");
+    let compiled = CompiledDefinition::load(document.clone(), &sha).expect("1.1 compiles");
+    assert_eq!(compiled.version, "1.1");
+    let input = parse_json_str(
+        r#"{"tasks":[{"depends_on":[],"task_id":"slow"},{"depends_on":[],"task_id":"fast"},{"depends_on":["fast"],"task_id":"after_fast"}]}"#,
+    )
+    .expect("input");
+    let (mut machine, outcome) =
+        start_run(document, &sha, "ready-fixture".into(), input, 0).expect("starts");
+    assert_eq!(
+        handler_task_ids(&outcome.effects),
+        vec!["slow".to_string(), "fast".to_string()]
+    );
+    let fast = invoke_named(&outcome.effects, "fast");
+    let step = machine.complete(&fast, Json::object([("ok".into(), Json::Bool(true))]), 1);
+    assert_eq!(step.status, RunStatus::Running);
+    assert_eq!(
+        handler_task_ids(&step.effects),
+        vec!["after_fast".to_string()]
+    );
+}
+
+fn handler_task_ids(effects: &[Effect]) -> Vec<String> {
+    effects
+        .iter()
+        .filter_map(|effect| match effect {
+            Effect::InvokeHandler { input, .. } => input
+                .get("item")
+                .and_then(|item| item.get("task_id"))
+                .and_then(Json::as_str)
+                .map(str::to_string),
+            _ => None,
+        })
+        .collect()
+}
+
+fn invoke_named(effects: &[Effect], task_id: &str) -> String {
+    effects
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::InvokeHandler {
+                invocation_id,
+                input,
+                ..
+            } if input
+                .get("item")
+                .and_then(|item| item.get("task_id"))
+                .and_then(Json::as_str)
+                == Some(task_id) =>
+            {
+                Some(invocation_id.clone())
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("missing invocation for {task_id}"))
 }
 
 /// The fixtures are the emitter's output, not a second hand-maintained copy.

@@ -1,10 +1,12 @@
-"""Compile static microtask DAGs into ordinary SWD 1.0 map stages.
+"""Compile static microtask DAGs into ordinary SWD map stages.
 
 The microtask layer is an authoring and measurement convenience. It does not
-introduce a scheduler or a second workflow format: dependencies are divided
-into deterministic topological layers and each layer becomes one existing SWD
-``map`` node. The Rust machine therefore keeps ownership of bounded fan-out,
-join barriers, cancellation, events, and recovery identity.
+introduce a scheduler or a second workflow format. The default divides
+dependencies into deterministic topological layers and each layer becomes one
+SWD 1.0 ``map`` node. ``schedule="ready"`` emits one SWD 1.1 ready-map instead.
+The Rust machine keeps ownership of bounded fan-out, admission, cancellation,
+events, and recovery identity. ``depends_on`` admits work; it does not copy a
+dependency's output into the handler input.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import json
 import math
 import os
 import platform
+import re
 import sys
 import time
 from collections import defaultdict, deque
@@ -25,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from swe.definition import CompiledDefinition, compile_definition
+from swe.schema import SWD_VERSION, SWD_VERSION_1_1
 from swe.run_store import RunStore
 from swe.runtime import RunResult, WorkflowResources, WorkflowRunner
 from swe.runtime_clock import FrozenClock, WorkflowClock
@@ -35,6 +39,7 @@ from swe.runtime_validate import is_json_value
 DEFAULT_CONCURRENCY = 32
 DEFAULT_TIMEOUT_SECONDS = 300
 MAX_SWD_STEPS = 100_000
+ITEM_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
 
 
 class MicrotaskError(SweRuntimeError):
@@ -96,7 +101,7 @@ class Microtask:
 
 @dataclass(frozen=True, slots=True)
 class MicrotaskBatch:
-    """A compiled SWD 1.0 workflow plus its deterministic layer input."""
+    """A compiled SWD workflow plus its deterministic task input."""
 
     compiled: CompiledDefinition
     input_data: Mapping[str, Any]
@@ -106,6 +111,7 @@ class MicrotaskBatch:
     handler_name: str
     concurrency: int
     timeout_seconds: int
+    schedule: str
 
     async def run(
         self,
@@ -149,6 +155,8 @@ class MicrotaskBatch:
         """Return task results in topological-layer and input order."""
         if not isinstance(run.output, Mapping):
             raise MicrotaskError("completed run did not return an object output")
+        if self.schedule == "ready":
+            return _ready_rows(run.output, self.map_nodes, self.task_count)
         rows: list[Any] = []
         for node_id, expected_ids in zip(self.map_nodes, self.layers, strict=True):
             output = run.output.get(node_id)
@@ -173,8 +181,17 @@ def compile_microtasks(
     concurrency: int = DEFAULT_CONCURRENCY,
     name: str = "microtask_batch",
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    schedule: str = "ordered",
 ) -> MicrotaskBatch:
-    """Compile a static DAG to existing SWD map stages without a wire change."""
+    """Compile a static DAG to SWD map stages.
+
+    ``schedule="ordered"`` keeps today's SWD 1.0 layer maps. ``schedule="ready"``
+    emits one SWD 1.1 map whose admission follows item dependencies.
+    """
+    if schedule not in {"ordered", "ready"}:
+        raise MicrotaskError(
+            "schedule must be ordered or ready", path="schedule"
+        )
     if not isinstance(handler, str) or not handler:
         raise MicrotaskError("handler must be a non-empty string", path="handler")
     if isinstance(concurrency, bool) or not isinstance(concurrency, int):
@@ -200,6 +217,13 @@ def compile_microtasks(
                 f"duplicate task_id {task.task_id!r}", path=task.task_id
             )
         by_id[task.task_id] = task
+    if schedule == "ready":
+        for task in normalized:
+            if ITEM_ID_RE.fullmatch(task.task_id) is None:
+                raise MicrotaskError(
+                    f"task_id {task.task_id!r} is not a ready-map item id",
+                    path=task.task_id,
+                )
     for task in normalized:
         missing = [
             dependency for dependency in task.depends_on if dependency not in by_id
@@ -219,33 +243,64 @@ def compile_microtasks(
             f"batch needs {max_steps} SWD steps, above the frozen maximum {MAX_SWD_STEPS}"
         )
 
-    nodes: dict[str, Any] = {}
-    map_nodes: list[str] = []
-    for index, _layer in enumerate(layers):
-        map_node = f"microtasks_{index}"
-        child_node = f"microtask_{index}"
-        map_nodes.append(map_node)
-        next_node = f"microtasks_{index + 1}" if index + 1 < len(layers) else "done"
-        nodes[map_node] = {
-            "type": "map",
-            "items": f"$.input.layers.{index}",
-            "child": child_node,
-            "concurrency": concurrency,
-            "next": next_node,
-        }
-        nodes[child_node] = {
-            "type": "task",
-            "handler": handler,
-            "input": {
-                "task_id": "$.item.task_id",
-                "payload": "$.item.payload",
-                "depends_on": "$.item.depends_on",
+    task_input = {
+        "task_id": "$.item.task_id",
+        "payload": "$.item.payload",
+        "depends_on": "$.item.depends_on",
+    }
+    if schedule == "ready":
+        ordered_ids = [task_id for layer in layers for task_id in layer]
+        map_nodes = ["microtasks"]
+        nodes = {
+            "microtasks": {
+                "type": "map",
+                "items": "$.input.tasks",
+                "child": "microtask",
+                "concurrency": concurrency,
+                "schedule": "ready",
+                "item_id": "$.item.task_id",
+                "item_depends_on": "$.item.depends_on",
+                "next": "done",
             },
+            "microtask": {"type": "task", "handler": handler, "input": task_input},
+            "done": {"type": "end", "status": "completed"},
         }
-    nodes["done"] = {"type": "end", "status": "completed"}
+        version = SWD_VERSION_1_1
+        input_data: Mapping[str, Any] = {
+            "tasks": [_task_row(by_id[task_id]) for task_id in ordered_ids]
+        }
+    else:
+        nodes = {}
+        map_nodes = []
+        for index, _layer in enumerate(layers):
+            map_node = f"microtasks_{index}"
+            child_node = f"microtask_{index}"
+            map_nodes.append(map_node)
+            next_node = (
+                f"microtasks_{index + 1}" if index + 1 < len(layers) else "done"
+            )
+            nodes[map_node] = {
+                "type": "map",
+                "items": f"$.input.layers.{index}",
+                "child": child_node,
+                "concurrency": concurrency,
+                "next": next_node,
+            }
+            nodes[child_node] = {
+                "type": "task",
+                "handler": handler,
+                "input": task_input,
+            }
+        nodes["done"] = {"type": "end", "status": "completed"}
+        version = SWD_VERSION
+        input_data = {
+            "layers": [
+                [_task_row(by_id[task_id]) for task_id in layer] for layer in layers
+            ]
+        }
 
     document = {
-        "version": "1.0",
+        "version": version,
         "name": name,
         "entrypoint": map_nodes[0],
         "limits": {
@@ -256,27 +311,42 @@ def compile_microtasks(
         "nodes": nodes,
     }
     compiled = compile_definition(document, handlers=frozenset({handler}))
-    layer_payloads = [
-        [
-            {
-                "task_id": by_id[task_id].task_id,
-                "payload": by_id[task_id].payload,
-                "depends_on": list(by_id[task_id].depends_on),
-            }
-            for task_id in layer
-        ]
-        for layer in layers
-    ]
     return MicrotaskBatch(
         compiled=compiled,
-        input_data={"layers": layer_payloads},
+        input_data=input_data,
         layers=layers,
         map_nodes=tuple(map_nodes),
         task_count=len(normalized),
         handler_name=handler,
         concurrency=concurrency,
         timeout_seconds=timeout_seconds,
+        schedule=schedule,
     )
+
+
+def _task_row(task: Microtask) -> dict[str, Any]:
+    return {
+        "task_id": task.task_id,
+        "payload": task.payload,
+        "depends_on": list(task.depends_on),
+    }
+
+
+def _ready_rows(
+    output: Mapping[str, Any], map_nodes: tuple[str, ...], task_count: int
+) -> tuple[Any, ...]:
+    if len(map_nodes) != 1:
+        raise MicrotaskError("ready schedule emits one map", path="schedule")
+    node_output = output.get(map_nodes[0])
+    if not isinstance(node_output, Mapping):
+        raise MicrotaskError(f"missing map output for {map_nodes[0]!r}", path=map_nodes[0])
+    rows = node_output.get("result")
+    if not isinstance(rows, list) or len(rows) != task_count:
+        raise MicrotaskError(
+            f"map output for {map_nodes[0]!r} has the wrong result count",
+            path=map_nodes[0],
+        )
+    return tuple(rows)
 
 
 def _topological_layers(tasks: Sequence[Microtask]) -> tuple[tuple[str, ...], ...]:
