@@ -22,5 +22,13 @@ ValidatorInput(task_id="relevance.validate", source_task_id="relevance.generate"
 The bind is explicit. The map child does not perform it, and a missing or
 mistyped output fails in the Pydantic model before a validator runs.
 
+The planned kinds are `relevance`, `extraction`, `entailment`, `atomicity`,
+and `operation`. A generation is `{kind}.generate`. Its validator is
+`{kind}.validate`, and `source_task_id` is that same generation id. A crossed
+kind, an unplanned kind, or a direct `ValidatorInput` whose task, source, and
+generation name different kinds fails closed. This check stays inside the
+proposal. It does not add a runtime value channel, and SWD 1.1 section 7 keeps
+the map value channel absent.
+
 No provider is called. No `RuntimeBudget` tariff is implied by this proposal.
 The production tariff stays with the microtask-swarm policy.
