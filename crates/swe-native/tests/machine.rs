@@ -733,6 +733,46 @@ fn swd_1_0_handler_serials_stay_on_the_global_clock() {
 }
 
 #[test]
+fn parallel_nested_maps_keep_serials_when_the_other_branch_finishes_first() {
+    let raw = parallel_fork_maps_definition();
+    let input = ready_child_input(&[task_item("outer", &[])], false);
+    let low = handler_ids(&raw, input.clone(), false, |_, _, _| Json::empty_object());
+    let high = handler_ids(&raw, input, true, |_, _, _| Json::empty_object());
+    let left_low = part_serial(&low, "left_part");
+    let left_high = part_serial(&high, "left_part");
+    let right_low = part_serial(&low, "right_part");
+    let right_high = part_serial(&high, "right_part");
+    assert_eq!(
+        left_low, left_high,
+        "left_part serial followed completion order: {left_low} vs {left_high}"
+    );
+    assert_eq!(
+        right_low, right_high,
+        "right_part serial followed completion order: {right_low} vs {right_high}"
+    );
+    assert_ne!(
+        left_low, right_low,
+        "parallel parts collapsed to one serial"
+    );
+    assert_eq!(
+        low, high,
+        "another completion order changed an invocation id"
+    );
+}
+
+fn part_serial(ids: &std::collections::BTreeMap<(String, String, u32), String>, node: &str) -> u64 {
+    let (_, id) = ids
+        .iter()
+        .find(|((name, _, visit), _)| name == node && *visit == 1)
+        .unwrap_or_else(|| panic!("{node} was not scheduled"));
+    id.rsplit(':')
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap_or_else(|_| panic!("{node} id {id}"))
+}
+
+#[test]
 fn ready_child_graphs_keep_invocation_ids_across_completion_order() {
     let items = vec![
         task_item("slow", &[]),
@@ -944,6 +984,34 @@ fn fork_ready_definition() -> String {
         "lane_a": {"type": "task", "handler": "demo.left", "next": "lane_a2"},
         "lane_a2": {"type": "task", "handler": "demo.left2"},
         "lane_b": {"type": "task", "handler": "demo.right"},
+        "joined": {"type": "join", "mode": "all"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#
+    .to_string()
+}
+
+fn parallel_fork_maps_definition() -> String {
+    r#"{
+      "version": "1.1",
+      "name": "ready_parallel_maps",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 500, "max_depth": 6, "timeout_seconds": 30},
+      "nodes": {
+        "fanout": {
+          "type": "map", "items": "$.input.tasks", "child": "split", "concurrency": 2,
+          "schedule": "ready", "item_id": "$.item.task_id", "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "split": {"type": "fork", "branches": {"left": "lane_a", "right": "lane_b"}, "join": "joined"},
+        "lane_a": {"type": "task", "handler": "demo.left", "next": "left_map"},
+        "left_map": {"type": "map", "items": "$.input.tasks", "child": "left_part", "next": "lane_a2"},
+        "left_part": {"type": "task", "handler": "demo.left_part"},
+        "lane_a2": {"type": "task", "handler": "demo.left2"},
+        "lane_b": {"type": "task", "handler": "demo.right", "next": "right_map"},
+        "right_map": {"type": "map", "items": "$.input.tasks", "child": "right_part", "next": "right_tail"},
+        "right_part": {"type": "task", "handler": "demo.right_part"},
+        "right_tail": {"type": "task", "handler": "demo.right_tail"},
         "joined": {"type": "join", "mode": "all"},
         "done": {"type": "end", "status": "completed"}
       }

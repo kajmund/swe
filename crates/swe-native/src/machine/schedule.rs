@@ -332,7 +332,7 @@ impl Machine {
         fork.branch_name = branch_name;
         fork.fork_instance_id = Some(fork_id.clone());
         fork.remaining = branches.len();
-        assign_isolated_cursor(self, parent_id, &mut fork);
+        assign_isolated_cursor(self, parent_id, &mut fork)?;
         for (name, start) in &branches {
             fork.branches.insert(
                 name.clone(),
@@ -357,7 +357,7 @@ impl Machine {
             branch.branch_name = Some(name.clone());
             branch.branch_path = path.clone();
             branch.fork_instance_id = Some(fork_id.clone());
-            assign_isolated_cursor(self, &fork_id, &mut branch);
+            assign_isolated_cursor(self, &fork_id, &mut branch)?;
             self.scopes.insert(branch_id.clone(), branch);
             self.emit(
                 EventKind::BranchSpawned,
@@ -411,9 +411,9 @@ impl Machine {
         map.items = items;
         map.concurrency = cap;
         map.remaining = map.items.len();
-        assign_isolated_cursor(self, start.parent_id, &mut map);
+        assign_isolated_cursor(self, start.parent_id, &mut map)?;
         if let Some(plan) = ready {
-            let serials = reserve_ready_serials(self, start.parent_id, plan.ids.len());
+            let serials = reserve_ready_serials(self, start.parent_id, plan.ids.len())?;
             map.map_schedule = MapSchedule::Ready;
             map.unmet = plan.unmet;
             map.dependents = plan.dependents;
@@ -475,7 +475,7 @@ impl Machine {
                 scope.owner_node = parent.owner_node.clone();
                 scope
             };
-            assign_isolated_cursor(self, map_id, &mut child_scope);
+            assign_isolated_cursor(self, map_id, &mut child_scope)?;
             self.scopes.insert(child_id.clone(), child_scope);
             if let Some(map) = self.scopes.get_mut(map_id) {
                 map.next_child += 1;
@@ -888,57 +888,50 @@ fn child_scope(parent: &Scope, id: String, kind: ScopeKind, depth: u32) -> Scope
     }
 }
 
-fn reserve_ready_serials(machine: &mut Machine, parent_id: &str, count: usize) -> Vec<u64> {
+fn reserve_ready_serials(machine: &mut Machine, parent_id: &str, count: usize) -> Result<Vec<u64>> {
     let isolated = machine
         .scopes
         .get(parent_id)
         .and_then(|scope| scope.serial_cursor)
         .is_some();
-    if isolated {
-        return (0..count)
-            .map(|_| {
-                reserve_isolated_stride(machine, parent_id)
-                    .expect("isolated ready map has a cursor")
-            })
-            .collect();
+    if !isolated {
+        return Ok((0..count).map(|_| machine.new_serial()).collect());
     }
-    (0..count).map(|_| machine.new_serial()).collect()
+    let mut serials = Vec::with_capacity(count);
+    for _ in 0..count {
+        let base = reserve_parent_stride(machine, parent_id)?.ok_or_else(|| {
+            RuntimeError::internal("isolated ready map is missing a serial cursor")
+        })?;
+        serials.push(base);
+    }
+    Ok(serials)
 }
 
-/// A scope under a ready item gets its own serial range. Ranges are `max_steps`
-/// apart so a later fork or map that reuses a branch path cannot repeat an id.
-fn assign_isolated_cursor(machine: &mut Machine, parent_id: &str, scope: &mut Scope) {
-    if let Some(base) = reserve_isolated_stride(machine, parent_id) {
+/// Child ranges come from the scope that creates them. A fork branch therefore
+/// does not share the ready item's cursor, so a sibling finishing first cannot
+/// take its serials. One scope owns `max_steps` serials; the next sibling
+/// starts after that. Overflow fails closed instead of aliasing ids.
+fn assign_isolated_cursor(machine: &mut Machine, parent_id: &str, scope: &mut Scope) -> Result<()> {
+    if let Some(base) = reserve_parent_stride(machine, parent_id)? {
         scope.serial_cursor = Some(base);
     }
+    Ok(())
 }
 
-fn reserve_isolated_stride(machine: &mut Machine, parent_id: &str) -> Option<u64> {
-    let root_id = isolated_root(machine, parent_id)?;
+fn reserve_parent_stride(machine: &mut Machine, parent_id: &str) -> Result<Option<u64>> {
     let stride = u64::from(machine.definition.limits.max_steps).max(1);
-    let root = machine.scopes.get_mut(&root_id)?;
-    let cursor = root.serial_cursor.as_mut()?;
+    let Some(parent) = machine.scopes.get_mut(parent_id) else {
+        return Ok(None);
+    };
+    let Some(cursor) = parent.serial_cursor.as_mut() else {
+        return Ok(None);
+    };
     let base = *cursor;
-    *cursor = cursor.saturating_add(stride);
-    Some(base)
-}
-
-fn isolated_root(machine: &Machine, start: &str) -> Option<String> {
-    let mut current = start.to_string();
-    let mut root = None;
-    loop {
-        let scope = machine.scopes.get(&current)?;
-        if scope.serial_cursor.is_none() {
-            break;
-        }
-        let parent = scope.parent.clone();
-        root = Some(current);
-        match parent {
-            Some(parent) => current = parent,
-            None => break,
-        }
-    }
-    root
+    let next = base
+        .checked_add(stride)
+        .ok_or_else(|| RuntimeError::limit("ready-map invocation serial space is exhausted"))?;
+    *cursor = next;
+    Ok(Some(base))
 }
 
 pub fn join_path(parent: &str, child: &str) -> String {
