@@ -27,6 +27,15 @@ Each semantic kind is two invocations, `kind.generate` and `kind.validate`.
 The provider and model come from the generation and decision configurations.
 A validator does not call the model again.
 
+## Ready-DAG seam
+
+`SEAM.md` records the boundary with t1bq's `experiment/barrier-free-scheduler`.
+The migration check is `ready_ids`: a task is eligible when its dependency ids
+are complete. This package does not contain that scheduler. The proposed map
+fields are `schedule`, `item_id`, and `item_depends_on`. They admit a task and
+do not deliver the dependency result. `RuntimeBudget` stays unattached until
+PR #11 is merged.
+
 ## Budget
 
 PR #11 is open. `RuntimeBudget` is not attached. t1bq owns that wait.

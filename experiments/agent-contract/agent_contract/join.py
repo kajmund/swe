@@ -121,7 +121,10 @@ def validate(kind: str, output: dict[str, Any] | None) -> str | None:
         return "relevant must be a boolean"
     if kind == "extraction" and not isinstance(output.get("quotes"), list):
         return "quotes must be a list"
-    if kind == "entailment" and output.get("choice") not in {"entailment", "contradiction", "neutral"}:
+    choice = output.get("choice")
+    if kind == "entailment" and (
+        not isinstance(choice, str) or choice not in {"entailment", "contradiction", "neutral"}
+    ):
         return "choice is outside the entailment labels"
     if kind == "atomicity" and not isinstance(output.get("atomic"), bool):
         return "atomic must be a boolean"
