@@ -1,16 +1,14 @@
 """Offline preflight of PR 13 against the real SWE machine.
 
-The wheel and ``WorkflowRunner`` come from this checkout. ``python/`` and
-``crates/`` match the merge base with ``origin/main``. The script does not
-import a runtime budget, does not construct ``RuntimeBudget``, and does not
-call a model provider.
+The wheel and ``WorkflowRunner`` come from this checkout. Each run attaches
+``RuntimeBudget`` through ``WorkflowResources``. The tariff is the injected
+one-milli policy, not the microtask-swarm policy. The script does not call a
+model provider.
 """
 
 from __future__ import annotations
 
 import asyncio
-import importlib
-import importlib.util
 import inspect
 import subprocess
 import sys
@@ -41,6 +39,7 @@ from hy4_research_policy.agent_adapter import (  # noqa: E402
     GenerationRequest,
     Usage,
 )
+from agent_contract.budget_run import budget_trace, open_budget, resources_for  # noqa: E402
 from swe.microtasks import Microtask, compile_microtasks  # noqa: E402
 from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord, RunStore  # noqa: E402
 from swe.runtime import WorkflowRunner  # noqa: E402
@@ -133,16 +132,6 @@ def _git(*args: str) -> str:
     return subprocess.check_output(("git", "-C", str(ROOT), *args), text=True).strip()
 
 
-def _budget_guard() -> dict[str, Any]:
-    spec = importlib.util.find_spec("swe.budget")
-    if spec is None:
-        return {"attached": False, "reason": "swe.budget is absent on this checkout"}
-    module = importlib.import_module("swe.budget")
-    if hasattr(module, "RuntimeBudget"):
-        raise RuntimeError("RuntimeBudget is present; this preflight does not attach it")
-    return {"attached": False, "reason": "RuntimeBudget is absent"}
-
-
 def _configs(provider: str) -> tuple[AgentConfig, AgentConfig]:
     return (
         AgentConfig(kind="generation", provider=provider, model=f"{provider}-model"),
@@ -180,6 +169,7 @@ async def _layer_barrier() -> dict[str, Any]:
     started: list[str] = []
     release_slow = asyncio.Event()
     store = MemoryRunStore()
+    budget = open_budget("layer-barrier", batch.task_count)
 
     async def work(payload: Mapping[str, Any]) -> dict[str, Any]:
         task_id = str(payload["task_id"])
@@ -206,7 +196,12 @@ async def _layer_barrier() -> dict[str, Any]:
 
     run, window = await asyncio.wait_for(
         asyncio.gather(
-            batch.run(work, run_store=store, run_id="layer-barrier"),
+            batch.run(
+                work,
+                resources=resources_for(budget),
+                run_store=store,
+                run_id="layer-barrier",
+            ),
             watch(),
         ),
         timeout=5,
@@ -218,6 +213,7 @@ async def _layer_barrier() -> dict[str, Any]:
         "after_fast_started_before_slow_released": "after_fast" in window,
         "final_start_order": started,
         "handler_input_keys": ["depends_on", "payload", "task_id"],
+        "budget": budget_trace(budget),
     }
 
 
@@ -233,6 +229,8 @@ async def _contract(provider_name: str) -> dict[str, Any]:
     journal = _Journal()
     host = AgentHost(budget=_Allow(), journal=journal, retries=0)
     store = MemoryRunStore()
+    run_id = f"contract-{provider_name}"
+    budget = open_budget(run_id, batch.task_count)
     seen_inputs: list[list[str]] = []
 
     async def work(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -284,12 +282,18 @@ async def _contract(provider_name: str) -> dict[str, Any]:
             "upstream_output_present": "output" in payload,
         }
 
-    run = await batch.run(work, run_store=store, run_id=f"contract-{provider_name}")
+    run = await batch.run(
+        work,
+        resources=resources_for(budget),
+        run_store=store,
+        run_id=run_id,
+    )
     rows = []
-    for record in store.invocations[f"contract-{provider_name}"].values():
+    for record in store.invocations[run_id].values():
         value = record.value if isinstance(record.value, Mapping) else {}
         rows.append(
             {
+                "invocation_id": record.invocation_id,
                 "node_id": record.node_id,
                 "ok": record.ok,
                 "task_id": value.get("task_id"),
@@ -312,6 +316,7 @@ async def _contract(provider_name: str) -> dict[str, Any]:
         "generation_calls": list(generation.calls),
         "decision_calls": list(decision.calls),
         "handler_input_keys": sorted({key for keys in seen_inputs for key in keys}),
+        "budget": budget_trace(budget),
     }
 
 
@@ -333,27 +338,29 @@ async def _replay() -> dict[str, Any]:
         return {"task_id": task_id}
 
     store = _CrashOnce(crash_after=1)
+    budget = open_budget("replay-run", batch.task_count)
+    resources = resources_for(budget)
     try:
-        await batch.run(work, run_store=store, run_id="replay-run")
+        await batch.run(work, resources=resources, run_store=store, run_id="replay-run")
     except RuntimeError as exc:
         crashed = str(exc) == "simulated crash"
     else:
         crashed = False
     before = list(executed)
-    resumed = await batch.resume(work, "replay-run", run_store=store)
+    resumed = await batch.resume(work, "replay-run", resources=resources, run_store=store)
     return {
         "crashed_after_first_persisted_invocation": crashed,
         "executed_before_resume": before,
         "executed_after_resume": list(executed),
         "resume_status": resumed.status,
         "replayed_task_executed_again": executed.count("a") != 1,
+        "budget": budget_trace(budget),
     }
 
 
 async def run_preflight() -> dict[str, Any]:
     import swe_native
 
-    budget = _budget_guard()
     package_budget = runtime_budget_status()
     gap = dispatch_gap()
     refused = False
@@ -381,7 +388,7 @@ async def run_preflight() -> dict[str, Any]:
             for name in inspect.signature(WorkflowRunner.__init__).parameters
             if name != "self"
         ],
-        "runtime_budget": budget,
+        "runtime_budget": alpha["budget"],
         "package_runtime_budget": package_budget,
         "package_dispatch_gap": {
             "event_ready": gap["event_ready"],

@@ -6,7 +6,8 @@ mode, where a task would start as soon as its own dependencies finish.
 ``WorkflowRunner`` is the dispatch boundary and it requires ``swe_native``.
 This module does not replace that machine.
 
-PR #11 is still open, so ``swe.budget.RuntimeBudget`` is not attached.
+PR #11 is merged. A run attaches ``RuntimeBudget`` through
+``WorkflowResources`` at that boundary. This module does not construct one.
 """
 
 from __future__ import annotations
@@ -36,18 +37,26 @@ class DispatchGap(RuntimeError):
     """SWE cannot run this plan on the invocation boundary from here."""
 
 
-class BudgetPending(RuntimeError):
-    """PR #11 is not merged, so no runtime budget is attached."""
-
-
 def runtime_budget_status() -> dict[str, Any]:
     try:
         import swe.budget as budget
     except ImportError:
-        return {"attached": False, "reason": "PR 11 is open and not merged"}
+        return {
+            "available": False,
+            "attached": False,
+            "reason": "swe.budget is not importable",
+        }
     if not hasattr(budget, "RuntimeBudget"):
-        return {"attached": False, "reason": "RuntimeBudget is absent"}
-    return {"attached": True, "reason": "swe.budget.RuntimeBudget"}
+        return {
+            "available": False,
+            "attached": False,
+            "reason": "RuntimeBudget is absent",
+        }
+    return {
+        "available": True,
+        "attached": False,
+        "reason": "RuntimeBudget attaches per run through WorkflowResources",
+    }
 
 
 def dispatch_gap() -> dict[str, Any]:
@@ -106,10 +115,7 @@ def plan_invocations(generation: AgentConfig, decision: AgentConfig) -> list[dic
 def require_swe_dispatch() -> None:
     """Refuse a local runner. SWE's machine is the only dispatcher."""
 
-    gap = dispatch_gap()
-    if gap["runtime_budget"]["attached"]:
-        raise BudgetPending("RuntimeBudget imported before PR 11 was recorded merged")
-    raise DispatchGap(gap["reason"])
+    raise DispatchGap(dispatch_gap()["reason"])
 
 
 def validate(kind: str, output: dict[str, Any] | None) -> str | None:

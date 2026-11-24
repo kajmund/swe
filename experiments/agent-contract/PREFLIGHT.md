@@ -2,10 +2,10 @@
 
 PR 13, branch `experiment/agent-microtask-contract`. The run uses the checkout's
 `WorkflowRunner` and a `swe_native` wheel built from `crates/swe-native` in the
-same tree. `python/` and `crates/` match `origin/main` at
-`eff1c7e8943dd64827fb4916719ced5515bf3db5`. PR 11 is not checked out.
-`swe.budget` is absent, `WorkflowRunner` has no budget parameter, and
-`RuntimeBudget` is not constructed. The run makes no provider call.
+same tree. `python/` and `crates/` match `origin/main` after PR 11
+(`252620be31a4bf0d2c1f451d3ce2137a2b158fc1`). Each run attaches
+`RuntimeBudget` through `WorkflowResources` with an injected one-milli policy.
+The production tariff stays with t1bp. The run makes no provider call.
 
 ## Reproduction
 
@@ -14,6 +14,10 @@ From this worktree, with Python 3.12 and `cargo` on `PATH`:
 ```bash
 python3.12 -m venv /tmp/pr13-preflight/venv
 /tmp/pr13-preflight/venv/bin/pip install maturin pydantic jsonschema pyyaml pytest
+/tmp/pr13-preflight/venv/bin/maturin build \
+  --manifest-path crates/swe-budget-py/Cargo.toml \
+  --interpreter /tmp/pr13-preflight/venv/bin/python \
+  --out /tmp/pr13-preflight/dist
 /tmp/pr13-preflight/venv/bin/maturin build \
   --manifest-path crates/swe-native/Cargo.toml \
   --interpreter /tmp/pr13-preflight/venv/bin/python \
@@ -25,9 +29,10 @@ PYTHONPATH=experiments/agent-contract \
   /tmp/pr13-preflight/venv/bin/python -m pytest experiments/agent-contract/tests/test_preflight.py
 ```
 
-The wheel built for this run is
-`swe_native-0.1.0-cp312-cp312-macosx_11_0_arm64.whl`. The installed extension
-is `swe_native.cpython-312-darwin.so`. Leave the system interpreter unchanged.
+The wheels built for this run are
+`swe_budget_native-0.1.0-cp312-cp312-macosx_11_0_arm64.whl` and
+`swe_native-0.1.0-cp312-cp312-macosx_11_0_arm64.whl`. Leave the system
+interpreter unchanged.
 
 ## Observed trace
 
@@ -72,5 +77,7 @@ A crash after the persisted invocation `a` resumes through `WorkflowRunner` to
 
 Config selects the provider and model inside the static payload. It does not
 change the compiled definition. The semantic check of a generation result needs
-a value channel the map child input does not have. Production budget stays
-unattached until PR 11 is merged.
+a value channel the map child input does not have. `VALUE_CHANNEL.md`
+proposes that bind as a host call. It does not change SWD. The contract run
+reserves and settles one milli-unit per handler invocation through the real
+`WorkflowRunner`.

@@ -10,7 +10,9 @@ from agent_contract.preflight import run_preflight
 def test_offline_machine_preflight() -> None:
     report = asyncio.run(run_preflight())
     assert report["paid_calls"] == 0
-    assert report["runtime_budget"]["attached"] is False
+    assert report["runtime_budget"]["attached"] is True
+    assert report["runtime_budget"]["spent_milli"] == 10
+    assert report["runtime_budget"]["reserved_milli"] == 0
     assert report["package_runtime_budget"]["attached"] is False
     assert "budget" not in report["runner_parameters"]
     assert report["package_dispatch_gap"]["event_ready"] is False
@@ -22,6 +24,7 @@ def test_offline_machine_preflight() -> None:
     contract = report["contract"]
     assert contract["same_definition"] is True
     assert contract["same_task_ids"] is True
+    assert len({row["invocation_id"] for row in contract["alpha_trace"]}) == 10
     assert contract["handler_input_keys"] == ["depends_on", "payload", "task_id"]
     assert contract["upstream_output_present"] is False
     assert contract["validator_model_calls"] == 0

@@ -1,7 +1,7 @@
 {
   "checkout": {
     "branch": "experiment/agent-microtask-contract",
-    "merge_base": "eff1c7e8943dd64827fb4916719ced5515bf3db5",
+    "merge_base": "252620be31a4bf0d2c1f451d3ce2137a2b158fc1",
     "python_and_crates_diff": ""
   },
   "contract": {
@@ -197,6 +197,15 @@
   },
   "layer_barrier": {
     "after_fast_started_before_slow_released": false,
+    "budget": {
+      "account": "agent-contract",
+      "attached": true,
+      "available_milli": 0,
+      "events": 7,
+      "policy": "injected-fixed-milli",
+      "reserved_milli": 0,
+      "spent_milli": 3
+    },
     "final_start_order": [
       "slow",
       "fast",
@@ -230,10 +239,20 @@
   },
   "package_runtime_budget": {
     "attached": false,
-    "reason": "PR 11 is open and not merged"
+    "available": true,
+    "reason": "RuntimeBudget attaches per run through WorkflowResources"
   },
   "paid_calls": 0,
   "replay": {
+    "budget": {
+      "account": "agent-contract",
+      "attached": true,
+      "available_milli": 0,
+      "events": 5,
+      "policy": "injected-fixed-milli",
+      "reserved_milli": 0,
+      "spent_milli": 2
+    },
     "crashed_after_first_persisted_invocation": true,
     "executed_after_resume": [
       "a",
@@ -254,12 +273,15 @@
     "concurrency"
   ],
   "runtime_budget": {
-    "attached": false,
-    "reason": "swe.budget is absent on this checkout"
+    "account": "agent-contract",
+    "attached": true,
+    "available_milli": 0,
+    "events": 21,
+    "policy": "injected-fixed-milli",
+    "reserved_milli": 0,
+    "spent_milli": 10
   },
   "wheel": {
-    "built_from": "crates/swe-native",
-    "distribution": "swe_native-0.1.0-cp312-cp312-macosx_11_0_arm64.whl",
-    "extension": "swe_native.cpython-312-darwin.so"
+    "file": "/private/tmp/pr13-preflight/venv/lib/python3.12/site-packages/swe_native/__init__.py"
   }
 }

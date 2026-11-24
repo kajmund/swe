@@ -56,5 +56,8 @@ predicate with a layer wait would fail `tests/test_seam.py`.
 
 `item_depends_on` decides admission. The handler input measured here still has
 no dependency result, so a validator cannot read the generation output through
-that field. The value channel stays `absent` until a separate contract injects
-it. Production budget stays on PR 11.
+that field. `VALUE_CHANNEL.md` is the separate proposal: the host binds a
+typed `GenerationOutput` into `ValidatorInput`. That bind is not an SWD change.
+
+PR #11 is merged. Budget attaches per run through `WorkflowResources` and the
+real `WorkflowRunner`. This package does not own the production tariff.

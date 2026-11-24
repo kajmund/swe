@@ -38,4 +38,12 @@ PR #11 is merged.
 
 ## Budget
 
-PR #11 is open. `RuntimeBudget` is not attached. t1bq owns that wait.
+PR #11 is merged. A run attaches `RuntimeBudget` through `WorkflowResources`
+on `WorkflowRunner`. The fixed one-milli policy in `budget_run.py` is an
+injected stand-in. t1bp owns the production tariff in `experiment/microtask-swarm`.
+
+## Value channel
+
+`VALUE_CHANNEL.md` proposes a typed `GenerationOutput` bound into
+`ValidatorInput` by an explicit host call. The SWD schema is unchanged, and
+the map handler still does not receive that output.
