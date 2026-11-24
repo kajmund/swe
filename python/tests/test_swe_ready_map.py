@@ -641,3 +641,175 @@ class _CrashOnceStore(RunStore):
 
     async def events(self, run_id: str) -> list[dict[str, Any]]:
         return list(self.event_log.get(run_id, []))
+
+
+class _MilliPolicy:
+    """One milli-unit for a successful child. Matches the PR11 fixed tariff."""
+
+    def reserve(self, request: object) -> int:
+        del request
+        return 1
+
+    def settle(self, request: object, outcome: object) -> int:
+        del request
+        return 1 if getattr(outcome, "ok", False) else 0
+
+
+def _ready_budget(cap_milli: int) -> tuple[Any, Any]:
+    pytest.importorskip("swe_budget")
+    from swe.budget import NativeBudgetLedger, RuntimeBudget
+
+    ledger = NativeBudgetLedger()
+    ledger.allocate(run_id="run-1", account="a", amount_milli=cap_milli, key="a:alloc")
+    return RuntimeBudget(ledger, _MilliPolicy(), account="a"), ledger
+
+
+def _ready_tasks(*task_ids: str, depends: Mapping[str, Sequence[str]] | None = None) -> dict[str, Any]:
+    dependencies = depends or {}
+    return {
+        "tasks": [
+            {
+                "task_id": task_id,
+                "payload": {},
+                "depends_on": list(dependencies.get(task_id, ())),
+            }
+            for task_id in task_ids
+        ]
+    }
+
+
+def _assert_child_invocation(invocation_id: str, *, run_id: str, task_id: str) -> None:
+    run, node, path, epoch, serial = invocation_id.split(":")
+    assert run == run_id
+    assert node == "work"
+    assert path.endswith(f"/{task_id}")
+    assert epoch == "0"
+    int(serial)
+
+
+def _spend_invocation_ids(ledger: Any, *, run_id: str) -> list[str]:
+    found: list[str] = []
+    for event in ledger.events():
+        if event["kind"] != "spend":
+            continue
+        key = str(event["key"])
+        assert key.endswith(":settle")
+        body = key[: -len(":settle")]
+        prefix = f"{run_id}:"
+        assert body.startswith(prefix)
+        found.append(body[len(prefix) :])
+    return found
+
+
+def _assert_budget_closed(budget: Any, ledger: Any, *, spent: int) -> None:
+    balance = ledger.balance(account="a")
+    assert balance["spent"] == spent
+    assert balance["reserved"] == 0
+    assert budget.open_count == 0
+    assert budget.unresolved() == ()
+    assert {event["kind"] for event in ledger.events()} <= {
+        "allocate",
+        "reserve",
+        "spend",
+        "release",
+    }
+
+
+async def test_ready_map_budget_refuses_the_child_past_the_cap() -> None:
+    calls: list[str] = []
+
+    async def work(payload: Mapping[str, Any]) -> dict[str, str]:
+        task_id = str(payload["task_id"])
+        calls.append(task_id)
+        handle = current_invocation()
+        assert handle is not None
+        _assert_child_invocation(handle.invocation_id, run_id="ready-budget-cap", task_id=task_id)
+        return {"task_id": task_id}
+
+    budget, ledger = _ready_budget(1)
+    compiled = compile_definition(_ready_document(), handlers=frozenset({"demo.work"}))
+    result = await asyncio.wait_for(
+        WorkflowRunner(
+            compiled,
+            {"demo.work": work},
+            resources=WorkflowResources(budget=budget),
+            run_store=MemoryRunStore(),
+        ).run(_ready_tasks("only", "next", "last"), run_id="ready-budget-cap"),
+        timeout=2,
+    )
+    assert result.status == "failed"
+    assert result.error is not None
+    assert "budget" in result.error["message"].lower()
+    assert len(calls) == 1
+    assert calls[0] in {"only", "next", "last"}
+    spends = _spend_invocation_ids(ledger, run_id="ready-budget-cap")
+    assert len(spends) == 1
+    _assert_child_invocation(spends[0], run_id="ready-budget-cap", task_id=calls[0])
+    _assert_budget_closed(budget, ledger, spent=1)
+
+
+async def test_ready_map_budget_resume_does_not_recharge_a_journaled_child() -> None:
+    pytest.importorskip("swe_budget")
+    from swe.budget import NativeBudgetLedger, RuntimeBudget
+
+    run_id = "ready-budget-resume"
+    release = asyncio.Event()
+    executions: list[tuple[str, str]] = []
+
+    async def work(payload: Mapping[str, Any]) -> dict[str, str]:
+        task_id = str(payload["task_id"])
+        handle = current_invocation()
+        assert handle is not None
+        _assert_child_invocation(handle.invocation_id, run_id=run_id, task_id=task_id)
+        executions.append((task_id, handle.invocation_id))
+        if task_id == "slow":
+            await release.wait()
+        return {"task_id": task_id}
+
+    budget, ledger = _ready_budget(3)
+    store = _CrashOnceStore(crash_after=1)
+    compiled = compile_definition(_ready_document(), handlers=frozenset({"demo.work"}))
+    runner = WorkflowRunner(
+        compiled,
+        {"demo.work": work},
+        resources=WorkflowResources(budget=budget),
+        run_store=store,
+    )
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        await asyncio.wait_for(
+            runner.run(
+                _ready_tasks("fast", "slow", "later", depends={"later": ["fast"]}),
+                run_id=run_id,
+            ),
+            timeout=2,
+        )
+    assert store.runs[run_id].status == "running"
+    settled = list(store.invocations[run_id])
+    assert len(settled) == 1
+    journaled = settled[0]
+    assert _spend_invocation_ids(ledger, run_id=run_id) == [journaled]
+    release.set()
+    replayed = NativeBudgetLedger.replay(ledger.events())
+    resumed_budget = RuntimeBudget(replayed, _MilliPolicy(), account="a")
+    resumed = await asyncio.wait_for(
+        WorkflowRunner(
+            compiled,
+            {"demo.work": work},
+            resources=WorkflowResources(budget=resumed_budget),
+            run_store=store,
+        ).resume(run_id),
+        timeout=2,
+    )
+    assert resumed.status == "completed"
+    counts = Counter(task_id for task_id, _invocation_id in executions)
+    assert counts["fast"] == 1
+    assert counts["slow"] == 2
+    assert counts["later"] == 1
+    assert [invocation_id for task_id, invocation_id in executions if task_id == "fast"] == [
+        journaled
+    ]
+    spends = _spend_invocation_ids(replayed, run_id=run_id)
+    assert spends.count(journaled) == 1
+    assert len(spends) == len(set(spends)) == 3
+    assert set(spends) == set(store.invocations[run_id])
+    _assert_budget_closed(resumed_budget, replayed, spent=3)
