@@ -154,8 +154,8 @@ charge, so `calculated_usd` and `actual_usd` stay `N/A`.
 
 ## Schema diagnosis
 
-`runs/20261123T213131Z` has its own $2 cap, zero retries, and saved request
-bodies. With `think` false, DeepSeek's four empty decisions were the prompt
+`runs/20261123T213131Z` has its own $2 cap and zero retries. Each call file
+keeps its request body. The aggregate `report.json` omits those bodies. With `think` false, DeepSeek's four empty decisions were the prompt
 JSON echoed back (`conclusions`, `corpus`, `question`, …), `done_reason` stop,
 and no thinking field. The server reports the model as `deepseek-v4.1-flash`
 for a `:cloud` request. Native `format` accepted the call and did not enforce
