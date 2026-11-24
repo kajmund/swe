@@ -678,6 +678,321 @@ fn invocation_ids_for(
 }
 
 #[test]
+fn swd_1_0_handler_serials_stay_on_the_global_clock() {
+    let ordered = r#"{
+      "version": "1.0",
+      "name": "ordered_ids",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 12, "max_depth": 2, "timeout_seconds": 5},
+      "nodes": {
+        "fanout": {"type": "map", "items": "$.needs", "child": "work", "concurrency": 2, "next": "done"},
+        "work": {"type": "task", "handler": "demo.work"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#;
+    let input = Json::object([(
+        "needs".into(),
+        Json::Array(vec![Json::from("a"), Json::from("b")]),
+    )]);
+    let ids = handler_ids(ordered, input, false, |_, _, _| Json::empty_object());
+    assert_eq!(
+        ids.get(&("work".into(), "0".into(), 1)).map(String::as_str),
+        Some("legacy:work:0:0:2")
+    );
+    assert_eq!(
+        ids.get(&("work".into(), "1".into(), 1)).map(String::as_str),
+        Some("legacy:work:1:0:3")
+    );
+
+    let fork = r#"{
+      "version": "1.0",
+      "name": "fork_ids",
+      "entrypoint": "split",
+      "limits": {"max_steps": 12, "max_depth": 2, "timeout_seconds": 5},
+      "nodes": {
+        "split": {"type": "fork", "branches": {"left": "task_a", "right": "task_b"}, "join": "together"},
+        "task_a": {"type": "task", "handler": "demo.left"},
+        "task_b": {"type": "task", "handler": "demo.right"},
+        "together": {"type": "join", "mode": "all", "next": "done"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#;
+    let ids = handler_ids(fork, Json::empty_object(), false, |_, _, _| {
+        Json::empty_object()
+    });
+    assert_eq!(
+        ids.get(&("task_a".into(), "left".into(), 1))
+            .map(String::as_str),
+        Some("legacy:task_a:left:0:2")
+    );
+    assert_eq!(
+        ids.get(&("task_b".into(), "right".into(), 1))
+            .map(String::as_str),
+        Some("legacy:task_b:right:0:3")
+    );
+}
+
+#[test]
+fn ready_child_graphs_keep_invocation_ids_across_completion_order() {
+    let items = vec![
+        task_item("slow", &[]),
+        task_item("fast", &[]),
+        task_item("after_fast", &["fast"]),
+        task_item("after_slow", &["slow"]),
+    ];
+    for (name, raw) in [
+        ("decision", gate_ready_definition()),
+        ("tasks", two_task_ready_definition()),
+        ("fork", fork_ready_definition()),
+        ("nested_map", nested_map_ready_definition()),
+        ("loop", loop_ready_definition()),
+    ] {
+        let input = ready_child_input(&items, name == "nested_map");
+        let low = handler_ids(&raw, input.clone(), false, child_output);
+        let high = handler_ids(&raw, input, true, child_output);
+        assert_eq!(low, high, "{name}");
+        assert!(low.len() >= 4, "{name} scheduled no item handlers");
+        let work = low
+            .iter()
+            .filter(|((node, path, _), _)| node == "work" && path.contains("after_"))
+            .map(|(_, id)| id.as_str())
+            .collect::<Vec<_>>();
+        if name == "decision" {
+            assert_eq!(work.len(), 2, "{name}");
+            assert_ne!(work[0].rsplit(':').next(), work[1].rsplit(':').next());
+        }
+    }
+}
+
+fn child_output(node: &str, _path: &str, visit: u32) -> Json {
+    if node == "body" && visit == 1 {
+        Json::object([("go".into(), Json::from(true))])
+    } else {
+        Json::object([("go".into(), Json::from(false))])
+    }
+}
+
+fn handler_ids(
+    raw: &str,
+    input: Json,
+    high_path_first: bool,
+    mut output_for: impl FnMut(&str, &str, u32) -> Json,
+) -> std::collections::BTreeMap<(String, String, u32), String> {
+    let (document, sha) = load(raw);
+    let (mut machine, outcome) = start_run(document, &sha, "legacy".into(), input, 0).unwrap();
+    let mut pending = handler_effects(&outcome.effects);
+    let mut ids = std::collections::BTreeMap::new();
+    let mut visits: std::collections::BTreeMap<(String, String), u32> =
+        std::collections::BTreeMap::new();
+    let mut now = 1u64;
+    let mut status = outcome.status;
+    while status == RunStatus::Running {
+        assert!(!pending.is_empty(), "running without a handler");
+        let index = if high_path_first {
+            pending
+                .iter()
+                .enumerate()
+                .max_by(|left, right| effect_path(left.1).cmp(effect_path(right.1)))
+                .unwrap()
+                .0
+        } else {
+            pending
+                .iter()
+                .enumerate()
+                .min_by(|left, right| effect_path(left.1).cmp(effect_path(right.1)))
+                .unwrap()
+                .0
+        };
+        let effect = pending.remove(index);
+        let Effect::InvokeHandler {
+            invocation_id,
+            node_id,
+            branch_path,
+            ..
+        } = effect
+        else {
+            unreachable!("handler effect");
+        };
+        let seen = visits
+            .entry((node_id.clone(), branch_path.clone()))
+            .or_insert(0);
+        *seen += 1;
+        let visit = *seen;
+        ids.insert(
+            (node_id.clone(), branch_path.clone(), visit),
+            invocation_id.clone(),
+        );
+        now += 1;
+        let step = machine.complete(
+            &invocation_id,
+            output_for(&node_id, &branch_path, visit),
+            now,
+        );
+        pending.extend(handler_effects(&step.effects));
+        status = step.status;
+        if status == RunStatus::Failed {
+            panic!(
+                "{}",
+                machine
+                    .error()
+                    .map(|error| error.message.clone())
+                    .unwrap_or_default()
+            );
+        }
+    }
+    assert_eq!(status, RunStatus::Completed);
+    ids
+}
+
+fn handler_effects(effects: &[Effect]) -> Vec<Effect> {
+    effects
+        .iter()
+        .filter(|effect| matches!(effect, Effect::InvokeHandler { .. }))
+        .cloned()
+        .collect()
+}
+
+fn effect_path(effect: &Effect) -> &str {
+    match effect {
+        Effect::InvokeHandler { branch_path, .. } => branch_path,
+        Effect::InvokeProvider { branch_path, .. } => branch_path,
+        Effect::CancelInvocation { .. } => "",
+    }
+}
+
+fn ready_child_input(items: &[Json], with_parts: bool) -> Json {
+    let items = items
+        .iter()
+        .map(|item| {
+            let mut item = item.clone();
+            if with_parts {
+                if let Json::Object(fields) = &mut item {
+                    fields.insert(
+                        "parts".into(),
+                        Json::Array(vec![Json::from("p0"), Json::from("p1")]),
+                    );
+                }
+            }
+            item
+        })
+        .collect();
+    ready_input(items)
+}
+
+fn gate_ready_definition() -> String {
+    r#"{
+      "version": "1.1",
+      "name": "ready_gate",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 40, "max_depth": 4, "timeout_seconds": 30},
+      "nodes": {
+        "fanout": {
+          "type": "map", "items": "$.input.tasks", "child": "gate", "concurrency": 2,
+          "schedule": "ready", "item_id": "$.item.task_id", "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "gate": {
+          "type": "decision", "evaluator": "expression",
+          "condition": {"eq": [{"var": "$.item.task_id"}, {"const": ""}]},
+          "routes": {"true": "work", "false": "work"}
+        },
+        "work": {"type": "task", "handler": "demo.work"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#
+    .to_string()
+}
+
+fn two_task_ready_definition() -> String {
+    r#"{
+      "version": "1.1",
+      "name": "ready_tasks",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 40, "max_depth": 4, "timeout_seconds": 30},
+      "nodes": {
+        "fanout": {
+          "type": "map", "items": "$.input.tasks", "child": "first", "concurrency": 2,
+          "schedule": "ready", "item_id": "$.item.task_id", "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "first": {"type": "task", "handler": "demo.first", "next": "second"},
+        "second": {"type": "task", "handler": "demo.second"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#
+    .to_string()
+}
+
+fn fork_ready_definition() -> String {
+    r#"{
+      "version": "1.1",
+      "name": "ready_fork",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 80, "max_depth": 4, "timeout_seconds": 30},
+      "nodes": {
+        "fanout": {
+          "type": "map", "items": "$.input.tasks", "child": "split", "concurrency": 2,
+          "schedule": "ready", "item_id": "$.item.task_id", "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "split": {"type": "fork", "branches": {"left": "lane_a", "right": "lane_b"}, "join": "joined"},
+        "lane_a": {"type": "task", "handler": "demo.left", "next": "lane_a2"},
+        "lane_a2": {"type": "task", "handler": "demo.left2"},
+        "lane_b": {"type": "task", "handler": "demo.right"},
+        "joined": {"type": "join", "mode": "all"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#
+    .to_string()
+}
+
+fn nested_map_ready_definition() -> String {
+    r#"{
+      "version": "1.1",
+      "name": "ready_nested",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 80, "max_depth": 4, "timeout_seconds": 30},
+      "nodes": {
+        "fanout": {
+          "type": "map", "items": "$.input.tasks", "child": "inner", "concurrency": 2,
+          "schedule": "ready", "item_id": "$.item.task_id", "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "inner": {"type": "map", "items": "$.item.parts", "child": "part", "concurrency": 2, "next": "tail"},
+        "part": {"type": "task", "handler": "demo.part"},
+        "tail": {"type": "task", "handler": "demo.tail"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#
+    .to_string()
+}
+
+fn loop_ready_definition() -> String {
+    r#"{
+      "version": "1.1",
+      "name": "ready_loop",
+      "entrypoint": "fanout",
+      "limits": {"max_steps": 80, "max_depth": 4, "timeout_seconds": 30},
+      "nodes": {
+        "fanout": {
+          "type": "map", "items": "$.input.tasks", "child": "body", "concurrency": 2,
+          "schedule": "ready", "item_id": "$.item.task_id", "item_depends_on": "$.item.depends_on",
+          "next": "done"
+        },
+        "body": {"type": "task", "handler": "demo.body", "next": "again"},
+        "again": {
+          "type": "decision", "evaluator": "expression",
+          "condition": {"eq": [{"var": "$.body.result.go"}, {"const": true}]},
+          "routes": {"true": "body", "false": "tail"}
+        },
+        "tail": {"type": "task", "handler": "demo.tail"},
+        "done": {"type": "end", "status": "completed"}
+      }
+    }"#
+    .to_string()
+}
+
+#[test]
 fn ready_map_rejects_bad_graphs_before_any_child() {
     let cases = [
         (

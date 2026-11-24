@@ -73,7 +73,7 @@ impl Machine {
                 map_schedule: crate::definition::MapSchedule::Ordered,
                 unmet: Vec::new(),
                 dependents: Vec::new(),
-                pinned_serial: None,
+                serial_cursor: None,
                 item: None,
                 index: None,
             },

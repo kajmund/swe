@@ -12,9 +12,10 @@ from jsonschema import Draft202012Validator
 
 from swe.definition import compile_definition
 from swe.errors import SwdValidationError
+from swe.invocation_handle import current_invocation
 from swe.microtasks import Microtask, MicrotaskError, MicrotaskMeter, compile_microtasks
-from swe.run_store import InvocationRecord, RunRecord, RunStore
-from swe.runtime import WorkflowResources
+from swe.run_store import InvocationRecord, MemoryRunStore, RunRecord, RunStore
+from swe.runtime import WorkflowResources, WorkflowRunner
 from swe.schema import SWD_VERSION, SWD_VERSION_1_1, load_schema
 
 pytestmark = pytest.mark.swe_runtime
@@ -289,6 +290,96 @@ async def test_unknown_runtime_dependency_fails_before_the_handler() -> None:
     assert result.error is not None
     assert result.error["kind"] == "preflight"
     assert called is False
+
+
+def _gate_document() -> dict[str, Any]:
+    document = _ready_document()
+    document["name"] = "ready_gate"
+    document["limits"]["max_steps"] = 40
+    document["limits"]["max_depth"] = 4
+    fanout = document["nodes"]["fanout"]
+    fanout["child"] = "gate"
+    document["nodes"]["gate"] = {
+        "type": "decision",
+        "evaluator": "expression",
+        "condition": {"eq": [{"var": "$.item.task_id"}, {"const": ""}]},
+        "routes": {"true": "work", "false": "work"},
+    }
+    return document
+
+
+def _gate_input() -> dict[str, Any]:
+    return {
+        "tasks": [
+            {"task_id": "slow", "payload": {}, "depends_on": []},
+            {"task_id": "fast", "payload": {}, "depends_on": []},
+            {"task_id": "after_fast", "payload": {}, "depends_on": ["fast"]},
+            {"task_id": "after_slow", "payload": {}, "depends_on": ["slow"]},
+        ]
+    }
+
+
+async def _run_gate(*, prefer_fast: bool, run_id: str) -> dict[str, str]:
+    release = asyncio.Event()
+    seen: dict[str, str] = {}
+
+    async def work(payload: Mapping[str, Any]) -> dict[str, str]:
+        task_id = str(payload["task_id"])
+        handle = current_invocation()
+        assert handle is not None
+        seen[task_id] = handle.invocation_id
+        if prefer_fast and task_id == "slow":
+            await release.wait()
+        if not prefer_fast and task_id == "fast":
+            await release.wait()
+        if task_id in {"after_fast", "after_slow"}:
+            release.set()
+        return {"task_id": task_id}
+
+    store = MemoryRunStore()
+    compiled = compile_definition(_gate_document(), handlers=frozenset({"demo.work"}))
+    runner = WorkflowRunner(compiled, {"demo.work": work}, run_store=store)
+    result = await asyncio.wait_for(runner.run(_gate_input(), run_id=run_id), timeout=2)
+    assert result.status == "completed"
+    assert set(store.invocations[run_id]) == set(seen.values())
+    return seen
+
+
+async def test_ready_gate_ids_match_across_completion_order_and_resume() -> None:
+    fast_first = await _run_gate(prefer_fast=True, run_id="ready-gate")
+    slow_first = await _run_gate(prefer_fast=False, run_id="ready-gate")
+    assert fast_first == slow_first
+    assert fast_first["after_fast"] != fast_first["after_slow"]
+    assert "2/after_fast" in fast_first["after_fast"]
+    assert "3/after_slow" in fast_first["after_slow"]
+
+    release_slow = asyncio.Event()
+    executions: list[str] = []
+    store = _CrashOnceStore(crash_after=2)
+
+    async def work(payload: Mapping[str, Any]) -> dict[str, str]:
+        task_id = str(payload["task_id"])
+        executions.append(task_id)
+        if task_id == "slow":
+            await release_slow.wait()
+        return {"task_id": task_id}
+
+    compiled = compile_definition(_gate_document(), handlers=frozenset({"demo.work"}))
+    runner = WorkflowRunner(compiled, {"demo.work": work}, run_store=store)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        await asyncio.wait_for(runner.run(_gate_input(), run_id="ready-gate"), timeout=2)
+    release_slow.set()
+    resumed = await asyncio.wait_for(
+        WorkflowRunner(compiled, {"demo.work": work}, run_store=store).resume("ready-gate"),
+        timeout=2,
+    )
+    assert resumed.status == "completed"
+    counts = Counter(executions)
+    assert counts["fast"] == 1
+    assert counts["after_fast"] == 1
+    assert counts["slow"] == 2
+    assert counts["after_slow"] == 1
+    assert set(store.invocations["ready-gate"]) == set(fast_first.values())
 
 
 class _CrashOnceStore(RunStore):

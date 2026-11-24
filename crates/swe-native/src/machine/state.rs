@@ -69,8 +69,12 @@ pub struct Scope {
     pub unmet: Vec<u32>,
     /// Dependents of each ready-map item, aligned with `items`.
     pub dependents: Vec<Vec<usize>>,
-    /// Serial reserved for the first node scheduled in this scope.
-    pub pinned_serial: Option<u64>,
+    /// Next serial for this scope when it must not read the global clock.
+    ///
+    /// `None` keeps SWD 1.0 allocation: one run-wide counter. A ready-map item
+    /// and every scope under it set this so a sibling's completion cannot
+    /// change their invocation ids.
+    pub serial_cursor: Option<u64>,
     pub item: Option<Json>,
     pub index: Option<usize>,
 }
@@ -139,13 +143,15 @@ impl Machine {
     }
 
     pub fn instance_id(&mut self, node_id: &str, scope: &Scope) -> String {
-        // Ready-map children pin a serial in input order at start_map so
-        // invocation identity does not follow admission order.
-        let pinned = self
-            .scopes
-            .get_mut(&scope.id)
-            .and_then(|stored| stored.pinned_serial.take());
-        let serial = pinned.unwrap_or_else(|| self.new_serial());
+        // A private cursor is consumed for every node in the scope, not only
+        // the first. Taking it once left later nodes on the global clock.
+        let local = self.scopes.get_mut(&scope.id).and_then(|stored| {
+            let cursor = stored.serial_cursor.as_mut()?;
+            let serial = *cursor;
+            *cursor = cursor.saturating_add(1);
+            Some(serial)
+        });
+        let serial = local.unwrap_or_else(|| self.new_serial());
         format!(
             "{}:{}:{}:{}:{}",
             self.run_id, node_id, scope.branch_path, scope.loop_epoch, serial

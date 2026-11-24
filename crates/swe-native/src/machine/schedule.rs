@@ -410,11 +410,7 @@ impl Machine {
         map.concurrency = cap;
         map.remaining = map.items.len();
         if let Some(plan) = ready {
-            let count = plan.ids.len();
-            let mut serials = Vec::with_capacity(count);
-            for _ in 0..count {
-                serials.push(self.new_serial());
-            }
+            let serials = reserve_ready_serials(self, start.parent_id, plan.ids.len());
             map.map_schedule = MapSchedule::Ready;
             map.unmet = plan.unmet;
             map.dependents = plan.dependents;
@@ -554,7 +550,9 @@ impl Machine {
             scope.branch_path = path;
             scope.map_instance_id = Some(map_id.to_string());
             scope.owner_node = parent.owner_node.clone();
-            scope.pinned_serial = pinned_serial;
+            // The reserved serial is the first id in this item. Later nodes
+            // stay on this cursor instead of the run-wide clock.
+            scope.serial_cursor = pinned_serial;
             scope
         };
         self.scopes.insert(child_id.clone(), child_scope);
@@ -880,10 +878,24 @@ fn child_scope(parent: &Scope, id: String, kind: ScopeKind, depth: u32) -> Scope
         map_schedule: MapSchedule::Ordered,
         unmet: Vec::new(),
         dependents: Vec::new(),
-        pinned_serial: None,
+        serial_cursor: parent.serial_cursor.map(|_| 0),
         item: None,
         index: None,
     }
+}
+
+fn reserve_ready_serials(machine: &mut Machine, parent_id: &str, count: usize) -> Vec<u64> {
+    let isolated = machine
+        .scopes
+        .get(parent_id)
+        .and_then(|scope| scope.serial_cursor)
+        .is_some();
+    if isolated {
+        // Already inside one item. Input order is 0..n; the branch path
+        // distinguishes these ids from the parent item's own serials.
+        return (0..count as u64).collect();
+    }
+    (0..count).map(|_| machine.new_serial()).collect()
 }
 
 pub fn join_path(parent: &str, child: &str) -> String {
