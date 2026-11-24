@@ -10,8 +10,9 @@ ett dokumenterat beslut — ingen tyst kontraktsändring.
 **Bas:** `origin/main` `252620be31a4bf0d2c1f451d3ce2137a2b158fc1`
 (2026-11-24, PR #11 mergad av ägaren; jag har inte mergat den).
 **Underlag:** PR #14 `experiment/barrier-free-scheduler` (offline
-simulering + riktiga SWE-handlers) och den externa PR13-preflighten
-`a69bd50` (separat branch, ingen budget, inga betalda anrop).
+simulering + riktiga SWE-handlers), PR13-preflighten `a69bd50` och
+PR13-seamen `5071a8b` (`experiments/agent-contract/SEAM.md`), separata
+branches utan budget eller betalda anrop.
 
 ## 1. Fråga
 
@@ -144,6 +145,34 @@ egen schemafil; 1.0-filen ändras inte.
 - Journal v1 ändras inte; om item-metadata kräver en ny event-typ ska det
   hanteras som ett separat journal-beslut.
 
+### 3.4 PR13-seam och värdekanal
+
+PR13 har en separat integrationsseam i `experiments/agent-contract/SEAM.md`
+vid `5071a8b`. Den låser **samma tre fältnamn** som detta förslag:
+`schedule`, `item_id`, `item_depends_on`. Seamen:
+
+- har `ready_ids` som enbart predikatet “alla beroenden är klara”, i
+  indataordning; den har ingen kö, ingen klocka och inget concurrency-tak,
+- importerar eller kopierar inte scheduler-experimentet,
+- bevarar vittnet: `after_fast` är eligible när `fast` är klar medan `slow`
+  fortfarande är öppen, medan `layer_is_complete(("slow","fast"), {"fast"})`
+  är false — det är just lagerbarriären,
+- kopplar inte in `RuntimeBudget`; PR #11 är mergad på main som `252620b`, men
+  PR13 håller budgeten okopplad.
+
+**Värdekanalen är uttryckligen `absent`.** `item_depends_on` styr endast
+admission. Den injicerar inte generationens output i validatorns handler-input;
+den uppmätta handler-inputen är fortfarande `task_id`, `payload` och
+`depends_on`. Detta förslag stänger alltså **inte** värdekanalen. Om en
+validator behöver generationens output krävs ett separat value-channel-kontrakt
+(exempelvis en explicit output-binding eller ett resultatflöde), med egen
+kontraktsändring. Det får inte smygas in i `item_depends_on`.
+
+Seamens `tests/test_seam.py` är ett acceptansvittne: en framtida scheduler ska
+göra samma `ready_ids`-predikat sant för samma items och ge varje admitted task
+sin egen invocation-id. Att ersätta predikatet med en lagerwait ska fälla
+testet.
+
 ## 4. Implementation plan (efter godkännande)
 
 ### 4.1 Python
@@ -203,6 +232,7 @@ replay och fairness. Det får inte smygas in i 1.1.
 | Host-ready-queue (PR #14) | Väntande handlers håller slots, dependency-state är host-ägd, replay kräver pre-seeding, dynamiska tasks tappar per-task-journal. |
 | Tysta fält i SWD 1.0 | `check_contract_freeze.py` fäller formändring utan versionsbump; ingen tyst kontraktsändring. |
 | Ny ledger/charge för ready-map | Ingen budgetändring behövs; child-invocations använder befintlig dispatch/budget. |
+| Värdekanal via `item_depends_on` | `item_depends_on` är admission, inte dataflöde; att injicera generationens output kräver ett separat value-channel-kontrakt. |
 | Dynamisk admission i samma steg | Kräver eget kontrakt, journal och fairness; hålls separat. |
 
 ## 7. Acceptanskriterier
@@ -214,6 +244,12 @@ replay och fairness. Det får inte smygas in i 1.1.
 - Okänt ID, duplicerat ID, självberoende och cykel failar före första
   handleranrop; inga child-journalposter skrivs.
 - Per-item `InvocationRecord` och resume fungerar utan host-pre-seeding.
+- PR13-seamens `tests/test_seam.py` passerar oförändrat: `ready_ids` ger
+  `after_fast` när `fast` är klar medan `slow` är öppen, medan
+  `layer_is_complete` fortsätter vara false; varje admitted task har egen
+  invocation-id.
+- Värdekanalen förblir `absent`: `item_depends_on` styr endast admission och
+  injicerar inte generationens output i validatorn.
 - Cancellation stoppar admission och avbryter pågående children.
 - Peak concurrency ≤ `map.concurrency`.
 - Budget per child fungerar via befintlig PR11-väg utan ny ledger.
