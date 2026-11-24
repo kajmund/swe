@@ -1,6 +1,6 @@
 //! Reject reserved SWD features before a run starts. Never ignore them.
 
-use crate::definition::{CompiledDefinition, MapSchedule, Node};
+use crate::definition::{CompiledDefinition, Node};
 use crate::error::{Result, RuntimeError};
 use crate::json::Json;
 
@@ -10,23 +10,33 @@ pub fn assert_supported(definition: &CompiledDefinition) -> Result<()> {
             Node::Task { .. } => assert_task_supported(node_id, definition.document.get("nodes"))?,
             Node::Decision { .. } | Node::ProviderDecision { .. } => {}
             Node::Fork { .. } | Node::Join { .. } | Node::End { .. } => {}
-            Node::Map {
-                schedule,
-                item_id,
-                item_depends_on,
-                ..
-            } => {
-                if definition.version == "1.0"
-                    && (*schedule != MapSchedule::Ordered
-                        || item_id.is_some()
-                        || item_depends_on.is_some())
-                {
-                    return Err(RuntimeError::preflight(
-                        "map schedule/item fields require SWD 1.1",
-                    )
-                    .with_path(format!("nodes.{node_id}")));
+            Node::Map { .. } => {
+                if definition.version == "1.0" {
+                    reject_v1_map_fields(node_id, definition.document.get("nodes"))?;
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+fn reject_v1_map_fields(node_id: &str, nodes: Option<&Json>) -> Result<()> {
+    let Some(raw) = nodes
+        .and_then(Json::as_object)
+        .and_then(|nodes| nodes.get(node_id))
+    else {
+        return Err(
+            RuntimeError::preflight("map node is missing from the definition")
+                .with_path(format!("nodes.{node_id}")),
+        );
+    };
+    // Presence, not value. Explicit `"ordered"` is still a 1.1 field.
+    for key in ["schedule", "item_id", "item_depends_on"] {
+        if raw.get(key).is_some() {
+            return Err(
+                RuntimeError::preflight("map schedule/item fields require SWD 1.1")
+                    .with_path(format!("nodes.{node_id}.{key}")),
+            );
         }
     }
     Ok(())

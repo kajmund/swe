@@ -1,6 +1,6 @@
 use swe_native::{
-    parse_json_str, sha256_hex, start_run, Effect, ErrorKind, EventKind, Json, RunStatus,
-    RuntimeError,
+    parse_json_str, sha256_hex, start_run, CompiledDefinition, Effect, ErrorKind, EventKind, Json,
+    RunStatus, RuntimeError,
 };
 
 fn load(doc: &str) -> (Json, String) {
@@ -844,6 +844,56 @@ fn swd_1_0_rejects_ready_fields_and_ordered_1_1_keeps_input_order() {
         1,
     );
     assert_eq!(admitted_index(&step.effects), vec![1]);
+}
+
+#[test]
+fn map_fields_reject_wrong_type_null_and_v1_presence() {
+    let rejected = [
+        (
+            r#"{"version":"1.1","name":"bad_type","entrypoint":"fanout","limits":{"max_steps":4,"max_depth":2,"timeout_seconds":5},"nodes":{"fanout":{"type":"map","items":"$.needs","child":"work","schedule":123,"next":"done"},"work":{"type":"task","handler":"demo.work"},"done":{"type":"end","status":"completed"}}}"#,
+            "nodes.fanout.schedule",
+            "must be a string",
+        ),
+        (
+            r#"{"version":"1.1","name":"bad_schedule_null","entrypoint":"fanout","limits":{"max_steps":4,"max_depth":2,"timeout_seconds":5},"nodes":{"fanout":{"type":"map","items":"$.needs","child":"work","schedule":null,"next":"done"},"work":{"type":"task","handler":"demo.work"},"done":{"type":"end","status":"completed"}}}"#,
+            "nodes.fanout.schedule",
+            "must be a string",
+        ),
+        (
+            r#"{"version":"1.1","name":"bad_null","entrypoint":"fanout","limits":{"max_steps":4,"max_depth":2,"timeout_seconds":5},"nodes":{"fanout":{"type":"map","items":"$.needs","child":"work","schedule":"ordered","item_id":null,"next":"done"},"work":{"type":"task","handler":"demo.work"},"done":{"type":"end","status":"completed"}}}"#,
+            "nodes.fanout.item_id",
+            "must be a string",
+        ),
+        (
+            r#"{"version":"1.1","name":"bad_depends_null","entrypoint":"fanout","limits":{"max_steps":4,"max_depth":2,"timeout_seconds":5},"nodes":{"fanout":{"type":"map","items":"$.needs","child":"work","schedule":"ready","item_id":"$.item.task_id","item_depends_on":null,"next":"done"},"work":{"type":"task","handler":"demo.work"},"done":{"type":"end","status":"completed"}}}"#,
+            "nodes.fanout.item_depends_on",
+            "must be a string",
+        ),
+        (
+            r#"{"version":"1.0","name":"explicit_ordered","entrypoint":"fanout","limits":{"max_steps":4,"max_depth":2,"timeout_seconds":5},"nodes":{"fanout":{"type":"map","items":"$.needs","child":"work","schedule":"ordered","next":"done"},"work":{"type":"task","handler":"demo.work"},"done":{"type":"end","status":"completed"}}}"#,
+            "nodes.fanout.schedule",
+            "require SWD 1.1",
+        ),
+    ];
+    for (raw, path, needle) in rejected {
+        let (document, sha) = load(raw);
+        let error = match CompiledDefinition::load(document, &sha) {
+            Err(error) => error,
+            Ok(_) => panic!("load accepted {path}"),
+        };
+        assert_eq!(error.kind, ErrorKind::Preflight, "{path}");
+        assert_eq!(error.path, path, "{}", error.message);
+        assert!(
+            error.message.contains(needle),
+            "{}: {}",
+            path,
+            error.message
+        );
+    }
+
+    let plain = r#"{"version":"1.0","name":"plain","entrypoint":"fanout","limits":{"max_steps":4,"max_depth":2,"timeout_seconds":5},"nodes":{"fanout":{"type":"map","items":"$.needs","child":"work","next":"done"},"work":{"type":"task","handler":"demo.work"},"done":{"type":"end","status":"completed"}}}"#;
+    let (document, sha) = load(plain);
+    CompiledDefinition::load(document, &sha).expect("1.0 map without schedule still loads");
 }
 
 fn admitted_index(effects: &[Effect]) -> Vec<u64> {
