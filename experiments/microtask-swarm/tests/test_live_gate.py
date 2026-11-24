@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import threading
 import unittest
 from datetime import UTC, datetime
+from decimal import Decimal
 from unittest import mock
 
 from microtask_swarm import cli
-from microtask_swarm.executor import ChatRequest
+from microtask_swarm.estimate import estimate_matrix
+from microtask_swarm.executor import ChatRequest, ProviderResponse
 from microtask_swarm.contracts import Kind, output_schema
 from microtask_swarm.live import (
     LiveDispatchRefused,
@@ -259,6 +263,102 @@ class LiveGateTests(unittest.TestCase):
         with mock.patch("microtask_swarm.live._http_json", side_effect=fake_http):
             client._chat_sync(request)
         self.assertIs(captured["payload"]["think"], False)
+
+    def test_selected_matrix_changes_the_approval_estimate(self) -> None:
+        baseline = estimate_matrix(self.config)
+        selected = estimate_matrix(
+            self.config,
+            model_ids=["deepseek-v4.1-flash", "gpt-oss-20b", "mimo-v2.6-flash", "nemotron-3-super"],
+            concurrency_levels=list(self.config["concurrency_levels"]),
+        )
+        self.assertEqual(selected["all_in_estimated_usd"], baseline["all_in_estimated_usd"])
+        wider = estimate_matrix(
+            self.config,
+            concurrency_levels=[1, 2, 4, 8, 16, 32, 64, 128],
+        )
+        self.assertGreater(
+            Decimal(wider["all_in_estimated_usd"]),
+            Decimal(baseline["all_in_estimated_usd"]),
+        )
+        self.assertEqual(wider["assumptions"]["concurrency_levels"], 8)
+        one_model = estimate_matrix(
+            self.config, model_ids=["nemotron-3-super"], modes=["single_call"]
+        )
+        self.assertLess(
+            Decimal(one_model["all_in_estimated_usd"]),
+            Decimal(baseline["all_in_estimated_usd"]),
+        )
+
+    def test_oversized_live_sweep_refuses_before_network(self) -> None:
+        with mock.patch.dict("os.environ", {"OLLAMA_API_KEY": "secret"}, clear=False):
+            with mock.patch(
+                "microtask_swarm.live._http_json", side_effect=AssertionError("network")
+            ):
+                code = cli.main(
+                    [
+                        "live",
+                        "--approve-usd-cap",
+                        "1.20",
+                        "--concurrency",
+                        "1",
+                        "2",
+                        "4",
+                        "8",
+                        "16",
+                        "32",
+                        "64",
+                        "128",
+                    ]
+                )
+        self.assertEqual(code, 2)
+
+    def test_cancelled_chat_joins_the_worker_before_returning(self) -> None:
+        gate = check_live_gate(
+            self.config,
+            approved_cap_usd="3.00",
+            environ={"OLLAMA_API_KEY": "secret"},
+        )
+        models = {model["id"]: model for model in self.config["models"]}
+        client = OllamaCloudClient(gate=gate, models=models)
+        started = threading.Event()
+        release = threading.Event()
+        phase = {"value": "init"}
+
+        def _blocked(_request: ChatRequest) -> ProviderResponse:
+            phase["value"] = "waiting"
+            started.set()
+            self.assertTrue(release.wait(2))
+            phase["value"] = "finished"
+            return ProviderResponse(content="{}", tokens={"input": 1, "output": 1})
+
+        request = ChatRequest(
+            request_id="r3",
+            task_id="t3",
+            kind=Kind.RELEVANCE,
+            model_id="nemotron-3-super",
+            system="system",
+            user="{}",
+            schema=output_schema(Kind.RELEVANCE),
+            max_output_tokens=32,
+            passage="passage",
+            input_data={"passage": "passage", "query": "q"},
+            attempt=1,
+            timeout_seconds=10.0,
+        )
+
+        async def _run() -> None:
+            with mock.patch.object(client, "_chat_sync", side_effect=_blocked):
+                task = asyncio.create_task(client.chat(request))
+                await asyncio.to_thread(started.wait, 2)
+                task.cancel()
+                await asyncio.sleep(0.05)
+                self.assertEqual(phase["value"], "waiting")
+                self.assertFalse(task.done())
+                release.set()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+
+        asyncio.run(_run())
 
 
 if __name__ == "__main__":

@@ -69,8 +69,14 @@ class RuntimeBudgetUnavailable(RuntimeError):
     """The merged RuntimeBudget or swe_budget extension is not installed."""
 
 
-class _AmountPolicy:
-    """A host policy that returns the amount carried by the request."""
+class CarriedMilliPolicy:
+    """Runtime ``BudgetPolicy`` for a tariff chosen before the call.
+
+    ``reserve`` and ``settle`` return milli integers, the same surface as
+    t1bm PR 13's ``InjectedPolicy``. That stand-in returns one milli. This
+    policy returns the amount the routing policy already placed on the
+    request. It does not price tokens and it does not call a provider.
+    """
 
     def reserve(self, request: Any) -> int:
         return int(request.input["amount_milli"])
@@ -103,7 +109,7 @@ class RuntimeBudgetBackend:
             amount_milli=cap_milli,
             key=f"{run_id}:alloc",
         )
-        self.budget = RuntimeBudget(self.ledger, _AmountPolicy(), account=account)
+        self.budget = RuntimeBudget(self.ledger, CarriedMilliPolicy(), account=account)
         self.min_available_milli = cap_milli
         self._track_available()
 
@@ -633,6 +639,7 @@ def render_runtime_budget_markdown(report: Mapping[str, Any]) -> str:
 __all__ = [
     "RUNTIME_BUDGET_AVAILABLE",
     "T1BM_PR13_COMMIT",
+    "CarriedMilliPolicy",
     "RuntimeBudgetBackend",
     "RuntimeBudgetPolicySimulator",
     "RuntimeBudgetUnavailable",

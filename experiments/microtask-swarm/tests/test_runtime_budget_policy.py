@@ -16,6 +16,7 @@ from microtask_swarm.dag import ensure_repo_python_on_path
 from microtask_swarm.production_stop import FROZEN_EXPECTED, _frozen_hashes
 from microtask_swarm.runtime_budget_policy import (
     T1BM_PR13_COMMIT,
+    CarriedMilliPolicy,
     RuntimeBudgetBackend,
     render_runtime_budget_markdown,
     run_runtime_budget_benchmark,
@@ -165,6 +166,31 @@ class FrozenBaselineTests(unittest.TestCase):
         self.assertNotIn("from microtask_swarm.budget import", source)
         self.assertNotIn("agent_contract", source)
         self.assertIn(T1BM_PR13_COMMIT, source)
+
+    def test_carried_milli_policy_uses_the_runtime_budget_surface(self) -> None:
+        from microtask_swarm.dag import ensure_repo_python_on_path
+
+        ensure_repo_python_on_path()
+        try:
+            from swe.budget import BudgetOutcome, BudgetRequest
+        except Exception as exc:
+            self.skipTest(f"swe.budget is not importable: {exc}")
+
+        policy = CarriedMilliPolicy()
+        request = BudgetRequest(
+            run_id="run-1",
+            invocation_id="task:model:attempt-1",
+            node_id="task",
+            kind="provider",
+            name="nemotron-3-super",
+            input={"amount_milli": 40},
+        )
+        self.assertEqual(policy.reserve(request), 40)
+        self.assertEqual(
+            policy.settle(request, BudgetOutcome(ok=True, value={"amount_milli": 25})),
+            25,
+        )
+        self.assertEqual(policy.settle(request, BudgetOutcome(ok=False)), 0)
 
 
 @unittest.skipUnless(LEDGER_READY, "swe_budget wheel is not installed")

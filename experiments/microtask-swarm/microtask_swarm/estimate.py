@@ -8,7 +8,7 @@ the sweep repeats the suite at each level.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 _MILLION = Decimal(1_000_000)
 
@@ -66,18 +66,49 @@ def _call_usd(
     )
 
 
-def _call_plan(config: Mapping[str, Any]) -> dict[str, int]:
-    assumptions = config["cost_control"]["estimate"]
+def _available_models(
+    config: Mapping[str, Any], model_ids: Sequence[str] | None
+) -> list[Mapping[str, Any]]:
     models = [m for m in config["models"] if m.get("available", False)]
-    sweep = int(assumptions["concurrency_levels"])
+    if model_ids is None:
+        return models
+    wanted = {str(model_id) for model_id in model_ids}
+    return [model for model in models if str(model["id"]) in wanted]
+
+
+def _call_plan(
+    config: Mapping[str, Any],
+    *,
+    model_ids: Sequence[str] | None = None,
+    modes: Sequence[str] | None = None,
+    concurrency_levels: Sequence[int] | None = None,
+) -> dict[str, int]:
+    assumptions = config["cost_control"]["estimate"]
+    models = _available_models(config, model_ids)
+    if concurrency_levels is None:
+        sweep = int(assumptions["concurrency_levels"])
+    else:
+        sweep = len(list(concurrency_levels))
     items = int(assumptions["items"])
     microtasks = items * int(assumptions["microtasks_per_item"])
-    # Competition runs every available model once per microtask per sweep.
-    per_model = (
-        int(assumptions["single_call_calls_per_model_per_sweep"])
-        + int(assumptions["distributed_calls_per_model_per_sweep"])
-        + microtasks
-    ) * sweep
+    selected = (
+        {
+            "single_call",
+            "distributed_independent",
+            "heterogeneous_competition",
+        }
+        if modes is None
+        else {str(mode) for mode in modes}
+    )
+    per_sweep = 0
+    if "single_call" in selected:
+        per_sweep += int(assumptions["single_call_calls_per_model_per_sweep"])
+    if "distributed_independent" in selected:
+        per_sweep += int(assumptions["distributed_calls_per_model_per_sweep"])
+    if "heterogeneous_competition" in selected:
+        # One competition candidate per microtask, counted on each model.
+        per_sweep += microtasks
+    per_model = per_sweep * sweep
     return {
         "available_models": len(models),
         "sweep": sweep,
@@ -89,9 +120,20 @@ def _call_plan(config: Mapping[str, Any]) -> dict[str, int]:
     }
 
 
-def estimate_matrix(config: Mapping[str, Any]) -> dict[str, Any]:
+def estimate_matrix(
+    config: Mapping[str, Any],
+    *,
+    model_ids: Sequence[str] | None = None,
+    modes: Sequence[str] | None = None,
+    concurrency_levels: Sequence[int] | None = None,
+) -> dict[str, Any]:
     assumptions = config["cost_control"]["estimate"]
-    plan = _call_plan(config)
+    plan = _call_plan(
+        config,
+        model_ids=model_ids,
+        modes=modes,
+        concurrency_levels=concurrency_levels,
+    )
     retry_rate = _decimal(assumptions["retry_rate"], "retry_rate")
     input_tokens = int(assumptions["input_tokens_per_call"])
     output_tokens = int(assumptions["output_tokens_per_call"])
@@ -102,7 +144,7 @@ def estimate_matrix(config: Mapping[str, Any]) -> dict[str, Any]:
     if period not in {"peak", "off_peak"}:
         raise EstimateError("price_period must be peak or off_peak")
 
-    models = [m for m in config["models"] if m.get("available", False)]
+    models = _available_models(config, model_ids)
     attempts_per_model = Decimal(plan["calls_per_model"]) * (Decimal(1) + retry_rate)
     per_model: list[dict[str, Any]] = []
     total = Decimal(0)

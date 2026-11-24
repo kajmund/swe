@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import threading
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -236,7 +237,38 @@ class OllamaCloudClient:
         self.models = models
 
     async def chat(self, request: ChatRequest) -> ProviderResponse:
-        return await asyncio.to_thread(self._chat_sync, request)
+        loop = asyncio.get_running_loop()
+        finished: asyncio.Future[ProviderResponse] = loop.create_future()
+
+        def _deliver(setter: Any, value: Any) -> None:
+            if not finished.done():
+                setter(value)
+
+        def _run() -> None:
+            try:
+                result = self._chat_sync(request)
+            except Exception as exc:  # noqa: BLE001 - delivered to the caller
+                loop.call_soon_threadsafe(_deliver, finished.set_exception, exc)
+            else:
+                loop.call_soon_threadsafe(_deliver, finished.set_result, result)
+
+        threading.Thread(target=_run, name="ollama-chat", daemon=True).start()
+        try:
+            # Shield the worker future so cancellation does not mark it done
+            # while the HTTP thread is still running.
+            return await asyncio.shield(finished)
+        except asyncio.CancelledError:
+            # A cancelled task cannot await. Drop the pending cancellation
+            # only long enough to join the worker, then refuse the call.
+            # The caller's concurrency slot stays held until the request ends.
+            current = asyncio.current_task()
+            if current is not None:
+                while current.uncancel():
+                    pass
+            try:
+                await finished
+            finally:
+                raise
 
     def _chat_sync(self, request: ChatRequest) -> ProviderResponse:
         model = self.models[request.model_id]

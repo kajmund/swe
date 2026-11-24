@@ -342,8 +342,17 @@ def _live(args: argparse.Namespace) -> int:
         use_local_daemon=args.use_local_daemon,
     )
     model_ids = list(args.models) if args.models else available_models(config)
-    metadata = preflight(config, gate, model_ids)
-    estimate = estimate_matrix(config)
+    concurrency = (
+        list(args.concurrency)
+        if args.concurrency
+        else list(config["concurrency_levels"])
+    )
+    estimate = estimate_matrix(
+        config,
+        model_ids=model_ids,
+        modes=args.modes,
+        concurrency_levels=concurrency,
+    )
     planned = Decimal(estimate["all_in_estimated_usd"])
     worst_case = Decimal(estimate["baseline_all_calls_estimated_usd"])
     if planned > gate.approved_cap_usd:
@@ -358,14 +367,10 @@ def _live(args: argparse.Namespace) -> int:
             f"{planned} USD",
             file=sys.stderr,
         )
+    metadata = preflight(config, gate, model_ids)
     suite = load_suite(config, _ROOT)
     models_by_id = {str(model["id"]): model for model in config["models"]}
     client = OllamaCloudClient(gate=gate, models=models_by_id)
-    concurrency = (
-        list(args.concurrency)
-        if args.concurrency
-        else list(config["concurrency_levels"])
-    )
     report = asyncio.run(
         run_matrix(
             config,
