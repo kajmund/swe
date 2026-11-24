@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "models": {
+    "A": "deepseek-v4.1-flash",
+    "BCD": "nemotron-3-super"
+  },
+  "provider_rate_limit": 3,
+  "run_allocated_milli": 250000,
+  "late_billing_fraction": 0.5,
+  "concurrency_levels": [1, 2, 4, 8, 16, 32, 64],
+  "trace": {
+    "seed": 20261123,
+    "base_ms": {
+      "relevance": 120,
+      "entailment": 180,
+      "atomicity": 140,
+      "extraction": 280,
+      "operation_selection": 120,
+      "combined": 700
+    },
+    "model_multiplier": {
+      "deepseek-v4.1-flash": 1.8,
+      "nemotron-3-super": 1.0
+    },
+    "jitter_fraction": 0.25,
+    "straggler_count": 2,
+    "straggler_extra_ms": 700,
+    "extra_ms_by_task": {}
+  },
+  "scenarios": {
+    "early_stop_C": {
+      "strategy": "C_layered_barrier",
+      "concurrency": 8,
+      "after_verified": 25
+    },
+    "early_stop_D": {
+      "strategy": "D_event_ready",
+      "concurrency": 8,
+      "after_verified": 25
+    },
+    "cancel_C": {
+      "strategy": "C_layered_barrier",
+      "concurrency": 8,
+      "cancel_after_ms": 1500
+    },
+    "cancel_D": {
+      "strategy": "D_event_ready",
+      "concurrency": 8,
+      "cancel_after_ms": 1500
+    }
+  }
+}
