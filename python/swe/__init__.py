@@ -10,6 +10,7 @@ from swe.budget import (
 )
 from swe.canonicalize import canonical_json_bytes, sha256_hex
 from swe.definition import CompiledDefinition, compile_definition, compile_swd_text
+from swe.effect_journal import begin_external_effect
 from swe.errors import SwdError, SwdExpressionError, SwdParseError, SwdValidationError
 from swe.expression import evaluate_expression
 from swe.invocation_handle import InvocationHandle, current_invocation
@@ -31,6 +32,7 @@ __all__ = [
     "SwdExpressionError",
     "SwdParseError",
     "SwdValidationError",
+    "begin_external_effect",
     "canonical_json_bytes",
     "compile_definition",
     "compile_swd_text",

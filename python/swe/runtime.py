@@ -35,6 +35,17 @@ before the handler/provider call and settles once; host reconciliation may
 release a pending hold. Cancel and timeout keep the reservation pending so
 funds that may already be billed are not reused early.
 
+External effects are opt-in. ``WorkflowResources.effect_deliveries`` maps a
+node id to a journal v1 delivery class. The handler awaits
+``begin_external_effect()`` before external I/O. Cancel before that mark
+releases only the unused reservation. Cancel after it appends
+``ChargePendingReconciliation``, keeps the runtime-budget reservation
+pending, and persists terminal ``cancelled`` when the runner task itself is
+cancelled. Resume loads the stored journal, fails closed on an open external
+attempt, and replays a confirmed result whose invocation record is missing
+instead of starting that effect again. Undeclared nodes keep the behaviour
+above.
+
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
 replays the deterministic machine under the same run id, start time and input,
@@ -55,6 +66,14 @@ from typing import Any
 from swe.budget import BudgetReservation, RuntimeBudget
 from swe.cache import CacheComputeOwner, OwnedOrphanDecisionCache
 from swe.definition import CompiledDefinition
+from swe.effect_journal import (
+    DELIVERIES,
+    EXTERNAL_DELIVERIES,
+    EffectJournal,
+    blocks_resume,
+    confirmed_replay_gap,
+    should_release_unused,
+)
 from swe.invocation_error import live_invocation_error, normalize_invocation_error
 from swe.invocation_handle import (
     AbandonedWorkRegistry,
@@ -119,6 +138,8 @@ class _Driver:
     action_timeouts: Mapping[str, int]
     abandoned: AbandonedWorkRegistry
     budget: RuntimeBudget | None = None
+    journal: EffectJournal | None = None
+    effect_deliveries: Mapping[str, str] = field(default_factory=dict)
     budget_slots: dict[str, list[BudgetReservation | None]] = field(
         default_factory=dict
     )
@@ -159,6 +180,7 @@ class _RunStart:
     replay: dict[str, InvocationRecord]
     persisted_events: int
     last_seq: int
+    journal_events: tuple[Mapping[str, Any], ...] = ()
 
 
 def require_native() -> Any:
@@ -187,6 +209,9 @@ class WorkflowRunner:
         self.handlers = handlers
         self.resources = resources or WorkflowResources()
         self.action_timeouts = _validate_action_timeouts(self.resources.action_timeouts)
+        self.effect_deliveries = _validate_effect_deliveries(
+            self.resources.effect_deliveries
+        )
         _validate_budget(self.resources.budget)
         self.run_store = run_store
         self.clock = clock
@@ -246,6 +271,9 @@ class WorkflowRunner:
         try:
             await _persist(driver)
             return await self._execute(driver, outcome)
+        except asyncio.CancelledError:
+            await _seal_task_cancel(driver)
+            raise
         finally:
             await reap_owned(
                 driver.pending,
@@ -282,6 +310,9 @@ class WorkflowRunner:
                 events=await store.events(run_id),
                 error=None if stored.error is None else dict(stored.error),
             )
+        journal_resume = await _journal_resume(self, store, run_id)
+        if journal_resume.block:
+            return await _fail_closed_resume(self, store, stored)
         native = require_native()
         document = thaw_json(self.compiled.document)
         assert_phase2_supported(document)
@@ -310,12 +341,19 @@ class WorkflowRunner:
             run_id=run_id,
             input_data=dict(stored.input),
             started_at_ms=stored.started_at_ms,
-            replay=dict(await store.replay_results(run_id)),
+            replay={
+                **dict(await store.replay_results(run_id)),
+                **journal_resume.replays,
+            },
             persisted_events=len(events),
             last_seq=stored.last_seq,
+            journal_events=tuple(journal_resume.events),
         ))
         try:
             return await self._execute(driver, outcome)
+        except asyncio.CancelledError:
+            await _seal_task_cancel(driver)
+            raise
         finally:
             await reap_owned(
                 driver.pending,
@@ -360,6 +398,8 @@ def _build_driver(runner: WorkflowRunner, start: _RunStart) -> _Driver:
         action_timeouts=runner.action_timeouts,
         abandoned=runner.abandoned,
         budget=runner.resources.budget,
+        journal=_resume_journal(runner, start.journal_events),
+        effect_deliveries=dict(runner.effect_deliveries),
     )
 
 
@@ -427,6 +467,7 @@ async def _drive(driver: _Driver, outcome: Mapping[str, Any]) -> None:
 async def _cancel_run(driver: _Driver) -> None:
     driver.interrupt_reason = "cancel"
     outcome = driver.machine.cancel(driver.clock.now_ms())
+    _note_open_effects(driver, "cancelled")
     await _persist(driver)
     await _apply_effects(driver, outcome["effects"])
     await _detach_pending(driver)
@@ -443,6 +484,7 @@ async def _persist(driver: _Driver, invocation: InvocationRecord | None = None) 
         driver.last_seq = int(new_events[-1]["seq"])
     status = machine.status()
     now = driver.clock.now_ms()
+    await _persist_journal(driver)
     await driver.run_store.record(
         RunRecord(
             run_id=driver.run_id,
@@ -562,6 +604,25 @@ def _bind_handle(driver: _Driver, effect: Mapping[str, Any]) -> InvocationHandle
             action_timeout_seconds=driver.action_timeouts.get(node_id),
         ),
     )
+    delivery = driver.effect_deliveries.get(node_id)
+    if delivery is not None and driver.journal is not None:
+        handle.effect.delivery = delivery
+        handle.effect.action = str(
+            effect.get("handler") or effect.get("provider") or node_id
+        )
+
+        async def begin(bound: InvocationHandle = handle) -> None:
+            await _begin_declared_effect(driver, bound)
+
+        async def confirm(
+            value: Any,
+            reservation: BudgetReservation | None,
+            bound: InvocationHandle = handle,
+        ) -> None:
+            await _confirm_declared_effect(driver, bound, value, reservation)
+
+        handle.effect.begin = begin
+        handle.effect.on_confirmed = confirm
     driver.handles[invocation_id] = handle
     return handle
 
@@ -636,19 +697,36 @@ def _abandon_pending(driver: _Driver) -> None:
                 )
         elif not task.done():
             task.cancel()
-        _mark_pending_slot(driver, invocation_id)
+        _note_open_effects(driver, driver.interrupt_reason or "cancelled")
+        _mark_pending_slot(driver, invocation_id, handle)
         driver.abandoned.register(invocation_id, node_id, task)
     _harvest_cache_orphans(driver)
 
 
-def _mark_pending_slot(driver: _Driver, invocation_id: str) -> None:
-    """Mark the abandoned attempt's own reservation, not a retry's fresh one."""
+def _mark_pending_slot(
+    driver: _Driver,
+    invocation_id: str,
+    handle: InvocationHandle | None = None,
+) -> None:
+    """Mark the abandoned attempt's own reservation, not a retry's fresh one.
+
+    A declared external node that has not started I/O releases that unused
+    reservation. Every other hold stays pending, including an effect that
+    already started.
+    """
 
     if driver.budget is None:
         return
     slot = driver.budget_slots.pop(invocation_id, None)
-    if slot and slot[0] is not None:
-        driver.budget.mark_pending(slot[0])
+    if not slot or slot[0] is None:
+        return
+    if handle is None:
+        handle = driver.handles.get(invocation_id)
+    reservation = slot[0]
+    if should_release_unused(handle):
+        driver.budget.release(reservation)
+        return
+    driver.budget.mark_pending(reservation)
 
 
 def _mark_abandoned_budget(driver: _Driver) -> None:
@@ -701,6 +779,210 @@ async def _fail_abandoned_cap(
         driver, InvocationRecord(invocation_id, node_id, False, None, payload)
     )
     return list(outcome["effects"])
+
+
+def _slot_reservation(
+    driver: _Driver, invocation_id: str,
+) -> BudgetReservation | None:
+    slot = driver.budget_slots.get(invocation_id)
+    if not slot:
+        return None
+    return slot[0]
+
+
+async def _begin_declared_effect(driver: _Driver, handle: InvocationHandle) -> None:
+    if handle.cancel.is_set():
+        raise asyncio.CancelledError
+    delivery = handle.effect.delivery
+    if driver.journal is None or delivery not in EXTERNAL_DELIVERIES:
+        raise SweRuntimeError(
+            "begin_external_effect requires an external delivery class",
+            kind="preflight",
+            path=f"nodes.{handle.node_id}",
+        )
+    if handle.effect.started:
+        raise SweRuntimeError(
+            "external effect already started",
+            kind="handler",
+            path=f"nodes.{handle.node_id}",
+        )
+    reservation = _slot_reservation(driver, handle.invocation_id)
+    reserved = None if reservation is None else int(reservation.reserved_milli)
+    driver.journal.begin(
+        run_id=driver.run_id,
+        invocation_id=handle.invocation_id,
+        node_id=handle.node_id,
+        action=handle.effect.action or handle.node_id,
+        delivery=delivery,
+        now_ms=int(driver.clock.now_ms()),
+        reserved_milli=reserved,
+    )
+    handle.effect.started = True
+    await _persist_journal(driver)
+
+
+async def _confirm_declared_effect(
+    driver: _Driver,
+    handle: InvocationHandle,
+    value: Any,
+    reservation: BudgetReservation | None,
+) -> None:
+    if driver.journal is None or not handle.effect.started:
+        return
+    spent = None if reservation is None else int(reservation.spent_milli)
+    driver.journal.confirm(
+        handle.invocation_id,
+        now_ms=int(driver.clock.now_ms()),
+        value=value,
+        spent_milli=spent,
+    )
+    await _persist_journal(driver)
+
+
+def _note_open_effects(driver: _Driver, reason: str) -> None:
+    journal = driver.journal
+    if journal is None:
+        return
+    now_ms = int(driver.clock.now_ms())
+    for invocation_id in journal.open_ids():
+        journal.note_unknown(invocation_id, now_ms, reason)
+
+
+async def _persist_journal(driver: _Driver) -> None:
+    journal = driver.journal
+    store = driver.run_store
+    if journal is None or store is None:
+        return
+    save = getattr(store, "save_journal", None)
+    if save is None:
+        return
+    await save(driver.run_id, journal.events())
+
+
+async def _seal_task_cancel(driver: _Driver) -> None:
+    """Persist ``cancelled`` when a runner-task cancel races a started effect."""
+
+    journal = driver.journal
+    if journal is None or not journal.open_external():
+        return
+    _note_open_effects(driver, "cancelled")
+    if driver.machine.status() == "running":
+        driver.interrupt_reason = "cancel"
+        driver.machine.cancel(driver.clock.now_ms())
+    await _persist(driver)
+
+
+def _resume_journal(
+    runner: WorkflowRunner, events: tuple[Mapping[str, Any], ...],
+) -> EffectJournal | None:
+    if events:
+        return EffectJournal.load([dict(event) for event in events])
+    if runner.effect_deliveries:
+        return EffectJournal()
+    return None
+
+
+@dataclass(frozen=True)
+class _JournalResume:
+    events: tuple[Mapping[str, Any], ...]
+    block: bool
+    replays: dict[str, InvocationRecord]
+
+
+async def _journal_resume(
+    runner: WorkflowRunner, store: RunStore, run_id: str,
+) -> _JournalResume:
+    """Load the durable journal before any re-dispatch.
+
+    An open external attempt fails closed even when this runner no longer
+    declares that delivery. A confirmed attempt with no invocation record is
+    replayed; an unreplayable confirmation fails closed. Either way the stored
+    event list is what a later save writes back.
+    """
+
+    external = any(
+        delivery in EXTERNAL_DELIVERIES
+        for delivery in runner.effect_deliveries.values()
+    )
+    load = getattr(store, "load_journal", None)
+    if load is None:
+        return _JournalResume((), external, {})
+    loaded = await load(run_id)
+    events = tuple(dict(event) for event in loaded)
+    if not events:
+        return _JournalResume((), False, {})
+    require_native()
+    if blocks_resume(events):
+        return _JournalResume(events, True, {})
+    known = set((await store.replay_results(run_id)).keys())
+    gap = confirmed_replay_gap(list(events), known)
+    if gap is None:
+        return _JournalResume(events, True, {})
+    replays = {
+        invocation_id: InvocationRecord(
+            invocation_id,
+            action or invocation_id,
+            True,
+            value,
+            None,
+        )
+        for invocation_id, action, value in gap
+    }
+    return _JournalResume(events, False, replays)
+
+
+async def _fail_closed_resume(
+    runner: WorkflowRunner, store: RunStore, stored: RunRecord,
+) -> RunResult:
+    clock = runner.clock or WorkflowClock()
+    now = clock.now_ms()
+    error = {
+        "kind": "handler",
+        "message": "unknown external effect pending reconciliation",
+        "path": "journal",
+    }
+    await store.record(
+        RunRecord(
+            run_id=stored.run_id,
+            definition_sha256=stored.definition_sha256,
+            status="failed",
+            input=stored.input,
+            output=stored.output,
+            error=error,
+            started_at_ms=stored.started_at_ms,
+            updated_at_ms=now,
+            finished_at_ms=now,
+            last_seq=stored.last_seq,
+        )
+    )
+    return RunResult(
+        run_id=stored.run_id,
+        status="failed",
+        output=stored.output,
+        events=await store.events(stored.run_id),
+        error=error,
+    )
+
+
+def _validate_effect_deliveries(deliveries: Mapping[str, str]) -> dict[str, str]:
+    validated: dict[str, str] = {}
+    for node_id, delivery in deliveries.items():
+        if not isinstance(node_id, str) or _NODE_ID_RE.fullmatch(node_id) is None:
+            raise SwePreflightError(
+                f"invalid effect delivery node id {node_id!r}",
+                path=(
+                    f"effect_deliveries.{node_id}"
+                    if isinstance(node_id, str)
+                    else "effect_deliveries"
+                ),
+            )
+        if not isinstance(delivery, str) or delivery not in DELIVERIES:
+            raise SwePreflightError(
+                f"unknown effect delivery {delivery!r}",
+                path=f"effect_deliveries.{node_id}",
+            )
+        validated[node_id] = delivery
+    return validated
 
 
 def _validate_action_timeouts(action_timeouts: Mapping[str, int]) -> dict[str, int]:
@@ -825,9 +1107,10 @@ async def _settle_expired_unfinished(
     invocation_id = unfinished[0]
     task = driver.pending.pop(invocation_id, None)
     node_id = driver.invocation_nodes.get(invocation_id, "")
-    driver.handles.pop(invocation_id, None)
+    handle = driver.handles.pop(invocation_id, None)
     if task is not None and not task.done():
-        _mark_pending_slot(driver, invocation_id)
+        _note_open_effects(driver, "timeout")
+        _mark_pending_slot(driver, invocation_id, handle)
         driver.abandoned.register(invocation_id, node_id, task)
     elif task is not None:
         consume_task_result(task)
@@ -876,10 +1159,13 @@ async def _settle_invocation(driver: _Driver, invocation_id: str) -> None:
         await _finish_invocation(driver, outcome, invocation)
         return
     if task.cancelled():
+        _note_open_effects(driver, "cancelled")
+        await _persist_journal(driver)
         driver.invocation_nodes.pop(invocation_id, None)
         return
     outcome, invocation = _report_task(driver, invocation_id, task)
     if invocation is None:
+        await _persist_journal(driver)
         return
     await _finish_invocation(driver, outcome, invocation)
 
@@ -916,6 +1202,7 @@ def _report_task(
         return outcome, InvocationRecord(invocation_id, node_id, False, None, payload)
     result = task.result()
     if result.cancelled:
+        _note_open_effects(driver, "cancelled")
         driver.invocation_nodes.pop(invocation_id, None)
         return {"status": "running", "effects": []}, None
     mapped_node_id = driver.invocation_nodes.pop(invocation_id, "")

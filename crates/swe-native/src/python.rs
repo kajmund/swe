@@ -18,15 +18,21 @@ use crate::json::Json;
 use crate::machine::{start_run, WorkflowMachine};
 use crate::needs::NeedRef;
 
+#[path = "python_journal.rs"]
+mod python_journal;
+
 #[pymodule]
 fn swe_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMachine>()?;
+    m.add_class::<python_journal::PyJournal>()?;
     m.add_function(wrap_pyfunction!(py_sha256_hex, m)?)?;
     m.add_function(wrap_pyfunction!(py_canonical_json_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(py_evaluate_expression, m)?)?;
     m.add_function(wrap_pyfunction!(py_resolve_evidence, m)?)?;
     m.add_function(wrap_pyfunction!(py_derive_needs, m)?)?;
     m.add_function(wrap_pyfunction!(py_operation_gate, m)?)?;
+    m.add_function(wrap_pyfunction!(python_journal::py_delivery_key, m)?)?;
+    m.add_function(wrap_pyfunction!(python_journal::py_attempt_id, m)?)?;
     Ok(())
 }
 
@@ -201,7 +207,7 @@ impl PyMachine {
     }
 }
 
-fn json_from_py(value: &Bound<'_, PyAny>) -> PyResult<Json> {
+pub(crate) fn json_from_py(value: &Bound<'_, PyAny>) -> PyResult<Json> {
     if value.is_none() {
         return Ok(Json::Null);
     }
@@ -273,7 +279,7 @@ fn object_from_mapping(mapping: Bound<'_, PyMapping>) -> PyResult<Json> {
     Ok(Json::Object(out))
 }
 
-fn json_to_py(py: Python<'_>, value: &Json) -> PyResult<Py<PyAny>> {
+pub(crate) fn json_to_py(py: Python<'_>, value: &Json) -> PyResult<Py<PyAny>> {
     match value {
         Json::Null => Ok(PyNone::get(py).to_owned().into_any().unbind()),
         Json::Bool(value) => Ok(PyBool::new(py, *value).to_owned().into_any().unbind()),

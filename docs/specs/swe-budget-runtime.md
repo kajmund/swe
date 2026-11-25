@@ -135,7 +135,11 @@ or take a fresh snapshot.
    new logical delivery).
 7. **Cancellation, timeout, abandonment, and failed settlement.** `mark_pending`
    keeps the reservation on the ledger. Funds are not released early, because
-   SWE cannot know whether the provider billed the cancelled call. A later
+   SWE cannot know whether the provider billed the cancelled call. The one
+   exception is a declared external delivery that has not called
+   `begin_external_effect`: that attempt has not started I/O, so cancel
+   releases only the unused reservation. After the mark, cancel still
+   `mark_pending` and does not release the charge as zero. A later
    outcome may settle it; otherwise the host calls `reconcile_invocation(...)`
    or `reconcile(..., release=True)`. When the runtime abandons a
    cancellation-resistant handler, it marks that attempt's own reservation
@@ -162,7 +166,7 @@ or take a fresh snapshot.
 | Handler/provider returns | `settle` with the policy's actual cost |
 | Handler/provider raises | `settle` with the policy's failure cost (often 0) |
 | Provider exact-cache hit | `reserve` still happens; policy may settle 0 using `cache_state="hit"` |
-| `cancel_event` or action timeout cancels the call | `mark_pending`; no release |
+| `cancel_event` or action timeout cancels the call | `mark_pending`; no release. A declared external node that has not called `begin_external_effect` releases only that unused reservation |
 | Runtime abandons a cancellation-resistant handler | `mark_pending` on the attempt's own reservation object; the hold is reconcilable, the orphan may still return |
 | `policy.settle` raises, returns an invalid amount, or exceeds the ceiling | `mark_pending`; the hold stays reserved and visible |
 | Ledger `settle` fails | `mark_pending`; the hold stays reserved and visible. If the ledger already has a settlement for the key, it is authoritative and the in-process state becomes terminal |
