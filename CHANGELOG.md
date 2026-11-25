@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Correct the exact-cache reference L1 description from FIFO to LRU
+  (`(last_access_ms, inserted_at_ms, key)`, already pinned by
+  `test_hits_refresh_lru_eviction_order`) and state that the 10,000-hit warm
+  phase measures hot-key throughput, not working-set reuse. Add a deterministic
+  working-set characterization, an updated opt-in budget-dispatch boundary test,
+  and the updated REA/budget audit that records the original 2026-11-23
+  findings, which gaps PR #11/#16/#17 have since closed, and that PR #15 is an
+  experiments-only adaptive-tariff comparison rather than a production policy.
 - Add an opt-in first-class runtime budget. `WorkflowResources.budget` accepts
   `swe.budget.RuntimeBudget`, which composes a host policy with the existing
   Rust `swe-budget` ledger exposed as `swe_budget.Ledger`. Dispatch reserves

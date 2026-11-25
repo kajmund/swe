@@ -29,7 +29,9 @@ reads and writes.
 
 `InMemoryDecisionCache` provides:
 
-- bounded entries and bytes, FIFO-by-`(inserted_at, key)` eviction;
+- bounded entries and bytes, LRU-by-`(last_access_ms, inserted_at_ms, key)`
+  eviction; a hit refreshes the order (pinned by
+  `python/tests/test_swe_cache.py::test_hits_refresh_lru_eviction_order`);
 - optional TTL with deterministic expiry (`expires_at`, then key);
 - single-flight per exact key;
 - cache of validated successful objects only (`choice` is a non-empty string);
@@ -51,12 +53,19 @@ durable store.
 
 ## Quality gate
 
-The synthetic gate performs 10,000 exact resolves cold and 10,000 warm hits at
-concurrency 64, with no model or network calls. It asserts unique compute on
-cold unique keys, warm hits, peak in-flight ≤ 64, and a memory bound.
+The synthetic gate performs 10,000 exact resolves cold and 10,000 hot-key hits
+at concurrency 64, with no model or network calls. It asserts that the cold
+wave computed at least once, that the hot-key wave produced at least one hit
+per operation, peak in-flight ≤ 64, and the memory bound. The warm phase
+deliberately reuses one primed key, so it measures hot-key throughput, not
+reuse over a working set. Working-set behavior is characterized separately by
+`python/tests/test_swe_cache_working_set.py`; see
+[`docs/analysis/2026-11-25-rea-budget-audit.md`](../analysis/2026-11-25-rea-budget-audit.md)
+(finding A).
+
 The committed baseline is
 [`benchmarks/offers-cache/independent-10000.json`](../../benchmarks/offers-cache/independent-10000.json):
-10,000 cold unique resolves plus 10,000 warm hits at concurrency 64, peak
+10,000 cold unique resolves plus 10,000 hot-key hits at concurrency 64, peak
 in-flight 64, peak entries 256, about 22,900 cache ops/s and 3,800 offer
 ops/s on the recorded Linux host. Throughput is diagnostic; correctness,
 idempotent reuse, bounded concurrency, and the memory cap are the hard gates.
