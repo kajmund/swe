@@ -440,5 +440,88 @@ class RuntimeBudgetCliTests(unittest.TestCase):
             self.assertIn("Overspend", markdown_path.read_text(encoding="utf-8"))
 
 
+class DocumentationTests(unittest.TestCase):
+    """The integration is on main; the docs must not drift back to blocked."""
+
+    STALE_README_CLAIMS = (
+        "PR #11 is open",
+        "PR #11 is still open",
+        "PR #11 is still unmerged",
+        "It is **not integrated**",
+        "No Python binding for `swe-budget`",
+        "No Rust toolchain / `swe_native`",
+        "PREPARED_BLOCKED",
+        "no Rust toolchain here",
+        "was not executed; the pilot",
+        "imported from `experiment/microtask-swarm` at `eff1c7e`",
+        "has no Python binding",
+    )
+
+    STALE_PLAN_CLAIMS = (
+        "PREPARED_BLOCKED_PENDING_PR_11",
+        "PR #11 is OPEN",
+        "No Python binding for `swe-budget`",
+        "No Rust toolchain / `swe_native`",
+        "until Phase 0 is satisfied",
+        "not integrated: PR #11 is open",
+    )
+
+    def test_readme_records_the_landed_runtime_budget(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("INTEGRATED_ON_MAIN", readme)
+        self.assertIn("runtime_budget_policy.py", readme)
+        self.assertIn("swe.budget.RuntimeBudget", readme)
+        self.assertIn("0f7a42f", readme)
+        self.assertIn("36ccdf7", readme)
+        self.assertIn("tests/test_integration_microtasks.py", readme)
+        for claim in self.STALE_README_CLAIMS:
+            self.assertNotIn(claim, readme)
+
+    def test_migration_plan_records_the_landed_integration(self) -> None:
+        plan = (ROOT / "docs" / "budget-migration-plan.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("INTEGRATED_ON_MAIN", plan)
+        self.assertIn("252620be31a4bf0d2c1f451d3ce2137a2b158fc1", plan)
+        self.assertIn("runtime_budget_policy.py", plan)
+        for claim in self.STALE_PLAN_CLAIMS:
+            self.assertNotIn(claim, plan)
+
+    def test_integration_test_really_runs_the_workflow_runner(self) -> None:
+        source = (ROOT / "tests" / "test_integration_microtasks.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("batch.run(", source)
+        self.assertIn("WorkflowResources(budget=budget)", source)
+        self.assertIn("RuntimeBudget", source)
+        self.assertIn("_NATIVE_RUNTIME", source)
+
+    def test_migration_probe_does_not_wait_for_pr_11(self) -> None:
+        probe = (ROOT / "tests" / "test_budget_migration_contract.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("until PR #11 lands", probe)
+        self.assertNotIn("PR #11 is not on this branch", probe)
+
+    def test_integration_commands_use_the_native_wheel_interpreter(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        plan = (ROOT / "docs" / "budget-migration-plan.md").read_text(
+            encoding="utf-8"
+        )
+        command = (
+            "../../python/.venv/bin/python -m unittest "
+            "tests.test_runtime_budget_policy"
+        )
+        target = "make PYTHON=../../python/.venv/bin/python runtime-budget-policy"
+        for document in (readme, plan):
+            self.assertIn(command, document)
+            self.assertIn(target, document)
+            self.assertNotIn(
+                "PYTHONPATH=.:../../python python3 -m unittest "
+                "tests.test_runtime_budget_policy",
+                document,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
