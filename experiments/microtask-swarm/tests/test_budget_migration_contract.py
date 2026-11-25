@@ -1,8 +1,8 @@
-"""Read-only probe for the PR #11 runtime-budget contract.
+"""Read-only probe for the landed `swe.budget` runtime-budget contract.
 
-Skipped until the landed `swe.budget` module is importable. This test does not
+Skipped when `swe.budget` is absent in this environment. This test does not
 instantiate a native ledger and does not make any model call; it only checks
-that the public surface planned in `docs/budget-migration-plan.md` exists.
+that the public surface documented in `docs/budget-migration-plan.md` exists.
 """
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ import unittest
 
 try:
     _budget = importlib.import_module("swe.budget")
-except Exception:  # pragma: no cover - PR #11 is not on this branch/base
+except Exception:  # pragma: no cover - the package is not installed here
     _budget = None
 
 
-@unittest.skipIf(_budget is None, "swe.budget is absent until PR #11 lands")
+@unittest.skipIf(_budget is None, "swe.budget is not installed")
 class BudgetMigrationContractTests(unittest.TestCase):
     def test_public_types_exist(self) -> None:
         for name in (

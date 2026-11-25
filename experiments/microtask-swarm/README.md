@@ -1,8 +1,9 @@
 # SWE microtask-swarm pilot
 
-Status: `OFFLINE_PREPARED_NOT_LIVE`. This experiment is isolated on
-`experiment/microtask-swarm` from `origin/main` (`eff1c7e`). It does not modify
-SWE core, the frozen contracts, the Hy4 worktree, or `main`.
+Status: `OFFLINE_PREPARED_NOT_LIVE`. The experiment is on `main`. The frozen
+baseline was imported in `0f7a42f` from `experiment/microtask-swarm` at
+`36ccdf7`; the runtime-budget integration path was added on top and merged in
+PR #15. It does not modify SWE core, the frozen contracts, or the Hy4 worktree.
 
 No paid model call was made. The offline pilot uses deterministic lexical
 personas; its quality numbers are pipeline evidence, not results about any
@@ -366,9 +367,11 @@ calls does not automatically mean lower latency.
 
 Totals over all 63 runs: **3,095 calls**, **1,240,750 milli settled**, 3,500
 milli pending before reconciliation, 3,000 milli late-billed, 500 milli
-released, **$0.02464** calculated USD. `actual_usd` is N/A. The runtime budget
-remains the local pilot meter; PR #11 is still unmerged, so no shared
-`RuntimeBudget` is attached. No paid call was made.
+released, **$0.02464** calculated USD. `actual_usd` is N/A. This frozen
+analysis keeps the local pilot meter so its recorded report stays reproducible.
+The separate `runtime-budget-policy` integration path uses the merged
+`swe.budget.RuntimeBudget`; see “Runtime budget integration” below. No paid
+call was made.
 
 Run:
 
@@ -485,9 +488,10 @@ rather than the aggregate coverage ratio.
 
 Totals across all 18 runs: **812 calls**, **332,000 milli settled**, 9,250
 milli pending before reconciliation, 5,750 milli late-billed, 3,500 milli
-released, **$0.00630** calculated USD. `actual_usd` is N/A. The runtime budget
-remains the local pilot meter; PR #11 is still open, so no shared
-`RuntimeBudget` is attached.
+released, **$0.00630** calculated USD. `actual_usd` is N/A. This frozen
+analysis keeps the local pilot meter so its recorded report stays reproducible.
+The separate `runtime-budget-policy` integration path uses the merged
+`swe.budget.RuntimeBudget`; see “Runtime budget integration” below.
 
 Run:
 
@@ -583,24 +587,52 @@ PYTHONPATH=. python3 -m unittest tests.test_adaptive_budget -v
 
 | Concern | Reused | Gap |
 | --- | --- | --- |
-| Microtask DAG validation and topological layers | `swe.microtasks.compile_microtasks` when importable | `swe_native` is not built (no Rust toolchain here), so `MicrotaskBatch.run` was not executed; the pilot uses an equivalent bounded asyncio dispatcher and verifies `peak_in_flight <= concurrency` |
+| Microtask DAG validation and topological layers | `swe.microtasks.compile_microtasks` on the merged ready map; `tests/test_integration_microtasks.py` runs a real `MicrotaskBatch` through `WorkflowRunner` with a `RuntimeBudget` when both native wheels are built (`make python`) | The frozen pilot still uses its equivalent bounded asyncio dispatcher so its recorded reports stay reproducible; `experiments/agent-contract/tests/test_preflight.py` exercises the same boundary |
 | Invocation/cancellation semantics | Contract and event shape follow the existing runtime/journal vocabulary | The experiment does not claim journal replay or exactly-once external effects |
-| Sweycoin ledger | Integer milli, reserve/settle/release, idempotency keys, replay | `crates/swe-budget` is Rust-only and has no Python binding; the host meter is a pilot adapter, not a second core ledger |
+| Sweycoin ledger | `crates/swe-budget` is exposed as `swe_budget.Ledger`; the `runtime-budget-policy` integration path composes the real `swe.budget.RuntimeBudget` with `NativeBudgetLedger` and `CarriedMilliPolicy` | The frozen pilot keeps `microtask_swarm/budget.py` for reproducibility; the integration path does not use it |
 | Provider routing | Typed operation menu mirrors a closed decision choice set | The pilot does not add SWD nodes or a second workflow format |
 | Exact quote evidence | Existing evidence discipline: exact, fail-closed | No fuzzy or semantic fallback |
 
 No domain logic was added to `python/swe` or `crates/`.
 
-### Budget migration
+### Runtime budget integration
 
-The local `SweycoinMeter` is temporary. The migration to the shared Rust/PyO3
-runtime budget in [PR #11](https://github.com/kajmund/swe/pull/11) is planned
-read-only in [`docs/budget-migration-plan.md`](docs/budget-migration-plan.md).
-It is **not integrated**: PR #11 is open, has no independent approval, and its
-packaging check is currently red. The plan deletes the local meter rather than
-wrapping it, and defines the retry/cancel/replay compatibility decisions.
-`tests/test_budget_migration_contract.py` is a skipped contract probe until the
-landed `swe.budget` module is importable.
+Status: `INTEGRATED_ON_MAIN` (2026-11-25).
+
+PR #11 merged the shared `swe.budget.RuntimeBudget` and its Rust
+`swe_budget.Ledger` binding. PR #15 added the integration path in
+`microtask_swarm/runtime_budget_policy.py`:
+
+- `CarriedMilliPolicy` implements `swe.budget.BudgetPolicy` and returns the
+  milli amount the routing policy already chose; it does not price tokens.
+- `RuntimeBudgetBackend` composes `NativeBudgetLedger` with that policy and
+  owns no ledger code. It reports the real `balance()` and `events()` and
+  replays them through `NativeBudgetLedger.replay`.
+- The integration path uses reserve → settle, `mark_pending` on cancel/timeout,
+  and host reconciliation; a denied reservation fails closed.
+- The frozen baseline (`budget.py`, `executor.py`, `async_benchmark.py`,
+  `adaptive_budget.py`, `production_stop.py`) intentionally still uses the
+  local pilot meter so the committed reports remain reproducible. The
+  integration path does not use it; `tests/test_runtime_budget_policy.py`
+  asserts that.
+- The agent-contract preflight separately exercises `RuntimeBudget` through
+  `WorkflowResources.budget` on the real `WorkflowRunner`.
+
+The historical migration plan is
+[`docs/budget-migration-plan.md`](docs/budget-migration-plan.md); it is marked
+`INTEGRATED_ON_MAIN`. The `tests/test_budget_migration_contract.py` probe runs
+when `swe.budget` is importable.
+
+Build the native wheels once from the repo root (`make python`), then run the
+integration path offline from the experiment directory. No provider call is
+made; the first command writes the ignored JSON report and the committed
+markdown summary.
+
+```sh
+cd experiments/microtask-swarm
+make PYTHON=../../python/.venv/bin/python runtime-budget-policy
+PYTHONPATH=.:../../python ../../python/.venv/bin/python -m unittest tests.test_runtime_budget_policy -v
+```
 
 ## Live gate and cost cap
 
@@ -650,12 +682,13 @@ selected exact tag; it currently does not expose `gpt-oss:20b`,
    supported, so it is a low-reasoning arm, not reasoning-off. It needs a
    128-token output headroom; without it, `think: "low"` consumed the entire
    classification budget and returned empty content.
-5. **No Python binding for `swe-budget`.** True core-ledger reuse needs a PyO3
-   binding or a host adapter owned by the core package; the pilot meter is
-   explicitly a host accounting adapter.
-6. **No Rust toolchain / `swe_native`.** The DAG compiler is reused, but the
-   full `MicrotaskBatch.run` path and journal replay were not executed. CI with
-   Rust must run that integration before live dispatch.
+5. **Resolved: Python binding for `swe-budget`.** PR #11 exposes
+   `swe_budget.Ledger`; the integration path uses it. The local meter remains
+   only in the frozen baseline.
+6. **Resolved: Rust toolchain / `swe_native`.** `make python` builds both native
+   wheels, and `tests/test_integration_microtasks.py` runs a real
+   `MicrotaskBatch` through `WorkflowRunner` with a `RuntimeBudget` when they
+   are installed.
 7. **DeepSeek `:1017` is a separate tag.** The baseline is pinned to
    `deepseek-v4.1-flash` digest `97308b916fc3`. `deepseek-v4.1-flash:1017` has
    digest `7f8e880bc207`; choosing it requires an explicit pin change.
@@ -673,10 +706,11 @@ selected exact tag; it currently does not expose `gpt-oss:20b`,
 | `microtask_swarm/offline.py` | Deterministic lexical personas for the offline pilot |
 | `microtask_swarm/scoring.py` | Quality, coverage, false support |
 | `microtask_swarm/cost.py` | Calculated vs actual USD, tokens, cache, retries, verifier |
-| `microtask_swarm/budget.py` | Host Sweycoin meter with core-ledger integer semantics |
+| `microtask_swarm/budget.py` | Frozen-baseline Sweycoin meter; not used by the integration path |
+| `microtask_swarm/runtime_budget_policy.py` | Integration path on `swe.budget.RuntimeBudget` and `swe_budget.Ledger` |
 | `microtask_swarm/live.py` | Gated Ollama Cloud client and free preflight |
 | `microtask_swarm/runner.py` | Mode/model/concurrency matrix and report |
-| `microtask_swarm/cli.py` | `offline`, `estimate`, `verify-fixtures`, `live` |
+| `microtask_swarm/cli.py` | `offline`, `async`, `adaptive`, `production-stop`, `adaptive-budget`, `runtime-budget-policy`, `estimate`, `verify-fixtures`, `live` |
 | `reports/offline-pilot.json` | Generated offline evidence, labelled `offline_heuristic` |
 
 ## Hy4 boundary
