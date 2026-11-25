@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from dataclasses import replace
 
 import pytest
 
@@ -498,4 +499,179 @@ async def test_undeclared_cancel_still_keeps_the_reservation_pending() -> None:
     assert _ledger_amounts(ledger, "spend") == []
     assert ledger.balance(account="demo")["reserved"] == _CEILING
     assert len(budget.pending()) == 1
+    await _stop_leftovers()
+
+
+def _running_without_invocation(store: MemoryRunStore, run_id: str) -> MemoryRunStore:
+    crashed = MemoryRunStore()
+    stored = store.runs[run_id]
+    crashed.runs[run_id] = replace(
+        stored,
+        status="running",
+        output=None,
+        error=None,
+        finished_at_ms=None,
+    )
+    crashed.journals[run_id] = [dict(event) for event in store.journals[run_id]]
+    return crashed
+
+
+@pytest.mark.asyncio
+async def test_confirmed_journal_without_an_invocation_record_is_replayed() -> None:
+    store = MemoryRunStore()
+    calls: list[str] = []
+
+    async def work(_payload: Mapping[str, object]) -> Mapping[str, bool]:
+        await begin_external_effect()
+        calls.append("first")
+        return {"wrote": True}
+
+    compiled = _flow()
+    result = await WorkflowRunner(
+        compiled,
+        {"demo.work": work},
+        resources=WorkflowResources(
+            effect_deliveries={"work": "external_non_idempotent"},
+        ),
+        run_store=store,
+    ).run({}, run_id="gap")
+    assert result.status == "completed"
+    original = await store.load_journal("gap")
+    started_at = next(
+        event["started_at_ms"]
+        for event in original
+        if event["kind"] == "AttemptStarted"
+    )
+    crashed = _running_without_invocation(store, "gap")
+    assert "gap" not in crashed.invocations or not crashed.invocations["gap"]
+
+    async def must_not_run(_payload: Mapping[str, object]) -> Mapping[str, bool]:
+        calls.append("second")
+        return {"wrote": False}
+
+    resumed = await WorkflowRunner(
+        compiled,
+        {"demo.work": must_not_run},
+        resources=WorkflowResources(
+            effect_deliveries={"work": "external_non_idempotent"},
+        ),
+        run_store=crashed,
+    ).resume("gap")
+    assert resumed.status == "completed"
+    assert resumed.output == {"work": {"result": {"wrote": True}}}
+    assert calls == ["first"]
+    replayed = await crashed.load_journal("gap")
+    assert _kinds(replayed) == _kinds(original)
+    assert next(
+        event["started_at_ms"]
+        for event in replayed
+        if event["kind"] == "AttemptStarted"
+    ) == started_at
+    await _stop_leftovers()
+
+
+@pytest.mark.asyncio
+async def test_open_journal_fails_closed_without_a_current_delivery_declaration() -> None:
+    store = MemoryRunStore()
+    started = asyncio.Event()
+
+    async def work(_payload: Mapping[str, object]) -> Mapping[str, bool]:
+        await begin_external_effect()
+        started.set()
+        await asyncio.Event().wait()
+        return {"wrote": True}
+
+    run_task = asyncio.create_task(
+        WorkflowRunner(
+            _flow(),
+            {"demo.work": work},
+            resources=WorkflowResources(
+                effect_deliveries={"work": "external_non_idempotent"},
+            ),
+            run_store=store,
+        ).run({}, run_id="open")
+    )
+    await asyncio.wait_for(started.wait(), timeout=5)
+    crashed = _running_without_invocation(store, "open")
+    run_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run_task
+
+    calls: list[str] = []
+
+    async def must_not_run(_payload: Mapping[str, object]) -> Mapping[str, bool]:
+        calls.append("resume")
+        return {"ok": True}
+
+    resumed = await WorkflowRunner(
+        _flow(),
+        {"demo.work": must_not_run},
+        resources=WorkflowResources(),
+        run_store=crashed,
+    ).resume("open")
+    assert resumed.status == "failed"
+    assert resumed.error is not None
+    assert resumed.error["path"] == "journal"
+    assert calls == []
+    await _stop_leftovers()
+
+
+@pytest.mark.asyncio
+async def test_exact_cache_hit_does_not_require_the_effect_mark() -> None:
+    from swe.cache import InMemoryDecisionCache, scoped_cache_params
+    from swe.definition import compile_definition
+
+    cache = InMemoryDecisionCache()
+    calls: list[str] = []
+
+    async def decide(_request: Mapping[str, object]) -> str:
+        await begin_external_effect()
+        calls.append("provider")
+        return "yes"
+
+    decide.cache_params = scoped_cache_params(  # type: ignore[attr-defined]
+        auth_scope="tenant-a",
+        model="m1",
+        policy_version="pol-1",
+    )
+    compiled = compile_definition(
+        {
+            "version": "1.0",
+            "name": "cached_effect",
+            "entrypoint": "decide",
+            "limits": {"max_steps": 8, "max_depth": 1, "timeout_seconds": 30},
+            "nodes": {
+                "decide": {
+                    "type": "decision",
+                    "evaluator": "provider",
+                    "provider": "mock.decision",
+                    "prompt_key": "demo.assessment",
+                    "input": {"topic": "$.topic"},
+                    "choices": ["yes", "no"],
+                    "routes": {"yes": "done", "no": "done"},
+                    "cache_policy": "exact",
+                },
+                "done": {"type": "end", "status": "completed"},
+            },
+        },
+        providers=frozenset({"mock.decision"}),
+        prompt_keys=frozenset({"demo.assessment"}),
+    )
+    resources = WorkflowResources(
+        providers={"mock.decision": decide},
+        prompts={"demo.assessment": "choose {topic}"},
+        prompt_keys=frozenset({"demo.assessment"}),
+        cache=cache,
+        effect_deliveries={"decide": "external_non_idempotent"},
+    )
+    first = await WorkflowRunner(compiled, {}, resources=resources).run(
+        {"topic": "alpha"}, run_id="cache-1",
+    )
+    assert first.status == "completed"
+    assert calls == ["provider"]
+    second = await WorkflowRunner(compiled, {}, resources=resources).run(
+        {"topic": "alpha"}, run_id="cache-2",
+    )
+    assert second.status == "completed"
+    assert calls == ["provider"]
     await _stop_leftovers()

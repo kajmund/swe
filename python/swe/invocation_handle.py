@@ -112,12 +112,14 @@ def make_invocation_handle(
     invocation_id: str,
     node_id: str,
     deadline_ms: int,
+    effect: EffectCell | None = None,
 ) -> InvocationHandle:
     return InvocationHandle(
         invocation_id=invocation_id,
         node_id=node_id,
         deadline_ms=int(deadline_ms),
         cancel=asyncio.Event(),
+        effect=effect if effect is not None else EffectCell(),
     )
 
 

@@ -123,10 +123,18 @@ may be lower than the ceiling. The ledger's release of an unspent remainder
 after a confirmed settlement is that unused ceiling, not an unknown effect.
 
 A runner task cancelled after the effect has started persists run status
-`cancelled`. Resume of a non-running run does not re-dispatch. Resume of a
-still-running run whose journal plans `fail_stop`, `replay_requires_result`,
-or `idempotent_retry` fails closed and does not call the handler. Pure open
-attempts stay on the existing recompute path. Retry stays unsupported.
+`cancelled`. Resume of a non-running run does not re-dispatch. Resume loads
+the stored v1 events into the runner journal before dispatch, including when
+the resumed runner does not declare the delivery. A plan of `fail_stop`,
+`replay_requires_result`, or `idempotent_retry` fails closed and does not
+call the handler. A confirmed attempt whose invocation record is missing is
+applied through the existing replay path and is not started again; the stored
+event list is what a later save writes back. A confirmed gap that is not a
+plain ok result fails closed. Pure open attempts stay on the existing
+recompute path. Retry stays unsupported. An exact provider-cache hit performs
+no new external I/O, so it does not require `begin_external_effect`. A cache
+miss runs the provider on the cache task, which shares that invocation's
+effect cell, so the mark is still recorded before the provider I/O.
 `RunStore.save_journal` / `load_journal` persist the v1 event list when the
 store implements them. `MemoryRunStore` does. A running resume that declared
 an external delivery and whose store cannot load the journal fails closed.

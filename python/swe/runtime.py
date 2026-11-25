@@ -41,8 +41,10 @@ node id to a journal v1 delivery class. The handler awaits
 releases only the unused reservation. Cancel after it appends
 ``ChargePendingReconciliation``, keeps the runtime-budget reservation
 pending, and persists terminal ``cancelled`` when the runner task itself is
-cancelled. Resume uses native ``plan_recovery`` and does not re-dispatch an
-open external attempt. Undeclared nodes keep the behaviour above.
+cancelled. Resume loads the stored journal, fails closed on an open external
+attempt, and replays a confirmed result whose invocation record is missing
+instead of starting that effect again. Undeclared nodes keep the behaviour
+above.
 
 Persistence: `WorkflowRunner(..., run_store=store)` writes every transition to
 a durable store as one transaction. `WorkflowRunner.resume` / `resume_run`
@@ -69,6 +71,7 @@ from swe.effect_journal import (
     EXTERNAL_DELIVERIES,
     EffectJournal,
     blocks_resume,
+    confirmed_replay_gap,
     should_release_unused,
 )
 from swe.invocation_error import live_invocation_error, normalize_invocation_error
@@ -177,6 +180,7 @@ class _RunStart:
     replay: dict[str, InvocationRecord]
     persisted_events: int
     last_seq: int
+    journal_events: tuple[Mapping[str, Any], ...] = ()
 
 
 def require_native() -> Any:
@@ -306,7 +310,8 @@ class WorkflowRunner:
                 events=await store.events(run_id),
                 error=None if stored.error is None else dict(stored.error),
             )
-        if await _resume_blocked(self, store, run_id):
+        journal_resume = await _journal_resume(self, store, run_id)
+        if journal_resume.block:
             return await _fail_closed_resume(self, store, stored)
         native = require_native()
         document = thaw_json(self.compiled.document)
@@ -336,9 +341,13 @@ class WorkflowRunner:
             run_id=run_id,
             input_data=dict(stored.input),
             started_at_ms=stored.started_at_ms,
-            replay=dict(await store.replay_results(run_id)),
+            replay={
+                **dict(await store.replay_results(run_id)),
+                **journal_resume.replays,
+            },
             persisted_events=len(events),
             last_seq=stored.last_seq,
+            journal_events=tuple(journal_resume.events),
         ))
         try:
             return await self._execute(driver, outcome)
@@ -389,7 +398,7 @@ def _build_driver(runner: WorkflowRunner, start: _RunStart) -> _Driver:
         action_timeouts=runner.action_timeouts,
         abandoned=runner.abandoned,
         budget=runner.resources.budget,
-        journal=EffectJournal() if runner.effect_deliveries else None,
+        journal=_resume_journal(runner, start.journal_events),
         effect_deliveries=dict(runner.effect_deliveries),
     )
 
@@ -863,23 +872,63 @@ async def _seal_task_cancel(driver: _Driver) -> None:
     await _persist(driver)
 
 
-async def _resume_blocked(
+def _resume_journal(
+    runner: WorkflowRunner, events: tuple[Mapping[str, Any], ...],
+) -> EffectJournal | None:
+    if events:
+        return EffectJournal.load([dict(event) for event in events])
+    if runner.effect_deliveries:
+        return EffectJournal()
+    return None
+
+
+@dataclass(frozen=True)
+class _JournalResume:
+    events: tuple[Mapping[str, Any], ...]
+    block: bool
+    replays: dict[str, InvocationRecord]
+
+
+async def _journal_resume(
     runner: WorkflowRunner, store: RunStore, run_id: str,
-) -> bool:
-    if not any(
+) -> _JournalResume:
+    """Load the durable journal before any re-dispatch.
+
+    An open external attempt fails closed even when this runner no longer
+    declares that delivery. A confirmed attempt with no invocation record is
+    replayed; an unreplayable confirmation fails closed. Either way the stored
+    event list is what a later save writes back.
+    """
+
+    external = any(
         delivery in EXTERNAL_DELIVERIES
         for delivery in runner.effect_deliveries.values()
-    ):
-        return False
+    )
     load = getattr(store, "load_journal", None)
     if load is None:
-        return True
+        return _JournalResume((), external, {})
     loaded = await load(run_id)
-    events = [dict(event) for event in loaded]
+    events = tuple(dict(event) for event in loaded)
     if not events:
-        return False
+        return _JournalResume((), False, {})
     require_native()
-    return blocks_resume(events)
+    if blocks_resume(events):
+        return _JournalResume(events, True, {})
+    known = set((await store.replay_results(run_id)).keys())
+    gap = confirmed_replay_gap(list(events), known)
+    if gap is None:
+        return _JournalResume(events, True, {})
+    replays = {
+        invocation_id: InvocationRecord(
+            invocation_id,
+            action or invocation_id,
+            True,
+            value,
+            None,
+        )
+        for invocation_id, action, value in gap
+    }
+    return _JournalResume(events, False, replays)
 
 
 async def _fail_closed_resume(

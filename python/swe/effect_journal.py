@@ -8,6 +8,7 @@ does not add a ledger.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -152,6 +153,45 @@ class EffectJournal:
             )
         attempt.closed = True
 
+    @classmethod
+    def load(cls, events: list[dict[str, Any]]) -> EffectJournal:
+        """Rebuild the in-process view from a persisted v1 event list.
+
+        Resume must start from this log. A fresh journal would let the next
+        ``save_journal`` replace a confirmed attempt.
+        """
+
+        import swe_native
+
+        journal = cls.__new__(cls)
+        journal._native = swe_native
+        journal._journal = swe_native.Journal.load(list(events))
+        journal._attempts = {}
+        charge_of: dict[str, str] = {}
+        pending_charges: set[str] = set()
+        for event in events:
+            kind = str(event.get("kind"))
+            if kind == "AttemptStarted":
+                journal._attempts[str(event["invocation_id"])] = _Attempt(
+                    attempt_id=str(event["attempt_id"]),
+                    charge_id=None,
+                    delivery=str(event["delivery"]),
+                )
+            elif kind == "ChargeReserved":
+                charge_of[str(event["attempt_id"])] = str(event["charge_id"])
+            elif kind in {"ResultConfirmed", "AttemptAbandoned"}:
+                attempt_id = str(event["attempt_id"])
+                for attempt in journal._attempts.values():
+                    if attempt.attempt_id == attempt_id:
+                        attempt.closed = True
+            elif kind == "ChargePendingReconciliation":
+                pending_charges.add(str(event["charge_id"]))
+        for attempt in journal._attempts.values():
+            attempt.charge_id = charge_of.get(attempt.attempt_id)
+            if attempt.charge_id is not None and attempt.charge_id in pending_charges:
+                attempt.pending = True
+        return journal
+
     def note_unknown(self, invocation_id: str, now_ms: int, reason: str) -> None:
         """Leave the attempt open and refuse to write its charge off as zero."""
 
@@ -168,6 +208,41 @@ class EffectJournal:
                 }
             )
         attempt.pending = True
+
+
+def confirmed_replay_gap(
+    events: list[dict[str, Any]], known_ids: set[str],
+) -> list[tuple[str, str, Any]] | None:
+    """Confirmed attempts whose invocation record was never stored.
+
+    Each item is ``(invocation_id, action, value)`` for an ok outcome the
+    existing replay path can apply without calling the handler. ``None`` means
+    the gap is not a plain ok result, so resume must fail closed instead of
+    starting the effect again.
+    """
+
+    started: dict[str, dict[str, Any]] = {}
+    gaps: list[tuple[str, str, Any]] = []
+    for event in events:
+        kind = str(event.get("kind"))
+        if kind == "AttemptStarted":
+            started[str(event["attempt_id"])] = event
+            continue
+        if kind != "ResultConfirmed":
+            continue
+        attempt = started.get(str(event.get("attempt_id")))
+        if attempt is None:
+            return None
+        invocation_id = str(attempt["invocation_id"])
+        if invocation_id in known_ids:
+            continue
+        outcome = event.get("outcome")
+        if not isinstance(outcome, Mapping) or outcome.get("kind") != "ok":
+            return None
+        gaps.append(
+            (invocation_id, str(attempt.get("action") or ""), outcome.get("value"))
+        )
+    return gaps
 
 
 def blocks_resume(events: list[dict[str, Any]]) -> bool:

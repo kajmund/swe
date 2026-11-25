@@ -546,7 +546,7 @@ async def _run_provider(
             )
             raise
         else:
-            if should_release_unused(handle):
+            if should_release_unused(handle) and cache_state != "hit":
                 if budget is not None and reservation is not None:
                     budget.release(reservation)
                     reservation = None

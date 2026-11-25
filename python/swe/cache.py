@@ -459,6 +459,7 @@ class InMemoryDecisionCache:
                         invocation_id=waiter_handle.invocation_id,
                         node_id=waiter_handle.node_id,
                         deadline_ms=waiter_handle.deadline_ms,
+                        effect=waiter_handle.effect,
                     )
                     if waiter_handle is not None
                     else None
