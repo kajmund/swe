@@ -101,6 +101,39 @@ never completed is not replayed as success; resume of a persisted
 timeout/cancel stays failed/cancelled and does not re-dispatch. The full
 contract is in [`swe-budget-runtime.md`](swe-budget-runtime.md).
 
+## External effect journal
+
+Journal schema v1 stays the native append-only log (`AttemptStarted`,
+`ResultConfirmed`, `ChargeReserved`, `ChargeSettled`,
+`ChargePendingReconciliation`, `plan_recovery`). The Python runner writes it
+only when the host sets `WorkflowResources.effect_deliveries` (SWD node id to
+`pure`, `replayable`, `external_idempotent`, or `external_non_idempotent`).
+Undeclared nodes keep the cancel and budget behaviour above.
+
+For an external delivery the handler awaits `begin_external_effect()` before
+external I/O. That appends `AttemptStarted` and, when a runtime-budget
+reservation exists, `ChargeReserved` for the reserved ceiling. Cancel before
+that call appends no attempt and releases only the unused reservation. Cancel
+after that call, including cancellation of the runner task, leaves the attempt
+open, appends `ChargePendingReconciliation` when a charge was reserved, and
+`mark_pending` on the same runtime-budget reservation. It does not settle that
+charge and it does not release it as zero. A confirmed return appends
+`ResultConfirmed` and `ChargeSettled` for the policy's actual amount, which
+may be lower than the ceiling. The ledger's release of an unspent remainder
+after a confirmed settlement is that unused ceiling, not an unknown effect.
+
+A runner task cancelled after the effect has started persists run status
+`cancelled`. Resume of a non-running run does not re-dispatch. Resume of a
+still-running run whose journal plans `fail_stop`, `replay_requires_result`,
+or `idempotent_retry` fails closed and does not call the handler. Pure open
+attempts stay on the existing recompute path. Retry stays unsupported.
+`RunStore.save_journal` / `load_journal` persist the v1 event list when the
+store implements them. `MemoryRunStore` does. A running resume that declared
+an external delivery and whose store cannot load the journal fails closed.
+
+The host API is generic. It is not an OverGraph client and it does not add a
+ledger or a USD pre-reservation.
+
 ## Non-goals
 
 The runtime is not a broker, database, distributed scheduler, provider SDK, or

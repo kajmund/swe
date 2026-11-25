@@ -10,11 +10,28 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeAlias
 
 CancelReason: TypeAlias = Literal["timeout", "cancel"]
+
+
+@dataclass
+class EffectCell:
+    """Opt-in external-effect mark for one invocation.
+
+    ``delivery`` is empty unless the host declared one for this node. ``begin``
+    is installed by the runner and records journal schema v1 ``AttemptStarted``
+    before external I/O. ``started`` stays false until that call returns.
+    """
+
+    delivery: str | None = None
+    action: str = ""
+    started: bool = False
+    begin: Callable[[], Awaitable[None]] | None = None
+    on_confirmed: Callable[[Any, Any], Awaitable[None]] | None = None
 
 
 @dataclass
@@ -36,6 +53,7 @@ class InvocationHandle:
     deadline_ms: int
     cancel: asyncio.Event = field(compare=False)
     _reason: _ReasonCell = field(default_factory=_ReasonCell, repr=False, compare=False)
+    effect: EffectCell = field(default_factory=EffectCell, compare=False, repr=False)
 
     def reason(self) -> CancelReason | None:
         return self._reason.value
@@ -215,6 +233,7 @@ __all__ = [
     "AbandonedWork",
     "AbandonedWorkRegistry",
     "CancelReason",
+    "EffectCell",
     "InvocationHandle",
     "bind_current_invocation",
     "consume_task_result",

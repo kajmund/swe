@@ -86,6 +86,7 @@ class MemoryRunStore:
         self.runs: dict[str, RunRecord] = {}
         self.invocations: dict[str, dict[str, InvocationRecord]] = defaultdict(dict)
         self.event_log: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self.journals: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     async def record(
         self,
@@ -107,6 +108,18 @@ class MemoryRunStore:
 
     async def events(self, run_id: str) -> list[dict[str, Any]]:
         return list(self.event_log.get(run_id, []))
+
+    async def save_journal(
+        self, run_id: str, events: Sequence[Mapping[str, Any]],
+    ) -> None:
+        """Replace the journal v1 event list for one run."""
+
+        self.journals[run_id] = [dict(event) for event in events]
+
+    async def load_journal(self, run_id: str) -> list[dict[str, Any]]:
+        """Return the journal v1 events saved for one run."""
+
+        return [dict(event) for event in self.journals.get(run_id, [])]
 
 
 @dataclass(frozen=True)
@@ -137,6 +150,14 @@ class WorkflowResources:
     crate; this resource adds no second ledger. Cancellation and action timeout
     keep the reservation pending rather than releasing funds that may already
     have been billed.
+
+    ``effect_deliveries`` is an optional map of SWD node id to a journal v1
+    delivery class (``pure``, ``replayable``, ``external_idempotent``,
+    ``external_non_idempotent``). It is empty by default. A declared external
+    node awaits ``begin_external_effect()`` before I/O. Cancel before that mark
+    releases only the unused reservation. Cancel after it keeps the charge
+    pending and records ``ChargePendingReconciliation``. Undeclared nodes are
+    unchanged.
     """
 
     providers: Mapping[str, Callable[..., Awaitable[Any]]] = field(
@@ -148,3 +169,4 @@ class WorkflowResources:
     cancel_event: asyncio.Event | None = None
     action_timeouts: Mapping[str, int] = field(default_factory=dict)
     budget: RuntimeBudget | None = None
+    effect_deliveries: Mapping[str, str] = field(default_factory=dict)

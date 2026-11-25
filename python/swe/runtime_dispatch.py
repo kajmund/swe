@@ -34,6 +34,11 @@ from swe.cache import (
     assert_cache_isolation,
     decision_cache_key,
 )
+from swe.effect_journal import (
+    EffectNotStarted,
+    note_confirmed,
+    should_release_unused,
+)
 from swe.invocation_error import invocation_error_from_exception
 from swe.invocation_handle import (
     AbandonedWorkRegistry,
@@ -346,6 +351,26 @@ def _settle(
         budget.settle(reservation, outcome)
 
 
+async def _account_cancelled(
+    budget: RuntimeBudget | None,
+    reservation: BudgetReservation | None,
+    handle: InvocationHandle | None,
+) -> None:
+    """Release an unused external reservation; keep a started one pending.
+
+    Undeclared nodes always ``mark_pending``. A declared external node that
+    has not called ``begin_external_effect`` has not started I/O, so only the
+    unused reservation is released. After the mark, the charge stays pending.
+    """
+
+    if budget is None or reservation is None:
+        return
+    if should_release_unused(handle):
+        budget.release(reservation)
+        return
+    budget.mark_pending(reservation)
+
+
 def _budget_flags(handle: InvocationHandle | None) -> tuple[bool, bool]:
     if handle is None:
         return False, False
@@ -401,8 +426,7 @@ async def _run_handler(
             try:
                 output = await handlers[effect["handler"]](effect["input"])
             except asyncio.CancelledError:
-                if budget is not None and reservation is not None:
-                    budget.mark_pending(reservation)
+                await _account_cancelled(budget, reservation, handle)
                 raise
             except SweHandlerError as exc:
                 _settle(
@@ -427,11 +451,17 @@ async def _run_handler(
                 )
                 raise
             else:
+                if should_release_unused(handle):
+                    if budget is not None and reservation is not None:
+                        budget.release(reservation)
+                        reservation = None
+                    raise EffectNotStarted(str(node_id))
                 _settle(
                     budget,
                     reservation,
                     _budget_outcome(handle, ok=True, value=output),
                 )
+                await note_confirmed(handle, output, reservation)
         output = require_json_value(output, node_id=node_id)
         validate_output_schema(nodes[node_id], output, node_id=node_id)
         return _outcome(invocation_id, node_id, now_ms=now_ms, ok=True, value=output)
@@ -491,8 +521,7 @@ async def _run_provider(
                 dispatch.cache_owner,
             )
         except asyncio.CancelledError:
-            if budget is not None and reservation is not None:
-                budget.mark_pending(reservation)
+            await _account_cancelled(budget, reservation, handle)
             raise
         except SweHandlerError as exc:
             _settle(
@@ -517,6 +546,11 @@ async def _run_provider(
             )
             raise
         else:
+            if should_release_unused(handle):
+                if budget is not None and reservation is not None:
+                    budget.release(reservation)
+                    reservation = None
+                raise EffectNotStarted(str(node_id))
             _settle(
                 budget,
                 reservation,
@@ -527,6 +561,7 @@ async def _run_provider(
                     value=dict(answer),
                 ),
             )
+            await note_confirmed(handle, dict(answer), reservation)
         output = _provider_output(effect, answer, cache_state)
         return _outcome(invocation_id, node_id, now_ms=now_ms, ok=True, value=output)
     except asyncio.CancelledError:
