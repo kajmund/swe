@@ -1,0 +1,181 @@
+{
+  "schema_version": "hy4-research-policy-v1",
+  "status": "SCHEMA_DIAGNOSIS_20261123T213131Z",
+  "swe_baseline": "eff1c7e8943dd64827fb4916719ced5515bf3db5",
+  "frozen": {
+    "questions": "frozen/gym/questions.json",
+    "corpus_dir": "frozen/corpus",
+    "questions_sha256": "142d8d8c3f2fdf1057e8bc3ce03fc81d764f82ce89270a87162d825888603df2",
+    "corpus_directory_sha256": "ff85a3965836524fc4a9e08fad6d146051444c6ebed493413582b6b3be299bfe",
+    "question_ids": [
+      "direct_effective_date",
+      "multi_document_orbit",
+      "dependent_northstar_release",
+      "conflicting_orbit_budget",
+      "missing_helios_retention"
+    ]
+  },
+  "tools": [
+    {
+      "id": "retrieve",
+      "tariff_milli": 1000,
+      "policy_version": "lexical-bm25-v1",
+      "network": false
+    },
+    {
+      "id": "read_passage",
+      "tariff_milli": 500,
+      "policy_version": "research-jev-assessment-job-v1",
+      "network": false
+    }
+  ],
+  "decisions": [
+    {
+      "kind": "decompose",
+      "tariff_milli": 500,
+      "policy_version": "ordinary-decompose-2026-11-17"
+    },
+    {
+      "kind": "select_next",
+      "tariff_milli": 0,
+      "policy_version": "hy4-research-policy-v1"
+    },
+    {
+      "kind": "stop",
+      "tariff_milli": 2250,
+      "policy_version": "research-synthesis-v1",
+      "includes_milli": {
+        "synthesize": 2000,
+        "persist_trace": 250
+      }
+    }
+  ],
+  "budget": {
+    "per_question_allocated_milli": 50000,
+    "question_count": 5,
+    "suite_allocated_milli": 250000,
+    "usd_cap": "2",
+    "usd_cap_source": "user-approved Hy4 vs DeepSeek Flash Ollama Cloud pilot on 2026-11-23",
+    "previous_usd_cap": "25.0",
+    "lexical_baseline_spent_milli": 29250,
+    "lexical_baseline_source": "benchmarks/results/baseline.json",
+    "same_for_every_arm": true
+  },
+  "quality_threshold": {
+    "same_for_every_arm": true,
+    "min_evidence_recall": "1",
+    "min_evidence_precision": "1",
+    "max_unsupported_claims": 0,
+    "require_stop_correct": true,
+    "allow_false_completeness": false
+  },
+  "cost_comparison": {
+    "baseline_arm": "deepseek-flash",
+    "cache_reported_separately": true,
+    "actual_usd_requires_provider_charge": true,
+    "subscription_is_not_marginal_cost": true
+  },
+  "evaluator": {
+    "role": "independent_fixed",
+    "live_model": "jev-1.13.0",
+    "offline_method": "exact-quote-v1",
+    "confidence_threshold": "0.6",
+    "usd_per_million_input": "0.042",
+    "output_usd_per_million": "0",
+    "endpoint": "https://api.typesafe.ai/v1/systemone",
+    "models_endpoint": "https://api.typesafe.ai/v1/models",
+    "pricing_url": "https://docs.typesafe.ai/models",
+    "credential_env": "TYPESAFE_API_KEY",
+    "alias_note": "GET /v1/models on 2026-11-23 listed jev-latest and jev-preview only. The versioned id is the configured Research pin. No System One call was made."
+  },
+  "ollama_cloud": {
+    "catalog": "https://ollama.com/api/tags",
+    "chat": "https://ollama.com/api/chat",
+    "docs": "https://docs.ollama.com/cloud/models",
+    "pricing_url": "https://ollama.com/pricing",
+    "verified_at": "2026-11-23",
+    "meter": "usage credits per million tokens at the published model row",
+    "off_peak_window": "outside 12:00-18:00 UTC on weekdays, and all day on weekends, only where the pricing table has an explicit off-peak row",
+    "concurrency": {"payg": 3, "pro": 3, "max": 10, "team": 10},
+    "included_credits_usd_per_month": {"payg": "0", "pro": "60", "max": "300", "team": "1000"},
+    "account_plan": "not present in the local daemon GET /api/usage response"
+  },
+  "arms": [
+    {
+      "id": "hy4",
+      "available": true,
+      "provider": "ollama-cloud",
+      "api_model": "hy4",
+      "cli_model": "hy4:cloud",
+      "model": "hy4",
+      "endpoint": "https://ollama.com/api/chat",
+      "models_endpoint": "https://ollama.com/api/tags",
+      "library_url": "https://ollama.com/library/hy4:cloud",
+      "pricing_url": "https://ollama.com/pricing",
+      "verified_at": "2026-11-23",
+      "catalog_digest": "1de429535565",
+      "catalog_modified_at": "2026-11-19T15:00:00-08:00",
+      "prices_usd_per_million": {
+        "input": "0.834",
+        "output": "2.501",
+        "cache_input": "0.042"
+      },
+      "price_basis": "Ollama pricing table, single row, no separate off-peak row",
+      "reasoning": {
+        "library_marks_thinking": true,
+        "preference": "disabled",
+        "documented_control": "The 2026-11-23 pilot sent think false. Stored responses had no thinking field. That does not prove thinking tokens are inside num_predict."
+      },
+      "credential_env": "OLLAMA_API_KEY"
+    },
+    {
+      "id": "hy4-flash",
+      "available": false,
+      "provider": "ollama-cloud",
+      "model": null,
+      "api_model": null,
+      "cli_model": null,
+      "verified_at": "2026-11-23",
+      "reason": "GET https://ollama.com/api/tags listed 25 cloud models and no Hy4 Flash tag. https://ollama.com/library/hy4-flash returned 404. Ollama search shows dhiltgen/hy4-flash as a local weight, which was not pulled."
+    },
+    {
+      "id": "deepseek-flash",
+      "available": true,
+      "model": "deepseek-flash",
+      "model_version": "DeepSeek-V4.1-Flash-1017",
+      "provider": "deepseek",
+      "endpoint": "https://api.deepseek.com/chat/completions",
+      "models_endpoint": "https://api.deepseek.com/models",
+      "pricing_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "ollama_cli_model": "deepseek-v4.1-flash:cloud",
+      "ollama_api_model": "deepseek-v4.1-flash:1017",
+      "verified_at": "2026-11-23",
+      "prices_usd_per_million": {
+        "input": "0.30",
+        "output": "1.20",
+        "cache_input": "0.006",
+        "input_off_peak": "0.15",
+        "output_off_peak": "0.60",
+        "cache_input_off_peak": "0.003"
+      },
+      "price_basis": "peak cache miss; off-peak is half and is not the approval bound. The same two rows are on ollama.com/pricing.",
+      "reasoning": {
+        "preference": "disabled",
+        "request_field": {"thinking": {"type": "disabled"}},
+        "documented_control": "https://api-docs.deepseek.com/guides/thinking_mode"
+      },
+      "credential_env": "DEEPSEEK_API_KEY"
+    }
+  ],
+  "estimate": {
+    "policy_calls_per_question": 8,
+    "input_tokens": 8000,
+    "output_tokens_low": 4000,
+    "output_tokens_high": 16000,
+    "cache": "miss",
+    "tool_pairs_per_question": 6,
+    "jev_calls_per_question": 4,
+    "jev_input_tokens": 32000,
+    "jev_once_for_all_arms": true
+  }
+}

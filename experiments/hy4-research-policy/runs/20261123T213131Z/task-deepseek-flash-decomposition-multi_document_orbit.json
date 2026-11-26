@@ -1,0 +1,141 @@
+{
+  "name": "task-deepseek-flash-decomposition-multi_document_orbit",
+  "transport": "ollama-native-chat",
+  "arm_id": "deepseek-flash",
+  "model": "deepseek-v4.1-flash:cloud",
+  "question_id": "multi_document_orbit",
+  "task": "decomposition",
+  "prompt_sha256": "41e72dd97e3bd3034637c0239f9134291123517b4613e778ae0dc9c918b97fe5",
+  "request": {
+    "model": "deepseek-v4.1-flash:cloud",
+    "stream": false,
+    "think": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "{\"corpus\": [{\"source_id\": \"helios-overview\", \"text\": \"Helios-9 is a research programme. Its current phase is discovery.\"}, {\"source_id\": \"northstar-security\", \"text\": \"The security review for Northstar is approved. Approval allows Northstar to ship to production. No critical findings remain after review NS-44.\"}, {\"source_id\": \"orbit-approval\", \"text\": \"ORBIT-7 was approved for production on 2026-05-12. The review cadence for ORBIT-7 is every 90 days. The ORBIT-7 programme budget is 1200000 SEK.\"}, {\"source_id\": \"orbit-audit\", \"text\": \"The audited ORBIT-7 programme budget is 1500000 SEK. The audit confirms the production approval recorded in May.\"}, {\"source_id\": \"policy-p17\", \"text\": \"Policy P-17 governs production change control. The effective date of Policy P-17 is 2026-03-01. Reviews are required before a production release.\"}, {\"source_id\": \"release-handbook\", \"text\": \"An approved security review is required before a service may ship to production. A release remains blocked while a critical finding is open.\"}], \"instructions\": \"Name every exact corpus quote the question needs. Copy quotes verbatim.\", \"question\": \"Is ORBIT-7 approved for production, and what is its review cadence?\", \"question_id\": \"multi_document_orbit\", \"task\": \"decomposition\"}"
+      }
+    ],
+    "options": {
+      "num_predict": 512,
+      "temperature": 0,
+      "seed": 0
+    },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "decomposition",
+          "description": "decomposition",
+          "parameters": {
+            "$defs": {
+              "Quote": {
+                "additionalProperties": false,
+                "properties": {
+                  "source_id": {
+                    "title": "Source Id",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "quote"
+                ],
+                "title": "Quote",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "target_quotes": {
+                "items": {
+                  "$ref": "#/$defs/Quote"
+                },
+                "title": "Target Quotes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "target_quotes"
+            ],
+            "title": "Decomposition",
+            "type": "object"
+          }
+        }
+      }
+    ]
+  },
+  "http_status": 200,
+  "latency_ms": 525.275,
+  "price_period": "off_peak",
+  "output_usd": "0.0000612",
+  "actual_usd": "N/A",
+  "classification": {
+    "channel": "tool",
+    "structure_error": null,
+    "validation_errors": null,
+    "json_keys": [
+      "target_quotes"
+    ],
+    "truncated": false,
+    "model_returned": "deepseek-v4.1-flash",
+    "model_tag_match": true,
+    "content_present": true,
+    "content": "",
+    "thinking_present": false,
+    "thinking": null,
+    "thinking_is_object": false,
+    "tool_calls": [
+      {
+        "id": "call_1b12x2fw",
+        "function": {
+          "index": 0,
+          "name": "decomposition",
+          "arguments": {
+            "target_quotes": [
+              {
+                "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+                "source_id": "orbit-approval"
+              },
+              {
+                "quote": "The review cadence for ORBIT-7 is every 90 days.",
+                "source_id": "orbit-approval"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "finish_reason": "stop",
+    "usage": {
+      "input": 678,
+      "output": 102
+    },
+    "parsed": {
+      "target_quotes": [
+        {
+          "quote": "ORBIT-7 was approved for production on 2026-05-12.",
+          "source_id": "orbit-approval"
+        },
+        {
+          "quote": "The review cadence for ORBIT-7 is every 90 days.",
+          "source_id": "orbit-approval"
+        }
+      ]
+    }
+  },
+  "exact_quote": {
+    "exact_quote": {
+      "recall": 0.6666666666666666,
+      "precision": 1.0,
+      "unsupported": 0,
+      "verified": 2,
+      "expected": 3
+    }
+  },
+  "hidden_retry": false
+}

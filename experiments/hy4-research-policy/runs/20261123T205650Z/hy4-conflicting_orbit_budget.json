@@ -1,0 +1,32 @@
+{
+  "arm_id": "hy4",
+  "calls": [
+    {
+      "attempt": 1,
+      "done_reason": "stop",
+      "eval_count": 46,
+      "http_status": 200,
+      "latency_ms": 1634.926,
+      "price_period": "off_peak",
+      "prompt_eval_count": 588
+    }
+  ],
+  "max_output_tokens": 1024,
+  "model": "hy4:cloud",
+  "prompt_sha256": "78bc8e972e274ec6e91b9786f55f3ef274adba7292ff72cb94cf957385d11607",
+  "question_id": "conflicting_orbit_budget",
+  "steps": [
+    {
+      "latency_ms": 0,
+      "needs": [],
+      "type": "decompose"
+    },
+    {
+      "answer_complete": false,
+      "claims": [],
+      "conclusion": "CONTRADICTED",
+      "latency_ms": 0,
+      "type": "stop"
+    }
+  ]
+}

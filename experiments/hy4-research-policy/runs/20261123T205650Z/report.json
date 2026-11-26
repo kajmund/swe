@@ -1,0 +1,983 @@
+{
+  "stopped": null,
+  "reserved_worst_usd": "0.02517478",
+  "usd_cap": "2",
+  "verification": "exact-quote-v1",
+  "verification_usd": "0",
+  "quota": {
+    "requests": 40,
+    "credits_consumed_usd": "N/A",
+    "plan": "not present"
+  },
+  "scores": [
+    {
+      "question_id": "direct_effective_date",
+      "arm_id": "deepseek-flash",
+      "evidence_recall": 1.0,
+      "evidence_precision": 1.0,
+      "verified_evidence": 1,
+      "expected_evidence": 1,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 1.0,
+      "next_action_errors": 0,
+      "stop_correct": true,
+      "false_completeness_claim": false,
+      "tool_calls": 1,
+      "unknown_tools": 0,
+      "sweycoins_milli": 3250,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "deepseek-flash",
+        "question_id": "direct_effective_date",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 668.742,
+        "tokens": {
+          "input": 580,
+          "output": 146,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.0000876",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 1,
+        "meets_quality": true,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "multi_document_orbit",
+      "arm_id": "deepseek-flash",
+      "evidence_recall": 0.0,
+      "evidence_precision": 1.0,
+      "verified_evidence": 0,
+      "expected_evidence": 3,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 0.0,
+      "next_action_errors": 0,
+      "stop_correct": false,
+      "false_completeness_claim": false,
+      "tool_calls": 0,
+      "unknown_tools": 0,
+      "sweycoins_milli": 2750,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "deepseek-flash",
+        "question_id": "multi_document_orbit",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 1690.603,
+        "tokens": {
+          "input": 587,
+          "output": 583,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.0003498",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 0,
+        "meets_quality": false,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "dependent_northstar_release",
+      "arm_id": "deepseek-flash",
+      "evidence_recall": 0.0,
+      "evidence_precision": 1.0,
+      "verified_evidence": 0,
+      "expected_evidence": 3,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 0.0,
+      "next_action_errors": 0,
+      "stop_correct": false,
+      "false_completeness_claim": false,
+      "tool_calls": 0,
+      "unknown_tools": 0,
+      "sweycoins_milli": 2750,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "deepseek-flash",
+        "question_id": "dependent_northstar_release",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 5058.348,
+        "tokens": {
+          "input": 589,
+          "output": 585,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.000351",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 0,
+        "meets_quality": false,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "conflicting_orbit_budget",
+      "arm_id": "deepseek-flash",
+      "evidence_recall": 0.0,
+      "evidence_precision": 1.0,
+      "verified_evidence": 0,
+      "expected_evidence": 2,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 0.0,
+      "next_action_errors": 0,
+      "stop_correct": false,
+      "false_completeness_claim": false,
+      "tool_calls": 0,
+      "unknown_tools": 0,
+      "sweycoins_milli": 2750,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "deepseek-flash",
+        "question_id": "conflicting_orbit_budget",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 2426.13,
+        "tokens": {
+          "input": 580,
+          "output": 614,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.0003684",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 0,
+        "meets_quality": false,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "missing_helios_retention",
+      "arm_id": "deepseek-flash",
+      "evidence_recall": 1.0,
+      "evidence_precision": 1.0,
+      "verified_evidence": 0,
+      "expected_evidence": 0,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 1.0,
+      "next_action_errors": 0,
+      "stop_correct": false,
+      "false_completeness_claim": false,
+      "tool_calls": 0,
+      "unknown_tools": 0,
+      "sweycoins_milli": 2750,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "deepseek-flash",
+        "question_id": "missing_helios_retention",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 1523.817,
+        "tokens": {
+          "input": 583,
+          "output": 568,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.0003408",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 0,
+        "meets_quality": false,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "direct_effective_date",
+      "arm_id": "hy4",
+      "evidence_recall": 1.0,
+      "evidence_precision": 1.0,
+      "verified_evidence": 1,
+      "expected_evidence": 1,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 1.0,
+      "next_action_errors": 1,
+      "stop_correct": true,
+      "false_completeness_claim": false,
+      "tool_calls": 2,
+      "unknown_tools": 0,
+      "sweycoins_milli": 4250,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "hy4",
+        "question_id": "direct_effective_date",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 1987.875,
+        "tokens": {
+          "input": 588,
+          "output": 156,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.000390156",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 1,
+        "meets_quality": true,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "multi_document_orbit",
+      "arm_id": "hy4",
+      "evidence_recall": 0.6666666666666666,
+      "evidence_precision": 1.0,
+      "verified_evidence": 2,
+      "expected_evidence": 3,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 0.6666666666666666,
+      "next_action_errors": 0,
+      "stop_correct": false,
+      "false_completeness_claim": true,
+      "tool_calls": 4,
+      "unknown_tools": 0,
+      "sweycoins_milli": 5750,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "hy4",
+        "question_id": "multi_document_orbit",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 7518.994,
+        "tokens": {
+          "input": 594,
+          "output": 430,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.00107543",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 2,
+        "meets_quality": false,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "dependent_northstar_release",
+      "arm_id": "hy4",
+      "evidence_recall": 0.6666666666666666,
+      "evidence_precision": 0.5,
+      "verified_evidence": 2,
+      "expected_evidence": 3,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 0.6666666666666666,
+      "next_action_errors": 2,
+      "stop_correct": false,
+      "false_completeness_claim": true,
+      "tool_calls": 5,
+      "unknown_tools": 0,
+      "sweycoins_milli": 5750,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "hy4",
+        "question_id": "dependent_northstar_release",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 3832.711,
+        "tokens": {
+          "input": 596,
+          "output": 549,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.001373049",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 2,
+        "meets_quality": false,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "conflicting_orbit_budget",
+      "arm_id": "hy4",
+      "evidence_recall": 0.0,
+      "evidence_precision": 1.0,
+      "verified_evidence": 0,
+      "expected_evidence": 2,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 0.0,
+      "next_action_errors": 0,
+      "stop_correct": true,
+      "false_completeness_claim": false,
+      "tool_calls": 0,
+      "unknown_tools": 0,
+      "sweycoins_milli": 2750,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "hy4",
+        "question_id": "conflicting_orbit_budget",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 1634.926,
+        "tokens": {
+          "input": 588,
+          "output": 46,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.000115046",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 0,
+        "meets_quality": false,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    },
+    {
+      "question_id": "missing_helios_retention",
+      "arm_id": "hy4",
+      "evidence_recall": 1.0,
+      "evidence_precision": 0.0,
+      "verified_evidence": 0,
+      "expected_evidence": 0,
+      "unsupported_claims": 0,
+      "decomposition_present": true,
+      "decomposition_recall": 1.0,
+      "next_action_errors": 0,
+      "stop_correct": true,
+      "false_completeness_claim": false,
+      "tool_calls": 2,
+      "unknown_tools": 0,
+      "sweycoins_milli": 4250,
+      "over_sweycoin_budget": false,
+      "latency_ms": 0.0,
+      "cost": {
+        "arm_id": "hy4",
+        "question_id": "missing_helios_retention",
+        "calls": 1,
+        "retries": 0,
+        "latency_ms": 2434.433,
+        "tokens": {
+          "input": 590,
+          "output": 207,
+          "reasoning": "N/A",
+          "cache_read": "N/A",
+          "cache_write": "N/A"
+        },
+        "calculated_input_usd": "N/A",
+        "calculated_output_usd": "0.000517707",
+        "calculated_cache_usd": "N/A",
+        "calculated_reasoning_usd": "N/A",
+        "calculated_usd": "N/A",
+        "actual_usd": "N/A",
+        "quota": {
+          "requests": "N/A",
+          "credits_consumed_usd": "N/A",
+          "plan": "N/A"
+        },
+        "usd_per_question": "N/A",
+        "usd_per_verified_evidence": "N/A",
+        "verified_evidence": 0,
+        "meets_quality": false,
+        "budget": {
+          "per_question_allocated_milli": 50000,
+          "usd_cap": "2"
+        }
+      }
+    }
+  ],
+  "comparison": {
+    "baseline_arm": "deepseek-flash",
+    "budget": {
+      "per_question_allocated_milli": 50000,
+      "question_count": 5,
+      "suite_allocated_milli": 250000,
+      "usd_cap": "2",
+      "usd_cap_source": "user-approved Hy4 vs DeepSeek Flash Ollama Cloud pilot on 2026-11-23",
+      "previous_usd_cap": "25.0",
+      "lexical_baseline_spent_milli": 29250,
+      "lexical_baseline_source": "benchmarks/results/baseline.json",
+      "same_for_every_arm": true
+    },
+    "quality_threshold": {
+      "same_for_every_arm": true,
+      "min_evidence_recall": "1",
+      "min_evidence_precision": "1",
+      "max_unsupported_claims": 0,
+      "require_stop_correct": true,
+      "allow_false_completeness": false
+    },
+    "questions": [
+      {
+        "question_id": "direct_effective_date",
+        "arms": {
+          "deepseek-flash": {
+            "arm_id": "deepseek-flash",
+            "question_id": "direct_effective_date",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 668.742,
+            "tokens": {
+              "input": 580,
+              "output": 146,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.0000876",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 1,
+            "meets_quality": true,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          },
+          "hy4": {
+            "arm_id": "hy4",
+            "question_id": "direct_effective_date",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 1987.875,
+            "tokens": {
+              "input": 588,
+              "output": 156,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.000390156",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 1,
+            "meets_quality": true,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          }
+        },
+        "versus_deepseek_flash": [
+          {
+            "arm_id": "hy4",
+            "actual_usd_delta": "N/A",
+            "calculated_usd_delta": "N/A",
+            "cache_usd_delta": "N/A",
+            "usd_per_question": "N/A",
+            "baseline_usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "baseline_usd_per_verified_evidence": "N/A",
+            "meets_quality": true,
+            "baseline_meets_quality": true
+          }
+        ]
+      },
+      {
+        "question_id": "multi_document_orbit",
+        "arms": {
+          "deepseek-flash": {
+            "arm_id": "deepseek-flash",
+            "question_id": "multi_document_orbit",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 1690.603,
+            "tokens": {
+              "input": 587,
+              "output": 583,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.0003498",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 0,
+            "meets_quality": false,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          },
+          "hy4": {
+            "arm_id": "hy4",
+            "question_id": "multi_document_orbit",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 7518.994,
+            "tokens": {
+              "input": 594,
+              "output": 430,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.00107543",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 2,
+            "meets_quality": false,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          }
+        },
+        "versus_deepseek_flash": [
+          {
+            "arm_id": "hy4",
+            "actual_usd_delta": "N/A",
+            "calculated_usd_delta": "N/A",
+            "cache_usd_delta": "N/A",
+            "usd_per_question": "N/A",
+            "baseline_usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "baseline_usd_per_verified_evidence": "N/A",
+            "meets_quality": false,
+            "baseline_meets_quality": false
+          }
+        ]
+      },
+      {
+        "question_id": "dependent_northstar_release",
+        "arms": {
+          "deepseek-flash": {
+            "arm_id": "deepseek-flash",
+            "question_id": "dependent_northstar_release",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 5058.348,
+            "tokens": {
+              "input": 589,
+              "output": 585,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.000351",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 0,
+            "meets_quality": false,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          },
+          "hy4": {
+            "arm_id": "hy4",
+            "question_id": "dependent_northstar_release",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 3832.711,
+            "tokens": {
+              "input": 596,
+              "output": 549,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.001373049",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 2,
+            "meets_quality": false,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          }
+        },
+        "versus_deepseek_flash": [
+          {
+            "arm_id": "hy4",
+            "actual_usd_delta": "N/A",
+            "calculated_usd_delta": "N/A",
+            "cache_usd_delta": "N/A",
+            "usd_per_question": "N/A",
+            "baseline_usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "baseline_usd_per_verified_evidence": "N/A",
+            "meets_quality": false,
+            "baseline_meets_quality": false
+          }
+        ]
+      },
+      {
+        "question_id": "conflicting_orbit_budget",
+        "arms": {
+          "deepseek-flash": {
+            "arm_id": "deepseek-flash",
+            "question_id": "conflicting_orbit_budget",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 2426.13,
+            "tokens": {
+              "input": 580,
+              "output": 614,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.0003684",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 0,
+            "meets_quality": false,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          },
+          "hy4": {
+            "arm_id": "hy4",
+            "question_id": "conflicting_orbit_budget",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 1634.926,
+            "tokens": {
+              "input": 588,
+              "output": 46,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.000115046",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 0,
+            "meets_quality": false,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          }
+        },
+        "versus_deepseek_flash": [
+          {
+            "arm_id": "hy4",
+            "actual_usd_delta": "N/A",
+            "calculated_usd_delta": "N/A",
+            "cache_usd_delta": "N/A",
+            "usd_per_question": "N/A",
+            "baseline_usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "baseline_usd_per_verified_evidence": "N/A",
+            "meets_quality": false,
+            "baseline_meets_quality": false
+          }
+        ]
+      },
+      {
+        "question_id": "missing_helios_retention",
+        "arms": {
+          "deepseek-flash": {
+            "arm_id": "deepseek-flash",
+            "question_id": "missing_helios_retention",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 1523.817,
+            "tokens": {
+              "input": 583,
+              "output": 568,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.0003408",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 0,
+            "meets_quality": false,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          },
+          "hy4": {
+            "arm_id": "hy4",
+            "question_id": "missing_helios_retention",
+            "calls": 1,
+            "retries": 0,
+            "latency_ms": 2434.433,
+            "tokens": {
+              "input": 590,
+              "output": 207,
+              "reasoning": "N/A",
+              "cache_read": "N/A",
+              "cache_write": "N/A"
+            },
+            "calculated_input_usd": "N/A",
+            "calculated_output_usd": "0.000517707",
+            "calculated_cache_usd": "N/A",
+            "calculated_reasoning_usd": "N/A",
+            "calculated_usd": "N/A",
+            "actual_usd": "N/A",
+            "quota": {
+              "requests": "N/A",
+              "credits_consumed_usd": "N/A",
+              "plan": "N/A"
+            },
+            "usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "verified_evidence": 0,
+            "meets_quality": false,
+            "budget": {
+              "per_question_allocated_milli": 50000,
+              "usd_cap": "2"
+            }
+          }
+        },
+        "versus_deepseek_flash": [
+          {
+            "arm_id": "hy4",
+            "actual_usd_delta": "N/A",
+            "calculated_usd_delta": "N/A",
+            "cache_usd_delta": "N/A",
+            "usd_per_question": "N/A",
+            "baseline_usd_per_question": "N/A",
+            "usd_per_verified_evidence": "N/A",
+            "baseline_usd_per_verified_evidence": "N/A",
+            "meets_quality": false,
+            "baseline_meets_quality": false
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,868 @@
+{
+  "adapter": {
+    "catalog_version": "2.54.0",
+    "clef": "absent",
+    "clm": "mockable",
+    "jev": "mockable",
+    "laya": "mockable",
+    "native_constructed": false,
+    "native_importable": {
+      "ollama": true,
+      "system-one": true,
+      "typesafe": false
+    },
+    "prefixes": {
+      "ollama": "ollama:",
+      "system-one": "system-one:",
+      "typesafe": "typesafe:"
+    }
+  },
+  "diagnosis": {
+    "actual_usd": "N/A",
+    "count": 9,
+    "output_usd": "N/A",
+    "probes": [
+      {
+        "actual_usd": "N/A",
+        "finish_reason": "stop",
+        "name": "replay-multi_document_orbit-think-false",
+        "output_usd": "0.0003498",
+        "structure_error": "schema_validation",
+        "thinking_present": false,
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "finish_reason": "stop",
+        "name": "replay-dependent_northstar_release-think-false",
+        "output_usd": "0.000351",
+        "structure_error": "schema_validation",
+        "thinking_present": false,
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "finish_reason": "stop",
+        "name": "replay-conflicting_orbit_budget-think-false",
+        "output_usd": "0.0003456",
+        "structure_error": "schema_validation",
+        "thinking_present": false,
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "finish_reason": "stop",
+        "name": "replay-missing_helios_retention-think-false",
+        "output_usd": "0.0003474",
+        "structure_error": "schema_validation",
+        "thinking_present": false,
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "finish_reason": "length",
+        "name": "focus-think-true",
+        "output_usd": "0.0006144",
+        "structure_error": "empty_content",
+        "thinking_present": true,
+        "truncated": true
+      },
+      {
+        "actual_usd": "N/A",
+        "finish_reason": "stop",
+        "name": "direct-tools",
+        "output_usd": "0.000183",
+        "structure_error": "schema_validation",
+        "thinking_present": false,
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "finish_reason": "stop",
+        "name": "direct-format-probe",
+        "output_usd": "0.0003498",
+        "structure_error": "schema_validation",
+        "thinking_present": false,
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "finish_reason": null,
+        "name": "pydantic-tool",
+        "output_usd": "N/A",
+        "structure_error": "tool_calls_absent",
+        "thinking_present": false,
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "finish_reason": null,
+        "name": "pydantic-prompt",
+        "output_usd": "0.0013584",
+        "structure_error": "invalid_json",
+        "thinking_present": true,
+        "truncated": true
+      }
+    ]
+  },
+  "jev": {
+    "actual_usd": "N/A",
+    "calculated_input_usd": "0.000726978",
+    "choices": {
+      "INSUFFICIENT": 15,
+      "SUPPORTS": 11
+    },
+    "count": 26,
+    "http_status": [
+      200
+    ],
+    "input_tokens": 17309,
+    "input_usd_per_million": "0.042",
+    "output_priced": false,
+    "output_tokens": 1289
+  },
+  "paid_calls_for_this_report": 0,
+  "reserved_worst_usd": "0.068160806",
+  "run_id": "20261123T213131Z",
+  "stopped": null,
+  "task_mode": "direct_tools",
+  "tasks": {
+    "actual_usd": "N/A",
+    "count": 40,
+    "hidden_retry": false,
+    "output_usd": "0.006683743",
+    "rows": [
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "expected": 1,
+          "precision": 1.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 1
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000432",
+        "question_id": "direct_effective_date",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "expected": 3,
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "unsupported": 0,
+          "verified": 2
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000612",
+        "question_id": "multi_document_orbit",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "expected": 3,
+          "precision": 0.6,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 3
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000984",
+        "question_id": "dependent_northstar_release",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "expected": 2,
+          "precision": 1.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 2
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000708",
+        "question_id": "conflicting_orbit_budget",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "expected": 0,
+          "precision": 0.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000528",
+        "question_id": "missing_helios_retention",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "correct": false,
+          "tool": "stop",
+          "unsupported": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000324",
+        "question_id": "direct_effective_date",
+        "structure_error": null,
+        "task": "next_action",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "correct": false,
+          "tool": "retrieve",
+          "unsupported": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000033",
+        "question_id": "multi_document_orbit",
+        "structure_error": null,
+        "task": "next_action",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "correct": false,
+          "tool": "retrieve",
+          "unsupported": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000033",
+        "question_id": "dependent_northstar_release",
+        "structure_error": null,
+        "task": "next_action",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "correct": false,
+          "tool": "retrieve",
+          "unsupported": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000033",
+        "question_id": "conflicting_orbit_budget",
+        "structure_error": null,
+        "task": "next_action",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "correct": true,
+          "tool": "stop",
+          "unsupported": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000324",
+        "question_id": "missing_helios_retention",
+        "structure_error": null,
+        "task": "next_action",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 1,
+          "precision": 1.0,
+          "recall": 0.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000366",
+        "question_id": "direct_effective_date",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 3,
+          "precision": 1.0,
+          "recall": 0.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000366",
+        "question_id": "multi_document_orbit",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 3,
+          "precision": 1.0,
+          "recall": 0.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000366",
+        "question_id": "dependent_northstar_release",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 2,
+          "precision": 1.0,
+          "recall": 0.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000366",
+        "question_id": "conflicting_orbit_budget",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 0,
+          "precision": 0.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000552",
+        "question_id": "missing_helios_retention",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 1,
+          "false_completeness": false,
+          "precision": 1.0,
+          "recall": 1.0,
+          "stop_correct": true,
+          "unsupported": 0,
+          "verified": 1
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000624",
+        "question_id": "direct_effective_date",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 3,
+          "false_completeness": true,
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "stop_correct": false,
+          "unsupported": 0,
+          "verified": 2
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000804",
+        "question_id": "multi_document_orbit",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 3,
+          "false_completeness": true,
+          "precision": 0.0,
+          "recall": 0.0,
+          "stop_correct": false,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0000924",
+        "question_id": "dependent_northstar_release",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 2,
+          "false_completeness": true,
+          "precision": 1.0,
+          "recall": 1.0,
+          "stop_correct": false,
+          "unsupported": 0,
+          "verified": 2
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000081",
+        "question_id": "conflicting_orbit_budget",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "deepseek-flash",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 0,
+          "false_completeness": true,
+          "precision": 0.0,
+          "recall": 1.0,
+          "stop_correct": false,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000066",
+        "question_id": "missing_helios_retention",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "expected": 1,
+          "precision": 1.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 1
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000115046",
+        "question_id": "direct_effective_date",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "expected": 3,
+          "precision": 1.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 3
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.0002501",
+        "question_id": "multi_document_orbit",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "expected": 3,
+          "precision": 0.6,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 3
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000347639",
+        "question_id": "dependent_northstar_release",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "expected": 2,
+          "precision": 1.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 2
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000190076",
+        "question_id": "conflicting_orbit_budget",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "expected": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000037515",
+        "question_id": "missing_helios_retention",
+        "structure_error": null,
+        "task": "decomposition",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": null,
+        "finish_reason": "length",
+        "hidden_retry": false,
+        "output_usd": "0.001280512",
+        "question_id": "direct_effective_date",
+        "structure_error": "tool_calls_absent",
+        "task": "next_action",
+        "truncated": true
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": null,
+        "finish_reason": "length",
+        "hidden_retry": false,
+        "output_usd": "0.001280512",
+        "question_id": "multi_document_orbit",
+        "structure_error": "tool_calls_absent",
+        "task": "next_action",
+        "truncated": true
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "correct": false,
+          "tool": "stop",
+          "unsupported": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000047519",
+        "question_id": "dependent_northstar_release",
+        "structure_error": null,
+        "task": "next_action",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": null,
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000295118",
+        "question_id": "conflicting_orbit_budget",
+        "structure_error": "schema_validation",
+        "task": "next_action",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "correct": true,
+          "tool": "stop",
+          "unsupported": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000047519",
+        "question_id": "missing_helios_retention",
+        "structure_error": null,
+        "task": "next_action",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 1,
+          "precision": 1.0,
+          "recall": 0.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000062525",
+        "question_id": "direct_effective_date",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 3,
+          "precision": 1.0,
+          "recall": 0.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000062525",
+        "question_id": "multi_document_orbit",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 3,
+          "precision": 1.0,
+          "recall": 0.0,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000062525",
+        "question_id": "dependent_northstar_release",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "contains_answer_correct": false,
+          "expected": 2,
+          "precision": 1.0,
+          "recall": 1.0,
+          "unsupported": 0,
+          "verified": 2
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000215086",
+        "question_id": "conflicting_orbit_budget",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "contains_answer_correct": true,
+          "expected": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "unsupported": 1,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000120048",
+        "question_id": "missing_helios_retention",
+        "structure_error": null,
+        "task": "evidence_gap",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 1,
+          "false_completeness": false,
+          "precision": 1.0,
+          "recall": 1.0,
+          "stop_correct": true,
+          "unsupported": 0,
+          "verified": 1
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000147559",
+        "question_id": "direct_effective_date",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 3,
+          "false_completeness": false,
+          "precision": 1.0,
+          "recall": 1.0,
+          "stop_correct": true,
+          "unsupported": 0,
+          "verified": 3
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000282613",
+        "question_id": "multi_document_orbit",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 3,
+          "false_completeness": false,
+          "precision": 0.6,
+          "recall": 1.0,
+          "stop_correct": true,
+          "unsupported": 0,
+          "verified": 3
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000380152",
+        "question_id": "dependent_northstar_release",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 2,
+          "false_completeness": false,
+          "precision": 1.0,
+          "recall": 1.0,
+          "stop_correct": true,
+          "unsupported": 0,
+          "verified": 2
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000227591",
+        "question_id": "conflicting_orbit_budget",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      },
+      {
+        "actual_usd": "N/A",
+        "arm_id": "hy4",
+        "exact_quote": {
+          "conclusion_correct": true,
+          "expected": 0,
+          "false_completeness": false,
+          "precision": 0.0,
+          "recall": 1.0,
+          "stop_correct": true,
+          "unsupported": 0,
+          "verified": 0
+        },
+        "finish_reason": "stop",
+        "hidden_retry": false,
+        "output_usd": "0.000157563",
+        "question_id": "missing_helios_retention",
+        "structure_error": null,
+        "task": "stop",
+        "truncated": false
+      }
+    ],
+    "schema_valid": 37
+  },
+  "usd_cap": "2",
+  "validated_policy_mode": null
+}

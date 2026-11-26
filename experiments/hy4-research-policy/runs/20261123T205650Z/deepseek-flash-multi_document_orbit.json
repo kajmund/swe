@@ -1,0 +1,32 @@
+{
+  "arm_id": "deepseek-flash",
+  "calls": [
+    {
+      "attempt": 1,
+      "done_reason": "stop",
+      "eval_count": 583,
+      "http_status": 200,
+      "latency_ms": 1690.603,
+      "price_period": "off_peak",
+      "prompt_eval_count": 587
+    }
+  ],
+  "max_output_tokens": 1024,
+  "model": "deepseek-v4.1-flash:cloud",
+  "prompt_sha256": "ad749440f797c2140eb7e4f4c65bf304124d5fd476e18caac99df48017898d2e",
+  "question_id": "multi_document_orbit",
+  "steps": [
+    {
+      "latency_ms": 0,
+      "needs": [],
+      "type": "decompose"
+    },
+    {
+      "answer_complete": false,
+      "claims": [],
+      "conclusion": "",
+      "latency_ms": 0,
+      "type": "stop"
+    }
+  ]
+}

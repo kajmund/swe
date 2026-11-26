@@ -1,0 +1,28 @@
+{
+  "arms": [
+    {
+      "arm_id": "hy4",
+      "attempts": 2,
+      "call_usd": "0.003476756",
+      "model": "hy4:cloud",
+      "worst_usd": "0.03476756"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "attempts": 2,
+      "call_usd": "0.0015582",
+      "model": "deepseek-v4.1-flash:cloud",
+      "worst_usd": "0.015582"
+    }
+  ],
+  "fits": true,
+  "input_token_bound": 1098,
+  "max_output_tokens": 1024,
+  "price_basis": "cache-miss peak, no cache credit",
+  "questions": 5,
+  "retries_per_question": 1,
+  "usd_cap": "2",
+  "verification": "exact-quote-v1",
+  "verification_usd": "0",
+  "worst_usd": "0.05034956"
+}

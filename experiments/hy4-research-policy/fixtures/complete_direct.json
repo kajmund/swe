@@ -1,0 +1,62 @@
+{
+  "arm_id": "hy4-flash",
+  "question_id": "direct_effective_date",
+  "steps": [
+    {
+      "type": "decompose",
+      "latency_ms": 1,
+      "needs": [
+        {
+          "need_id": "effective-date",
+          "text": "effective date of the named policy",
+          "target_quotes": [
+            {
+              "source_id": "policy-p17",
+              "quote": "The effective date of Policy P-17 is 2026-03-01."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "select_next",
+      "tool": "retrieve",
+      "latency_ms": 0,
+      "gap": {
+        "source_id": "policy-p17",
+        "quote": "The effective date of Policy P-17 is 2026-03-01."
+      }
+    },
+    {"type": "tool", "tool": "retrieve", "latency_ms": 2},
+    {
+      "type": "select_next",
+      "tool": "read_passage",
+      "latency_ms": 0,
+      "gap": {
+        "source_id": "policy-p17",
+        "quote": "The effective date of Policy P-17 is 2026-03-01."
+      }
+    },
+    {
+      "type": "tool",
+      "tool": "read_passage",
+      "latency_ms": 3,
+      "quote": {
+        "source_id": "policy-p17",
+        "quote": "The effective date of Policy P-17 is 2026-03-01."
+      }
+    },
+    {
+      "type": "stop",
+      "latency_ms": 1,
+      "conclusion": "ANSWERED",
+      "answer_complete": true,
+      "claims": [
+        {
+          "source_id": "policy-p17",
+          "quote": "The effective date of Policy P-17 is 2026-03-01."
+        }
+      ]
+    }
+  ]
+}

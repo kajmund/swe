@@ -1,0 +1,29 @@
+{
+  "arm_id": "deepseek-flash",
+  "question_id": "direct_effective_date",
+  "steps": [
+    {
+      "type": "decompose",
+      "needs": [
+        {
+          "need_id": "effective-date",
+          "text": "effective date",
+          "target_quotes": [
+            {
+              "source_id": "policy-p17",
+              "quote": "The effective date of Policy P-17 is 2026-03-01."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "select_next",
+      "tool": "retrieve",
+      "gap": {
+        "source_id": "orbit-approval",
+        "quote": "ORBIT-7 was approved for production on 2026-05-12."
+      }
+    }
+  ]
+}

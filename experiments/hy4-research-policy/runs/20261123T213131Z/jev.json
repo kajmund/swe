@@ -1,0 +1,368 @@
+{
+  "calls": [
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "direct_effective_date",
+      "source_id": "policy-p17",
+      "http_status": 200,
+      "latency_ms": 211.903,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.91,
+        "input_tokens": 661,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "multi_document_orbit",
+      "source_id": "orbit-approval",
+      "http_status": 200,
+      "latency_ms": 181.959,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.89,
+        "input_tokens": 672,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "multi_document_orbit",
+      "source_id": "orbit-approval",
+      "http_status": 200,
+      "latency_ms": 176.018,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.98,
+        "input_tokens": 671,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "dependent_northstar_release",
+      "source_id": "northstar-security",
+      "http_status": 200,
+      "latency_ms": 162.83,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.97,
+        "input_tokens": 672,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "dependent_northstar_release",
+      "source_id": "northstar-security",
+      "http_status": 200,
+      "latency_ms": 196.27,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.38,
+        "input_tokens": 667,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "dependent_northstar_release",
+      "source_id": "northstar-security",
+      "http_status": 200,
+      "latency_ms": 192.092,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.97,
+        "input_tokens": 675,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "dependent_northstar_release",
+      "source_id": "release-handbook",
+      "http_status": 200,
+      "latency_ms": 172.745,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.58,
+        "input_tokens": 672,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "dependent_northstar_release",
+      "source_id": "release-handbook",
+      "http_status": 200,
+      "latency_ms": 180.453,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.25,
+        "input_tokens": 671,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "conflicting_orbit_budget",
+      "source_id": "orbit-approval",
+      "http_status": 200,
+      "latency_ms": 201.893,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.92,
+        "input_tokens": 651,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "conflicting_orbit_budget",
+      "source_id": "orbit-audit",
+      "http_status": 200,
+      "latency_ms": 160.952,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.89,
+        "input_tokens": 651,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "missing_helios_retention",
+      "source_id": "helios-overview",
+      "http_status": 200,
+      "latency_ms": 171.021,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 1.0,
+        "input_tokens": 650,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "dependent_northstar_release",
+      "source_id": "northstar-security",
+      "http_status": 200,
+      "latency_ms": 181.771,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.98,
+        "input_tokens": 692,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "deepseek-flash",
+      "question_id": "dependent_northstar_release",
+      "source_id": "release-handbook",
+      "http_status": 200,
+      "latency_ms": 173.141,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.89,
+        "input_tokens": 687,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "direct_effective_date",
+      "source_id": "policy-p17",
+      "http_status": 200,
+      "latency_ms": 194.074,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.94,
+        "input_tokens": 661,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "multi_document_orbit",
+      "source_id": "orbit-approval",
+      "http_status": 200,
+      "latency_ms": 170.142,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.88,
+        "input_tokens": 672,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "multi_document_orbit",
+      "source_id": "orbit-approval",
+      "http_status": 200,
+      "latency_ms": 197.767,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.97,
+        "input_tokens": 671,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "multi_document_orbit",
+      "source_id": "orbit-audit",
+      "http_status": 200,
+      "latency_ms": 169.843,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.86,
+        "input_tokens": 661,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "dependent_northstar_release",
+      "source_id": "northstar-security",
+      "http_status": 200,
+      "latency_ms": 151.033,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.96,
+        "input_tokens": 672,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "dependent_northstar_release",
+      "source_id": "northstar-security",
+      "http_status": 200,
+      "latency_ms": 156.601,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.46,
+        "input_tokens": 667,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "dependent_northstar_release",
+      "source_id": "northstar-security",
+      "http_status": 200,
+      "latency_ms": 187.547,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.96,
+        "input_tokens": 675,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "dependent_northstar_release",
+      "source_id": "release-handbook",
+      "http_status": 200,
+      "latency_ms": 172.071,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.6,
+        "input_tokens": 672,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "dependent_northstar_release",
+      "source_id": "release-handbook",
+      "http_status": 200,
+      "latency_ms": 171.951,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.34,
+        "input_tokens": 671,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "conflicting_orbit_budget",
+      "source_id": "orbit-approval",
+      "http_status": 200,
+      "latency_ms": 188.912,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.89,
+        "input_tokens": 651,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "conflicting_orbit_budget",
+      "source_id": "orbit-audit",
+      "http_status": 200,
+      "latency_ms": 161.136,
+      "jev": {
+        "choice": "SUPPORTS",
+        "confidence": 0.89,
+        "input_tokens": 651,
+        "output_tokens": 49
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "missing_helios_retention",
+      "source_id": "helios-overview",
+      "http_status": 200,
+      "latency_ms": 167.818,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 0.96,
+        "input_tokens": 643,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    },
+    {
+      "arm_id": "hy4",
+      "question_id": "missing_helios_retention",
+      "source_id": "helios-overview",
+      "http_status": 200,
+      "latency_ms": 189.452,
+      "jev": {
+        "choice": "INSUFFICIENT",
+        "confidence": 1.0,
+        "input_tokens": 650,
+        "output_tokens": 50
+      },
+      "actual_usd": "N/A"
+    }
+  ]
+}

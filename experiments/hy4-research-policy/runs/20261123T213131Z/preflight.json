@@ -1,0 +1,15 @@
+{
+  "usd_cap": "2",
+  "retries": 0,
+  "diagnosis_requests": 9,
+  "diagnosis_output_tokens": 1024,
+  "task_calls_per_arm": 20,
+  "task_output_tokens": 512,
+  "diagnosis_usd": "0.0194238",
+  "deepseek_tasks_usd": "0.030228",
+  "hy4_tasks_usd": "0.07548344",
+  "jev_usd": "0.00672",
+  "worst_usd": "0.13185524",
+  "fits": true,
+  "price_basis": "cache-miss peak for policy calls; JEV input only"
+}

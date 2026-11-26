@@ -1,0 +1,137 @@
+{
+  "name": "task-deepseek-flash-next_action-missing_helios_retention",
+  "transport": "ollama-native-chat",
+  "arm_id": "deepseek-flash",
+  "model": "deepseek-v4.1-flash:cloud",
+  "question_id": "missing_helios_retention",
+  "task": "next_action",
+  "prompt_sha256": "ec6beb4a09e244d45fc766de227ab48ee1dbd2c0d4c9fc2e1294cb24581a3dbd",
+  "request": {
+    "model": "deepseek-v4.1-flash:cloud",
+    "stream": false,
+    "think": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "{\"corpus\": [{\"source_id\": \"helios-overview\", \"text\": \"Helios-9 is a research programme. Its current phase is discovery.\"}, {\"source_id\": \"northstar-security\", \"text\": \"The security review for Northstar is approved. Approval allows Northstar to ship to production. No critical findings remain after review NS-44.\"}, {\"source_id\": \"orbit-approval\", \"text\": \"ORBIT-7 was approved for production on 2026-05-12. The review cadence for ORBIT-7 is every 90 days. The ORBIT-7 programme budget is 1200000 SEK.\"}, {\"source_id\": \"orbit-audit\", \"text\": \"The audited ORBIT-7 programme budget is 1500000 SEK. The audit confirms the production approval recorded in May.\"}, {\"source_id\": \"policy-p17\", \"text\": \"Policy P-17 governs production change control. The effective date of Policy P-17 is 2026-03-01. Reviews are required before a production release.\"}, {\"source_id\": \"release-handbook\", \"text\": \"An approved security review is required before a service may ship to production. A release remains blocked while a critical finding is open.\"}], \"instructions\": \"Choose one next tool. Use stop and a null gap when the corpus does not contain the answer.\", \"question\": \"What is the Helios-9 retention period?\", \"question_id\": \"missing_helios_retention\", \"task\": \"next_action\"}"
+      }
+    ],
+    "options": {
+      "num_predict": 512,
+      "temperature": 0,
+      "seed": 0
+    },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "next_action",
+          "description": "next_action",
+          "parameters": {
+            "$defs": {
+              "Quote": {
+                "additionalProperties": false,
+                "properties": {
+                  "source_id": {
+                    "title": "Source Id",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "quote"
+                ],
+                "title": "Quote",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "tool": {
+                "enum": [
+                  "retrieve",
+                  "read_passage",
+                  "stop"
+                ],
+                "title": "Tool",
+                "type": "string"
+              },
+              "gap": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Quote"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "tool"
+            ],
+            "title": "NextAction",
+            "type": "object"
+          }
+        }
+      }
+    ]
+  },
+  "http_status": 200,
+  "latency_ms": 420.703,
+  "price_period": "off_peak",
+  "output_usd": "0.0000324",
+  "actual_usd": "N/A",
+  "classification": {
+    "channel": "tool",
+    "structure_error": null,
+    "validation_errors": null,
+    "json_keys": [
+      "gap",
+      "tool"
+    ],
+    "truncated": false,
+    "model_returned": "deepseek-v4.1-flash",
+    "model_tag_match": true,
+    "content_present": true,
+    "content": "",
+    "thinking_present": false,
+    "thinking": null,
+    "thinking_is_object": false,
+    "tool_calls": [
+      {
+        "id": "call_7odd27dd",
+        "function": {
+          "index": 0,
+          "name": "next_action",
+          "arguments": {
+            "tool": "stop",
+            "gap": null
+          }
+        }
+      }
+    ],
+    "finish_reason": "stop",
+    "usage": {
+      "input": 691,
+      "output": 54
+    },
+    "parsed": {
+      "tool": "stop",
+      "gap": null
+    }
+  },
+  "exact_quote": {
+    "exact_quote": {
+      "correct": true,
+      "unsupported": 0,
+      "tool": "stop"
+    }
+  },
+  "hidden_retry": false
+}
